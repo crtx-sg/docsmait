@@ -1,0 +1,10 @@
+========================================
+Docsmait Test Suite Execution Log
+========================================
+Started: Tue Sep  2 10:54:59 UTC 2025
+Test Directory: /home/sganesh/crtx/docsmait/tests
+Results Directory: /home/sganesh/crtx/docsmait/tests/test_results
+========================================
+
+[2025-09-02 10:54:59] INFO: Checking prerequisites...
+[2025-09-02 10:54:59] ERROR: pytest is required. Install with: pip install pytest

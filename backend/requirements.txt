@@ -1,0 +1,25 @@
+# backend/requirements.txt
+fastapi
+uvicorn[standard]
+python-dotenv
+requests
+qdrant-client
+ollama
+python-jose[cryptography]
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+python-multipart
+email-validator
+python-magic
+PyPDF2
+python-docx
+aiofiles
+# PostgreSQL and SQLAlchemy
+psycopg2-binary
+sqlalchemy
+alembic
+# Template import dependencies
+pyyaml
+# PDF generation and archiving
+reportlab
+pillow

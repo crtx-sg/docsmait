@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="4" time="1.983" timestamp="2025-09-02T10:55:26.846547+00:00" hostname="VMI-MI17001-New"><testcase classname="security.test_security_validation.TestInputValidation" name="test_sql_injection_prevention" time="0.269"><failure message="KeyError: 'name'">security/test_security_validation.py:48: in test_sql_injection_prevention
+    assert created_project["name"] != payload, "SQL injection payload was not sanitized"
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'name'</failure></testcase><testcase classname="security.test_security_validation.TestInputValidation" name="test_xss_prevention" time="0.320" /><testcase classname="security.test_security_validation.TestInputValidation" name="test_json_injection_prevention" time="0.255" /><testcase classname="security.test_security_validation.TestInputValidation" name="test_file_upload_validation" time="0.250"><failure message="AssertionError: Dangerous file malicious.exe was accepted&#10;assert 405 in [400, 413, 415, 404, 501]&#10; +  where 405 = &lt;Response [405]&gt;.status_code">security/test_security_validation.py:122: in test_file_upload_validation
+    assert response.status_code in [400, 413, 415, 404, 501], f"Dangerous file {filename} was accepted"
+E   AssertionError: Dangerous file malicious.exe was accepted
+E   assert 405 in [400, 413, 415, 404, 501]
+E    +  where 405 = &lt;Response [405]&gt;.status_code</failure></testcase><testcase time="0.000" /></testsuite></testsuites>

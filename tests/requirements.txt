@@ -1,0 +1,53 @@
+# Docsmait Test Suite Requirements
+
+# Core testing frameworks
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-html==4.1.1
+pytest-xdist==3.3.1
+pytest-asyncio==0.21.1
+
+# HTTP testing
+requests==2.31.0
+httpx==0.25.2
+
+# Database testing
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.7
+pytest-postgresql==5.0.0
+
+# Frontend testing
+selenium==4.15.2
+webdriver-manager==4.0.1
+playwright==1.40.0
+pytest-playwright==0.4.3
+
+# API testing
+fastapi-testclient==0.1.0
+
+# Performance testing
+locust==2.17.0
+pytest-benchmark==4.0.0
+
+# Data validation
+jsonschema==4.19.2
+faker==20.1.0
+
+# Utilities
+python-dotenv==1.0.0
+pydantic==2.5.0
+jinja2==3.1.2
+
+# Reporting
+allure-pytest==2.13.2
+pytest-json-report==1.5.0
+
+# Security testing
+bandit==1.7.5
+
+# Parallel execution
+pytest-xdist==3.3.1
+
+# Mock and fixtures
+pytest-mock==3.12.0
+responses==0.24.0

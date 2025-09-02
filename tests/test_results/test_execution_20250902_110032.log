@@ -1,0 +1,303 @@
+========================================
+Docsmait Test Suite Execution Log
+========================================
+Started: Tue Sep  2 11:00:32 UTC 2025
+Test Directory: /home/sganesh/crtx/docsmait/tests
+Results Directory: /home/sganesh/crtx/docsmait/tests/test_results
+========================================
+
+[2025-09-02 11:00:32] INFO: Checking prerequisites...
+[2025-09-02 11:00:32] SUCCESS: Prerequisites check passed
+[2025-09-02 11:00:32] INFO: Installing test dependencies...
+Collecting pytest==7.4.3 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 4))
+  Using cached pytest-7.4.3-py3-none-any.whl.metadata (7.9 kB)
+Collecting pytest-cov==4.1.0 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 5))
+  Using cached pytest_cov-4.1.0-py3-none-any.whl.metadata (26 kB)
+Collecting pytest-html==4.1.1 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 6))
+  Using cached pytest_html-4.1.1-py3-none-any.whl.metadata (3.9 kB)
+Collecting pytest-xdist==3.3.1 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 7))
+  Using cached pytest_xdist-3.3.1-py3-none-any.whl.metadata (3.1 kB)
+Collecting pytest-asyncio==0.21.1 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 8))
+  Using cached pytest_asyncio-0.21.1-py3-none-any.whl.metadata (4.0 kB)
+Collecting requests==2.31.0 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 11))
+  Using cached requests-2.31.0-py3-none-any.whl.metadata (4.6 kB)
+Collecting httpx==0.25.2 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 12))
+  Using cached httpx-0.25.2-py3-none-any.whl.metadata (6.9 kB)
+Collecting sqlalchemy==2.0.23 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 15))
+  Using cached SQLAlchemy-2.0.23-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.6 kB)
+Collecting psycopg2-binary==2.9.7 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 16))
+  Using cached psycopg2-binary-2.9.7.tar.gz (383 kB)
+  Preparing metadata (setup.py): started
+  Preparing metadata (setup.py): finished with status 'done'
+Collecting pytest-postgresql==5.0.0 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 17))
+  Using cached pytest_postgresql-5.0.0-py3-none-any.whl.metadata (16 kB)
+Collecting selenium==4.15.2 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 20))
+  Using cached selenium-4.15.2-py3-none-any.whl.metadata (6.9 kB)
+Collecting webdriver-manager==4.0.1 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 21))
+  Using cached webdriver_manager-4.0.1-py2.py3-none-any.whl.metadata (12 kB)
+Collecting playwright==1.40.0 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 22))
+  Using cached playwright-1.40.0-py3-none-manylinux1_x86_64.whl.metadata (3.6 kB)
+Collecting pytest-playwright==0.4.3 (from -r /home/sganesh/crtx/docsmait/tests/requirements.txt (line 23))
+  Using cached pytest_playwright-0.4.3-py3-none-any.whl.metadata (1.5 kB)
+ERROR: Could not find a version that satisfies the requirement fastapi-testclient==0.1.0 (from versions: none)
+ERROR: No matching distribution found for fastapi-testclient==0.1.0
+[2025-09-02 11:00:35] WARNING: Some test dependencies may not have installed properly
+[2025-09-02 11:00:35] INFO: Running api tests...
+[2025-09-02 11:00:35] INFO: Executing: python3 -m pytest /home/sganesh/crtx/docsmait/tests/api         --verbose         --tb=short         --maxfail=5         --junit-xml=/home/sganesh/crtx/docsmait/tests/test_results/api_results_20250902_110032.xml         --capture=sys         -m "not slow"         --disable-warnings
+============================= test session starts ==============================
+platform linux -- Python 3.12.9, pytest-8.4.1, pluggy-1.5.0 -- /home/sganesh/miniconda3/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/sganesh/crtx/docsmait/tests
+plugins: anyio-4.9.0, typeguard-2.13.3, langsmith-0.4.12
+collecting ... collected 33 items / 5 deselected / 28 selected
+
+api/test_authentication.py::TestAuthentication::test_signup_new_user PASSED [  3%]
+api/test_authentication.py::TestAuthentication::test_signup_password_mismatch PASSED [  7%]
+api/test_authentication.py::TestAuthentication::test_login_valid_user PASSED [ 10%]
+api/test_authentication.py::TestAuthentication::test_login_invalid_credentials PASSED [ 14%]
+api/test_authentication.py::TestAuthentication::test_get_current_user PASSED [ 17%]
+api/test_authentication.py::TestAuthentication::test_get_current_user_no_token FAILED [ 21%]
+api/test_authentication.py::TestAuthentication::test_get_current_user_invalid_token PASSED [ 25%]
+api/test_authentication.py::TestAuthentication::test_signup_duplicate_email PASSED [ 28%]
+api/test_authentication.py::TestAuthentication::test_token_expiration_format PASSED [ 32%]
+api/test_endpoints.py::TestCoreEndpoints::test_health_endpoint SKIPPED   [ 35%]
+api/test_endpoints.py::TestCoreEndpoints::test_settings_endpoint PASSED  [ 39%]
+api/test_endpoints.py::TestCoreEndpoints::test_api_docs_endpoint PASSED  [ 42%]
+api/test_endpoints.py::TestCoreEndpoints::test_openapi_json PASSED       [ 46%]
+api/test_endpoints.py::TestProjectEndpoints::test_get_projects_unauthenticated FAILED [ 50%]
+api/test_endpoints.py::TestProjectEndpoints::test_get_projects_authenticated PASSED [ 53%]
+api/test_endpoints.py::TestProjectEndpoints::test_create_project FAILED  [ 57%]
+api/test_endpoints.py::TestProjectEndpoints::test_get_single_project SKIPPED [ 60%]
+api/test_endpoints.py::TestProjectEndpoints::test_update_project SKIPPED [ 64%]
+api/test_endpoints.py::TestProjectEndpoints::test_delete_project SKIPPED [ 67%]
+api/test_endpoints.py::TestProjectEndpoints::test_get_nonexistent_project PASSED [ 71%]
+api/test_endpoints.py::TestDocumentEndpoints::test_get_documents_authenticated FAILED [ 75%]
+api/test_endpoints.py::TestDocumentEndpoints::test_create_document FAILED [ 78%]
+
+=================================== FAILURES ===================================
+______________ TestAuthentication.test_get_current_user_no_token _______________
+api/test_authentication.py:96: in test_get_current_user_no_token
+    assert response.status_code == 401
+E   assert 403 == 401
+E    +  where 403 = <Response [403]>.status_code
+____________ TestProjectEndpoints.test_get_projects_unauthenticated ____________
+api/test_endpoints.py:64: in test_get_projects_unauthenticated
+    assert response.status_code == 401
+E   assert 200 == 401
+E    +  where 200 = <Response [200]>.status_code
+___________________ TestProjectEndpoints.test_create_project ___________________
+api/test_endpoints.py:80: in test_create_project
+    assert_docsmait.assert_api_success(response, 201)
+conftest.py:202: in assert_api_success
+    assert response.status_code == expected_status, f"Expected {expected_status}, got {response.status_code}: {response.text}"
+E   AssertionError: Expected 201, got 200: {"success":true,"project_id":"89bafa8d-3430-48c6-a0bf-e4bfc18929b5","message":"Project created successfully"}
+E   assert 200 == 201
+E    +  where 200 = <Response [200]>.status_code
+____________ TestDocumentEndpoints.test_get_documents_authenticated ____________
+api/test_endpoints.py:174: in test_get_documents_authenticated
+    assert_docsmait.assert_api_success(response)
+conftest.py:202: in assert_api_success
+    assert response.status_code == expected_status, f"Expected {expected_status}, got {response.status_code}: {response.text}"
+E   AssertionError: Expected 200, got 404: {"detail":"Not Found"}
+E   assert 404 == 200
+E    +  where 404 = <Response [404]>.status_code
+__________________ TestDocumentEndpoints.test_create_document __________________
+api/test_endpoints.py:188: in test_create_document
+    assert_docsmait.assert_api_success(response, 201)
+conftest.py:202: in assert_api_success
+    assert response.status_code == expected_status, f"Expected {expected_status}, got {response.status_code}: {response.text}"
+E   AssertionError: Expected 201, got 404: {"detail":"Not Found"}
+E   assert 404 == 201
+E    +  where 404 = <Response [404]>.status_code
+- generated xml file: /home/sganesh/crtx/docsmait/tests/test_results/api_results_20250902_110032.xml -
+=========================== short test summary info ============================
+FAILED api/test_authentication.py::TestAuthentication::test_get_current_user_no_token
+FAILED api/test_endpoints.py::TestProjectEndpoints::test_get_projects_unauthenticated
+FAILED api/test_endpoints.py::TestProjectEndpoints::test_create_project - Ass...
+FAILED api/test_endpoints.py::TestDocumentEndpoints::test_get_documents_authenticated
+FAILED api/test_endpoints.py::TestDocumentEndpoints::test_create_document - A...
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 5 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+============ 5 failed, 13 passed, 4 skipped, 5 deselected in 3.60s =============
+[2025-09-02 11:00:39] ERROR: api tests failed with exit code 1
+[2025-09-02 11:00:39] INFO: Running database tests...
+[2025-09-02 11:00:39] INFO: Executing: python3 -m pytest /home/sganesh/crtx/docsmait/tests/database         --verbose         --tb=short         --maxfail=5         --junit-xml=/home/sganesh/crtx/docsmait/tests/test_results/database_results_20250902_110032.xml         --capture=sys         -m "not slow"         --disable-warnings
+============================= test session starts ==============================
+platform linux -- Python 3.12.9, pytest-8.4.1, pluggy-1.5.0 -- /home/sganesh/miniconda3/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/sganesh/crtx/docsmait/tests
+plugins: anyio-4.9.0, typeguard-2.13.3, langsmith-0.4.12
+collecting ... collected 11 items / 2 deselected / 9 selected
+
+database/test_crud_operations.py::TestDatabaseConnection::test_database_connection SKIPPED [ 11%]
+database/test_crud_operations.py::TestDatabaseConnection::test_database_tables_exist SKIPPED [ 22%]
+database/test_crud_operations.py::TestDatabaseConnection::test_database_version SKIPPED [ 33%]
+database/test_crud_operations.py::TestUserCRUDOperations::test_create_user_direct SKIPPED [ 44%]
+database/test_crud_operations.py::TestUserCRUDOperations::test_user_constraints SKIPPED [ 55%]
+database/test_crud_operations.py::TestProjectCRUDOperations::test_create_project_direct SKIPPED [ 66%]
+database/test_crud_operations.py::TestActivityLogCRUDOperations::test_create_activity_log SKIPPED [ 77%]
+database/test_crud_operations.py::TestDatabaseIntegrity::test_foreign_key_constraints SKIPPED [ 88%]
+database/test_crud_operations.py::TestDatabaseIntegrity::test_cascade_behavior SKIPPED [100%]
+
+- generated xml file: /home/sganesh/crtx/docsmait/tests/test_results/database_results_20250902_110032.xml -
+======================= 9 skipped, 2 deselected in 0.35s =======================
+[2025-09-02 11:00:41] SUCCESS: database tests completed successfully
+[2025-09-02 11:00:41] INFO: Running frontend tests...
+[2025-09-02 11:00:41] INFO: Executing: python3 -m pytest /home/sganesh/crtx/docsmait/tests/frontend         --verbose         --tb=short         --maxfail=5         --junit-xml=/home/sganesh/crtx/docsmait/tests/test_results/frontend_results_20250902_110032.xml         --capture=sys         -m "not slow"         --disable-warnings
+============================= test session starts ==============================
+platform linux -- Python 3.12.9, pytest-8.4.1, pluggy-1.5.0 -- /home/sganesh/miniconda3/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/sganesh/crtx/docsmait/tests
+plugins: anyio-4.9.0, typeguard-2.13.3, langsmith-0.4.12
+collecting ... collected 0 items / 1 error
+
+==================================== ERRORS ====================================
+_______________ ERROR collecting frontend/test_ui_components.py ________________
+ImportError while importing test module '/home/sganesh/crtx/docsmait/tests/frontend/test_ui_components.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../../miniconda3/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+frontend/test_ui_components.py:9: in <module>
+    from selenium import webdriver
+E   ModuleNotFoundError: No module named 'selenium'
+- generated xml file: /home/sganesh/crtx/docsmait/tests/test_results/frontend_results_20250902_110032.xml -
+=========================== short test summary info ============================
+ERROR frontend/test_ui_components.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 0.09s ===============================
+[2025-09-02 11:00:41] ERROR: frontend tests failed with exit code 2
+[2025-09-02 11:00:41] INFO: Running integration tests...
+[2025-09-02 11:00:41] INFO: Executing: python3 -m pytest /home/sganesh/crtx/docsmait/tests/integration         --verbose         --tb=short         --maxfail=5         --junit-xml=/home/sganesh/crtx/docsmait/tests/test_results/integration_results_20250902_110032.xml         --capture=sys         -m "not slow"         --disable-warnings
+============================= test session starts ==============================
+platform linux -- Python 3.12.9, pytest-8.4.1, pluggy-1.5.0 -- /home/sganesh/miniconda3/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/sganesh/crtx/docsmait/tests
+plugins: anyio-4.9.0, typeguard-2.13.3, langsmith-0.4.12
+collecting ... collected 12 items / 3 deselected / 9 selected
+
+integration/test_end_to_end.py::TestUserRegistrationFlow::test_complete_user_signup_flow PASSED [ 11%]
+integration/test_end_to_end.py::TestProjectManagementFlow::test_complete_project_workflow FAILED [ 22%]
+integration/test_end_to_end.py::TestDocumentWorkflow::test_document_creation_workflow FAILED [ 33%]
+integration/test_end_to_end.py::TestTemplateWorkflow::test_template_listing_workflow PASSED [ 44%]
+integration/test_end_to_end.py::TestExportWorkflow::test_export_status_and_functionality PASSED [ 55%]
+integration/test_end_to_end.py::TestUserManagementWorkflow::test_user_listing_workflow FAILED [ 66%]
+integration/test_end_to_end.py::TestErrorHandling::test_invalid_authentication_handling FAILED [ 77%]
+integration/test_end_to_end.py::TestErrorHandling::test_nonexistent_resource_handling PASSED [ 88%]
+integration/test_end_to_end.py::TestErrorHandling::test_malformed_request_handling PASSED [100%]
+
+=================================== FAILURES ===================================
+___________ TestProjectManagementFlow.test_complete_project_workflow ___________
+integration/test_end_to_end.py:73: in test_complete_project_workflow
+    assert_docsmait.assert_api_success(create_response, 201)
+conftest.py:202: in assert_api_success
+    assert response.status_code == expected_status, f"Expected {expected_status}, got {response.status_code}: {response.text}"
+E   AssertionError: Expected 201, got 200: {"success":true,"project_id":"1dc685ce-0ab5-4456-bc37-ce83cd7de134","message":"Project created successfully"}
+E   assert 200 == 201
+E    +  where 200 = <Response [200]>.status_code
+_____________ TestDocumentWorkflow.test_document_creation_workflow _____________
+integration/test_end_to_end.py:122: in test_document_creation_workflow
+    assert_docsmait.assert_api_success(list_response)
+conftest.py:202: in assert_api_success
+    assert response.status_code == expected_status, f"Expected {expected_status}, got {response.status_code}: {response.text}"
+E   AssertionError: Expected 200, got 404: {"detail":"Not Found"}
+E   assert 404 == 200
+E    +  where 404 = <Response [404]>.status_code
+____________ TestUserManagementWorkflow.test_user_listing_workflow _____________
+integration/test_end_to_end.py:257: in test_user_listing_workflow
+    assert current_user["is_admin"] is True  # Test user should be admin
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   assert False is True
+____________ TestErrorHandling.test_invalid_authentication_handling ____________
+integration/test_end_to_end.py:384: in test_invalid_authentication_handling
+    assert response.status_code == 401
+E   assert 200 == 401
+E    +  where 200 = <Response [200]>.status_code
+- generated xml file: /home/sganesh/crtx/docsmait/tests/test_results/integration_results_20250902_110032.xml -
+=========================== short test summary info ============================
+FAILED integration/test_end_to_end.py::TestProjectManagementFlow::test_complete_project_workflow
+FAILED integration/test_end_to_end.py::TestDocumentWorkflow::test_document_creation_workflow
+FAILED integration/test_end_to_end.py::TestUserManagementWorkflow::test_user_listing_workflow
+FAILED integration/test_end_to_end.py::TestErrorHandling::test_invalid_authentication_handling
+================== 4 failed, 5 passed, 3 deselected in 2.57s ===================
+[2025-09-02 11:00:45] ERROR: integration tests failed with exit code 1
+[2025-09-02 11:00:45] INFO: Running security tests...
+[2025-09-02 11:00:45] INFO: Executing: python3 -m pytest /home/sganesh/crtx/docsmait/tests/security         --verbose         --tb=short         --maxfail=5         --junit-xml=/home/sganesh/crtx/docsmait/tests/test_results/security_results_20250902_110032.xml         --capture=sys         -m "not slow"         --disable-warnings
+============================= test session starts ==============================
+platform linux -- Python 3.12.9, pytest-8.4.1, pluggy-1.5.0 -- /home/sganesh/miniconda3/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/sganesh/crtx/docsmait/tests
+plugins: anyio-4.9.0, typeguard-2.13.3, langsmith-0.4.12
+collecting ... collected 16 items
+
+security/test_security_validation.py::TestInputValidation::test_sql_injection_prevention FAILED [  6%]
+security/test_security_validation.py::TestInputValidation::test_xss_prevention PASSED [ 12%]
+security/test_security_validation.py::TestInputValidation::test_json_injection_prevention PASSED [ 18%]
+security/test_security_validation.py::TestInputValidation::test_file_upload_validation FAILED [ 25%]
+security/test_security_validation.py::TestAuthenticationSecurity::test_password_complexity_requirements PASSED [ 31%]
+security/test_security_validation.py::TestAuthenticationSecurity::test_rate_limiting_login_attempts PASSED [ 37%]
+security/test_security_validation.py::TestAuthenticationSecurity::test_token_security FAILED [ 43%]
+security/test_security_validation.py::TestAccessControlSecurity::test_unauthorized_access_prevention FAILED [ 50%]
+security/test_security_validation.py::TestAccessControlSecurity::test_privilege_escalation_prevention PASSED [ 56%]
+security/test_security_validation.py::TestAccessControlSecurity::test_horizontal_privilege_escalation PASSED [ 62%]
+security/test_security_validation.py::TestDataProtectionSecurity::test_sensitive_data_exposure PASSED [ 68%]
+security/test_security_validation.py::TestDataProtectionSecurity::test_error_message_information_disclosure PASSED [ 75%]
+security/test_security_validation.py::TestDataProtectionSecurity::test_directory_traversal_prevention PASSED [ 81%]
+security/test_security_validation.py::TestSecurityHeaders::test_security_headers_present PASSED [ 87%]
+security/test_security_validation.py::TestSecurityHeaders::test_cors_configuration PASSED [ 93%]
+security/test_security_validation.py::TestSecurityHeaders::test_server_information_disclosure PASSED [100%]
+
+=================================== FAILURES ===================================
+______________ TestInputValidation.test_sql_injection_prevention _______________
+security/test_security_validation.py:48: in test_sql_injection_prevention
+    assert created_project["name"] != payload, "SQL injection payload was not sanitized"
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'name'
+_______________ TestInputValidation.test_file_upload_validation ________________
+security/test_security_validation.py:122: in test_file_upload_validation
+    assert response.status_code in [400, 413, 415, 404, 501], f"Dangerous file {filename} was accepted"
+E   AssertionError: Dangerous file malicious.exe was accepted
+E   assert 405 in [400, 413, 415, 404, 501]
+E    +  where 405 = <Response [405]>.status_code
+________________ TestAuthenticationSecurity.test_token_security ________________
+security/test_security_validation.py:236: in test_token_security
+    assert response.status_code == 401, f"Tampered token was accepted: {tampered_token[:20]}..."
+E   AssertionError: Tampered token was accepted: ...
+E   assert 403 == 401
+E    +  where 403 = <Response [403]>.status_code
+________ TestAccessControlSecurity.test_unauthorized_access_prevention _________
+security/test_security_validation.py:257: in test_unauthorized_access_prevention
+    assert response.status_code == 401, f"Endpoint {endpoint} accessible without authentication"
+E   AssertionError: Endpoint /auth/me accessible without authentication
+E   assert 200 == 401
+E    +  where 200 = <Response [200]>.status_code
+- generated xml file: /home/sganesh/crtx/docsmait/tests/test_results/security_results_20250902_110032.xml -
+=========================== short test summary info ============================
+FAILED security/test_security_validation.py::TestInputValidation::test_sql_injection_prevention
+FAILED security/test_security_validation.py::TestInputValidation::test_file_upload_validation
+FAILED security/test_security_validation.py::TestAuthenticationSecurity::test_token_security
+FAILED security/test_security_validation.py::TestAccessControlSecurity::test_unauthorized_access_prevention
+========================= 4 failed, 12 passed in 5.05s =========================
+[2025-09-02 11:00:50] ERROR: security tests failed with exit code 1
+[2025-09-02 11:00:50] INFO: Running slow/integration tests...
+============================= test session starts ==============================
+platform linux -- Python 3.12.9, pytest-8.4.1, pluggy-1.5.0 -- /home/sganesh/miniconda3/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/sganesh/crtx/docsmait/tests
+plugins: anyio-4.9.0, typeguard-2.13.3, langsmith-0.4.12
+collecting ... collected 20 items / 9 deselected / 11 selected
+
+integration/test_end_to_end.py::TestSystemIntegration::test_multi_service_health PASSED [  9%]
+integration/test_end_to_end.py::TestSystemIntegration::test_data_consistency PASSED [ 18%]
+integration/test_end_to_end.py::TestSystemIntegration::test_concurrent_user_operations PASSED [ 27%]
+performance/test_load_testing.py::TestAPIPerformance::test_settings_endpoint_performance PASSED [ 36%]
+performance/test_load_testing.py::TestAPIPerformance::test_authentication_performance PASSED [ 45%]
+performance/test_load_testing.py::TestAPIPerformance::test_concurrent_requests_performance PASSED [ 54%]
+performance/test_load_testing.py::TestDatabasePerformance::test_database_connection_pool_performance SKIPPED [ 63%]
+performance/test_load_testing.py::TestMemoryAndResourceUsage::test_memory_usage_during_requests PASSED [ 72%]
+performance/test_load_testing.py::TestMemoryAndResourceUsage::test_response_size_optimization PASSED [ 81%]
+performance/test_load_testing.py::TestScalabilityLimits::test_maximum_concurrent_users PASSED [ 90%]
+performance/test_load_testing.py::TestScalabilityLimits::test_sustained_load_performance PASSED [100%]
+
+- generated xml file: /home/sganesh/crtx/docsmait/tests/test_results/slow_tests_20250902_110032.xml -
+=========== 10 passed, 1 skipped, 9 deselected in 147.44s (0:02:27) ============

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="9" time="2.562" timestamp="2025-09-02T10:55:23.608576+00:00" hostname="VMI-MI17001-New"><testcase classname="integration.test_end_to_end.TestUserRegistrationFlow" name="test_complete_user_signup_flow" time="0.552" /><testcase classname="integration.test_end_to_end.TestProjectManagementFlow" name="test_complete_project_workflow" time="0.271"><failure message="AssertionError: Expected 201, got 200: {&quot;success&quot;:true,&quot;project_id&quot;:&quot;07585c57-9398-4e68-995d-a676b5e4b59c&quot;,&quot;message&quot;:&quot;Project created successfully&quot;}&#10;assert 200 == 201&#10; +  where 200 = &lt;Response [200]&gt;.status_code">integration/test_end_to_end.py:73: in test_complete_project_workflow
+    assert_docsmait.assert_api_success(create_response, 201)
+conftest.py:202: in assert_api_success
+    assert response.status_code == expected_status, f"Expected {expected_status}, got {response.status_code}: {response.text}"
+E   AssertionError: Expected 201, got 200: {"success":true,"project_id":"07585c57-9398-4e68-995d-a676b5e4b59c","message":"Project created successfully"}
+E   assert 200 == 201
+E    +  where 200 = &lt;Response [200]&gt;.status_code</failure></testcase><testcase classname="integration.test_end_to_end.TestDocumentWorkflow" name="test_document_creation_workflow" time="0.264"><failure message="AssertionError: Expected 200, got 404: {&quot;detail&quot;:&quot;Not Found&quot;}&#10;assert 404 == 200&#10; +  where 404 = &lt;Response [404]&gt;.status_code">integration/test_end_to_end.py:122: in test_document_creation_workflow
+    assert_docsmait.assert_api_success(list_response)
+conftest.py:202: in assert_api_success
+    assert response.status_code == expected_status, f"Expected {expected_status}, got {response.status_code}: {response.text}"
+E   AssertionError: Expected 200, got 404: {"detail":"Not Found"}
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404]&gt;.status_code</failure></testcase><testcase classname="integration.test_end_to_end.TestTemplateWorkflow" name="test_template_listing_workflow" time="0.314" /><testcase classname="integration.test_end_to_end.TestExportWorkflow" name="test_export_status_and_functionality" time="0.280" /><testcase classname="integration.test_end_to_end.TestUserManagementWorkflow" name="test_user_listing_workflow" time="0.245"><failure message="assert False is True">integration/test_end_to_end.py:257: in test_user_listing_workflow
+    assert current_user["is_admin"] is True  # Test user should be admin
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   assert False is True</failure></testcase><testcase classname="integration.test_end_to_end.TestErrorHandling" name="test_invalid_authentication_handling" time="0.004"><failure message="assert 200 == 401&#10; +  where 200 = &lt;Response [200]&gt;.status_code">integration/test_end_to_end.py:384: in test_invalid_authentication_handling
+    assert response.status_code == 401
+E   assert 200 == 401
+E    +  where 200 = &lt;Response [200]&gt;.status_code</failure></testcase><testcase classname="integration.test_end_to_end.TestErrorHandling" name="test_nonexistent_resource_handling" time="0.296" /><testcase classname="integration.test_end_to_end.TestErrorHandling" name="test_malformed_request_handling" time="0.248" /></testsuite></testsuites>

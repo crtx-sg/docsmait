@@ -1,0 +1,110 @@
+# docker-compose.yml
+# This file orchestrates all services for the Docsmait application.
+# Ports and resources can be configured via .env file
+# Copy .env.docker to .env and customize as needed
+
+services:
+  # FastAPI Backend Service
+  backend:
+    build: ./backend
+    container_name: docsmait_backend
+    ports:
+      - "${BACKEND_HOST_PORT:-8001}:8000"
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    networks:
+      - docsmait_network
+    depends_on:
+      - qdrant
+      - postgres
+    deploy:
+      resources:
+        limits:
+          memory: ${BACKEND_MEMORY_LIMIT:-2G}
+          cpus: '${BACKEND_CPU_LIMIT:-1.0}'
+        reservations:
+          memory: ${BACKEND_MEMORY_RESERVATION:-1G}
+          cpus: '${BACKEND_CPU_RESERVATION:-0.5}'
+
+  # Streamlit Frontend Service
+  frontend:
+    build: ./frontend
+    container_name: docsmait_frontend
+    ports:
+      - "${FRONTEND_HOST_PORT:-8501}:8501"
+    volumes:
+      - ./frontend:/app
+    networks:
+      - docsmait_network
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+
+  # Ollama Service for LLMs
+  ollama:
+    image: ollama/ollama
+    container_name: docsmait_ollama
+    ports:
+      - "${OLLAMA_HOST_PORT:-11435}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - docsmait_network
+    environment:
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-2}
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-2}
+    deploy:
+      resources:
+        limits:
+          memory: ${OLLAMA_MEMORY_LIMIT:-4G}
+          cpus: '${OLLAMA_CPU_LIMIT:-2.0}'
+        reservations:
+          memory: ${OLLAMA_MEMORY_RESERVATION:-2G}
+          cpus: '${OLLAMA_CPU_RESERVATION:-1.0}'
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: docsmait_qdrant
+    ports:
+      - "${QDRANT_REST_HOST_PORT:-6335}:6333"
+      - "${QDRANT_GRPC_HOST_PORT:-6336}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - docsmait_network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: docsmait_postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-docsmait}
+      POSTGRES_USER: ${DB_USER:-docsmait_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-docsmait_password}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - docsmait_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docsmait_user -d docsmait"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# Define the network for services to communicate
+networks:
+  docsmait_network:
+    driver: bridge
+
+# Define volumes for persistent data storage
+volumes:
+  ollama_data:
+  qdrant_data:
+  postgres_data:
+
