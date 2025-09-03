@@ -5,7 +5,7 @@ from datetime import datetime, date
 import pandas as pd
 from typing import List, Dict, Any
 from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers
-from config import BACKEND_URL
+from config import BACKEND_URL, DATAFRAME_HEIGHT
 
 require_auth()
 
@@ -165,15 +165,207 @@ with tab1:
             })
         
         df = pd.DataFrame(audit_data)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, use_container_width=True, height=DATAFRAME_HEIGHT)
     else:
         st.info("No audits found. Create your first audit in the 'Manage Audits' tab.")
 
 with tab2:
     
-    action = st.radio("Select Action", ["Create New Audit", "View/Edit Existing"])
+    audit_subtabs = st.tabs(["View/Edit Existing", "Create New Audit"])
     
-    if action == "Create New Audit":
+    with audit_subtabs[0]:
+        st.markdown("**View and Edit Audits**")
+        
+        # Filters for audits
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            audit_type_filter = st.selectbox(
+                "Type",
+                ["All", "internal", "external", "supplier", "regulatory"],
+                key="audit_type_filter"
+            )
+        
+        with col2:
+            audit_status_filter = st.selectbox(
+                "Status",
+                ["All", "planned", "in_progress", "completed", "cancelled"],
+                key="audit_status_filter"
+            )
+        
+        with col3:
+            projects = get_projects()
+            project_options = ["All Projects"] + [p["name"] for p in projects]
+            audit_project_filter = st.selectbox("Project", project_options, key="audit_project_filter")
+        
+        # Get and display audits
+        audits = get_audits()
+        
+        if audits:
+            # Apply filters
+            filtered_audits = audits
+            if audit_type_filter != "All":
+                filtered_audits = [a for a in filtered_audits if a.get('audit_type') == audit_type_filter]
+            if audit_status_filter != "All":
+                filtered_audits = [a for a in filtered_audits if a.get('status') == audit_status_filter]
+            if audit_project_filter != "All Projects":
+                filtered_audits = [a for a in filtered_audits if a.get('project_name') == audit_project_filter]
+            
+            st.markdown(f"**Showing {len(filtered_audits)} of {len(audits)} audits**")
+            
+            # Prepare data for st.dataframe
+            audit_grid_data = []
+            for audit in filtered_audits:
+                audit_row = {
+                    'Audit #': audit['audit_number'],
+                    'Title': audit['title'],
+                    'Type': audit['audit_type'].title(),
+                    'Status': audit['status'].title(),
+                    'Lead Auditor': audit['lead_auditor_username'],
+                    'Start Date': audit['planned_start_date'],
+                    'End Date': audit['planned_end_date'],
+                    'Project': audit['project_name'],
+                    'Findings': f"{audit['open_findings_count']}/{audit['findings_count']}",
+                    'full_audit_data': audit
+                }
+                audit_grid_data.append(audit_row)
+            
+            # Create DataFrame for display
+            audit_df_data = []
+            for row in audit_grid_data:
+                audit_df_row = {
+                    'Audit #': row['Audit #'],
+                    'Title': row['Title'],
+                    'Type': row['Type'],
+                    'Status': row['Status'],
+                    'Lead Auditor': row['Lead Auditor'],
+                    'Start Date': row['Start Date'],
+                    'Project': row['Project'],
+                    'Findings': row['Findings']
+                }
+                audit_df_data.append(audit_df_row)
+            
+            audit_df = pd.DataFrame(audit_df_data)
+            
+            # Display with selection capability
+            audit_selected_indices = st.dataframe(
+                audit_df,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                height=DATAFRAME_HEIGHT
+            )
+            
+            st.caption("💡 Select a row to view audit details")
+            
+            # Handle audit selection
+            if audit_selected_indices and len(audit_selected_indices.selection.rows) > 0:
+                selected_idx = audit_selected_indices.selection.rows[0]
+                audit = audit_grid_data[selected_idx]['full_audit_data']
+                # Only update if different audit selected
+                if st.session_state.get('selected_audit_id') != audit.get('id'):
+                    st.session_state.selected_audit_id = audit.get('id')
+                    st.session_state.selected_audit_data = audit
+                    st.rerun()
+            
+            # Show editable details for selected audit
+            if st.session_state.get('selected_audit_data'):
+                audit = st.session_state.selected_audit_data
+                st.markdown("---")
+                st.markdown("### 📝 Edit Selected Audit")
+                
+                with st.form("edit_audit_form"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        edited_title = st.text_input("Audit Title", value=audit.get('title', ''))
+                        edited_type = st.selectbox("Audit Type", ["internal", "external", "supplier", "regulatory"], 
+                                                 index=["internal", "external", "supplier", "regulatory"].index(audit.get('audit_type', 'internal')))
+                        edited_status = st.selectbox("Status", ["planned", "in_progress", "completed", "cancelled"],
+                                                   index=["planned", "in_progress", "completed", "cancelled"].index(audit.get('status', 'planned')))
+                        edited_auditee_dept = st.text_input("Auditee Department", value=audit.get('auditee_department', ''))
+                    
+                    with col2:
+                        edited_start_date = st.date_input("Planned Start Date", 
+                                                        value=datetime.strptime(audit.get('planned_start_date', '2024-01-01'), '%Y-%m-%d').date())
+                        edited_end_date = st.date_input("Planned End Date", 
+                                                      value=datetime.strptime(audit.get('planned_end_date', '2024-01-01'), '%Y-%m-%d').date())
+                        edited_compliance_standard = st.text_input("Compliance Standard", value=audit.get('compliance_standard', ''))
+                        
+                        # Lead Auditor selection
+                        users = get_users()
+                        if users:
+                            lead_auditor_names = [f"{u['username']} ({u['email']})" for u in users]
+                            current_lead = audit.get('lead_auditor_username', '')
+                            current_lead_index = 0
+                            for i, name in enumerate(lead_auditor_names):
+                                if current_lead in name:
+                                    current_lead_index = i
+                                    break
+                            selected_lead = st.selectbox("Lead Auditor", lead_auditor_names, index=current_lead_index)
+                            lead_auditor_id = users[lead_auditor_names.index(selected_lead)]["id"]
+                        else:
+                            lead_auditor_id = audit.get('lead_auditor')
+                    
+                    edited_scope = st.text_area("Audit Scope", value=audit.get('scope', ''), height=100)
+                    
+                    col3, col4 = st.columns(2)
+                    with col3:
+                        if st.form_submit_button("💾 Save Changes", type="primary"):
+                            try:
+                                updated_audit = {
+                                    "title": edited_title,
+                                    "audit_type": edited_type,
+                                    "status": edited_status,
+                                    "scope": edited_scope,
+                                    "planned_start_date": edited_start_date.isoformat(),
+                                    "planned_end_date": edited_end_date.isoformat(),
+                                    "auditee_department": edited_auditee_dept,
+                                    "compliance_standard": edited_compliance_standard,
+                                    "lead_auditor": lead_auditor_id
+                                }
+                                
+                                response = requests.put(
+                                    f"{BACKEND_URL}/audits/{audit['id']}", 
+                                    json=updated_audit, 
+                                    headers=get_auth_headers()
+                                )
+                                
+                                if response.status_code == 200:
+                                    st.success("✅ Audit updated successfully!")
+                                    # Clear selection and rerun to refresh data
+                                    if 'selected_audit_id' in st.session_state:
+                                        del st.session_state.selected_audit_id
+                                    if 'selected_audit_data' in st.session_state:
+                                        del st.session_state.selected_audit_data
+                                    st.rerun()
+                                else:
+                                    error_msg = response.text
+                                    try:
+                                        error_json = response.json()
+                                        if "detail" in error_json:
+                                            error_msg = error_json["detail"]
+                                    except:
+                                        pass
+                                    st.error(f"❌ Failed to update audit: {error_msg}")
+                            except Exception as e:
+                                st.error(f"❌ Connection error: {e}")
+                    
+                    with col4:
+                        if st.form_submit_button("❌ Cancel"):
+                            # Clear selection
+                            if 'selected_audit_id' in st.session_state:
+                                del st.session_state.selected_audit_id
+                            if 'selected_audit_data' in st.session_state:
+                                del st.session_state.selected_audit_data
+                            st.rerun()
+        
+        else:
+            st.info("No audits found. Create your first audit in the 'Create New Audit' tab.")
+    
+    with audit_subtabs[1]:
+        st.markdown("**Create New Audit**")
         
         with st.form("create_audit_form"):
             col1, col2 = st.columns(2)
@@ -257,76 +449,6 @@ with tab2:
                             st.error(f"❌ Failed to create audit: {error_msg}")
                     except Exception as e:
                         st.error(f"❌ Connection error: {e}")
-    
-    else:  # View/Edit Existing
-        
-        audits = get_audits()
-        if audits:
-            audit_options = [f"{a['audit_number']} - {a['title']}" for a in audits]
-            selected_audit_str = st.selectbox("Select Audit", audit_options)
-            selected_audit = audits[audit_options.index(selected_audit_str)]
-            
-            # Display audit details
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown(f"**Audit Number:** {selected_audit['audit_number']}")
-                st.markdown(f"**Type:** {selected_audit['audit_type'].title()}")
-                st.markdown(f"**Status:** {selected_audit['status'].title()}")
-                st.markdown(f"**Lead Auditor:** {selected_audit['lead_auditor_username']}")
-                st.markdown(f"**Department:** {selected_audit['auditee_department']}")
-            
-            with col2:
-                st.markdown(f"**Start Date:** {selected_audit['planned_start_date']}")
-                st.markdown(f"**End Date:** {selected_audit['planned_end_date']}")
-                st.markdown(f"**Project:** {selected_audit['project_name']}")
-                st.markdown(f"**Findings:** {selected_audit['open_findings_count']}/{selected_audit['findings_count']}")
-                st.markdown(f"**Standard:** {selected_audit['compliance_standard']}")
-            
-            st.markdown(f"**Scope:** {selected_audit['scope']}")
-            
-            # Status update using form to avoid nested button issues
-            st.markdown("**Update Status:**")
-            with st.form(f"update_status_form_{selected_audit['id']}"):
-                current_status = selected_audit.get('status', 'planned')
-                status_options = ["planned", "in_progress", "completed", "cancelled"]
-                current_index = status_options.index(current_status) if current_status in status_options else 0
-                
-                new_status = st.selectbox(
-                    "New Status", 
-                    status_options,
-                    index=current_index,
-                    key=f"status_select_{selected_audit['id']}"
-                )
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.form_submit_button("🔄 Update Status", type="primary"):
-                        if new_status != current_status:
-                            try:
-                                update_data = {"status": new_status}
-                                response = requests.put(
-                                    f"{BACKEND_URL}/audits/{selected_audit['id']}", 
-                                    json=update_data, 
-                                    headers=get_auth_headers()
-                                )
-                                if response.status_code == 200:
-                                    st.success(f"✅ Status updated from '{current_status.title()}' to '{new_status.title()}'!")
-                                    st.rerun()
-                                else:
-                                    try:
-                                        error_detail = response.json()
-                                        st.error(f"❌ Error updating status: {error_detail.get('error', 'Unknown error')}")
-                                    except:
-                                        st.error(f"❌ Error updating status: {response.text}")
-                            except Exception as e:
-                                st.error(f"❌ Connection error: {e}")
-                        else:
-                            st.info("💡 Status unchanged - select a different status to update.")
-                
-                with col2:
-                    st.form_submit_button("❌ Cancel")
-        else:
-            st.info("No audits found.")
 
 with tab3:
     
@@ -385,7 +507,7 @@ with tab3:
                     hide_index=True,
                     on_select="rerun",
                     selection_mode="single-row",
-                    height=400
+                    height=DATAFRAME_HEIGHT
                 )
                 
                 st.caption("💡 Select a row to view finding details")
@@ -400,130 +522,133 @@ with tab3:
                         st.session_state.selected_finding_data = finding
                         st.rerun()
                 
-                # Show detailed view for selected finding
+                # Show editable details for selected finding
                 if st.session_state.get('selected_finding_data'):
                     finding = st.session_state.selected_finding_data
-                    with st.expander("📋 Selected Finding Details", expanded=True):
+                    st.markdown("---")
+                    st.markdown("### 📝 Edit Selected Finding")
+                    
+                    with st.form("edit_finding_form"):
                         col1, col2 = st.columns(2)
+                        
                         with col1:
-                            st.markdown(f"**Finding:** {finding['finding_number']}: {finding['title']}")
-                            st.markdown(f"**Category:** {finding['category']}")
-                            st.markdown(f"**Status:** {finding['status'].title()}")
-                            st.markdown(f"**Severity:** {finding['severity'].upper()}")
-                            st.markdown(f"**Identified By:** {finding['identified_by_username']}")
-                            st.markdown(f"**Date:** {finding['identified_date']}")
+                            edited_title = st.text_input("Finding Title", value=finding.get('title', ''))
+                            
+                            # Handle category with safe index lookup
+                            category_options = ["major_nonconformity", "minor_nonconformity", "observation", "opportunity_for_improvement"]
+                            current_category = finding.get('category', 'minor_nonconformity')
+                            try:
+                                category_index = category_options.index(current_category)
+                            except ValueError:
+                                category_index = 1  # Default to minor_nonconformity
+                            edited_category = st.selectbox("Category", category_options, index=category_index)
+                            
+                            # Handle severity with safe index lookup
+                            severity_options = ["observation", "minor", "major", "critical"]
+                            current_severity = finding.get('severity', 'minor')
+                            try:
+                                severity_index = severity_options.index(current_severity)
+                            except ValueError:
+                                severity_index = 1  # Default to minor
+                            edited_severity = st.selectbox("Severity", severity_options, index=severity_index)
+                            
+                            # Handle status with safe index lookup
+                            status_options = ["open", "in_progress", "closed", "verified"]
+                            current_status = finding.get('status', 'open')
+                            try:
+                                status_index = status_options.index(current_status)
+                            except ValueError:
+                                status_index = 0  # Default to open
+                            edited_status = st.selectbox("Status", status_options, index=status_index)
                         
                         with col2:
-                            if finding['clause_reference']:
-                                st.markdown(f"**Clause:** {finding['clause_reference']}")
-                            if finding['due_date']:
-                                st.markdown(f"**Due Date:** {finding['due_date']}")
-                            st.markdown(f"**Corrective Actions:** {finding['corrective_actions_count']}")
+                            edited_clause_reference = st.text_input("Clause Reference", value=finding.get('clause_reference', ''))
+                            edited_due_date = None
+                            if finding.get('due_date'):
+                                try:
+                                    edited_due_date = st.date_input("Due Date", 
+                                                                  value=datetime.strptime(finding.get('due_date'), '%Y-%m-%d').date())
+                                except:
+                                    edited_due_date = st.date_input("Due Date", value=date.today())
+                            else:
+                                edited_due_date = st.date_input("Due Date", value=date.today())
+                            
+                            # Risk level with safe index lookup
+                            risk_options = ["low", "medium", "high"]
+                            current_risk = finding.get('risk_level', 'medium')
+                            try:
+                                risk_index = risk_options.index(current_risk) if current_risk else 1
+                            except ValueError:
+                                risk_index = 1  # Default to medium
+                            edited_risk_level = st.selectbox("Risk Level", risk_options, index=risk_index)
+                            
+                            # Regulatory impact with safe index lookup
+                            regulatory_options = ["none", "low", "medium", "high"]
+                            current_regulatory = finding.get('regulatory_impact', 'low')
+                            try:
+                                regulatory_index = regulatory_options.index(current_regulatory) if current_regulatory else 1
+                            except ValueError:
+                                regulatory_index = 1  # Default to low
+                            edited_regulatory_impact = st.selectbox("Regulatory Impact", regulatory_options, index=regulatory_index)
                         
-                        st.markdown(f"**Description:** {finding['description']}")
+                        edited_description = st.text_area("Description", value=finding.get('description', ''), height=100)
+                        edited_evidence = st.text_area("Evidence", value=finding.get('evidence', ''))
+                        edited_root_cause = st.text_area("Root Cause Analysis", value=finding.get('root_cause', ''))
+                        edited_recommendation = st.text_area("Recommendation", value=finding.get('recommendation', ''))
                         
-                        if finding['evidence']:
-                            st.markdown(f"**Evidence:** {finding['evidence']}")
-                        
-                        if finding['root_cause']:
-                            st.markdown(f"**Root Cause:** {finding['root_cause']}")
-                        
-                        # Show corrective actions
-                        actions = get_corrective_actions(finding['id'])
-                        if actions:
-                            st.markdown("**Corrective Actions:**")
-                            for action in actions:
-                                status_color = {"assigned": "🔵", "in_progress": "🟡", "completed": "✅", "overdue": "🔴"}
-                                st.markdown(f"- {status_color.get(action['status'], '⚪')} {action['action_number']}: {action['description']} (Due: {action['target_date']}, Assigned: {action['responsible_person_username']})")
-                        
-                        # Edit/Delete buttons
-                        st.markdown("---")
-                        col_edit, col_delete, col_spacer = st.columns([1, 1, 3])
-                        
-                        with col_edit:
-                            if st.button(f"✏️ Edit", key=f"edit_{finding['id']}"):
-                                st.session_state[f"edit_finding_{finding['id']}"] = True
-                        
-                        with col_delete:
-                            if st.button(f"🗑️ Delete", key=f"delete_{finding['id']}", type="secondary"):
-                                if st.button(f"⚠️ Confirm Delete", key=f"confirm_delete_{finding['id']}", type="secondary"):
-                                    try:
-                                        response = requests.delete(f"{BACKEND_URL}/findings/{finding['id']}", headers=get_auth_headers())
-                                        if response.status_code == 200:
-                                            st.success("✅ Finding deleted successfully!")
-                                            st.rerun()
-                                        else:
-                                            st.error(f"❌ Failed to delete finding: {response.text}")
-                                    except Exception as e:
-                                        st.error(f"❌ Connection error: {e}")
-                        
-                        # Edit form
-                        if st.session_state.get(f"edit_finding_{finding['id']}", False):
-                            st.markdown("### Edit Finding")
-                            with st.form(f"edit_finding_form_{finding['id']}"):
-                                edit_col1, edit_col2 = st.columns(2)
-                                
-                                with edit_col1:
-                                    edit_title = st.text_input("Title*", value=finding['title'])
-                                    edit_severity = st.selectbox("Severity*", ["observation", "minor", "major", "critical"], 
-                                                                index=["observation", "minor", "major", "critical"].index(finding['severity']))
-                                    edit_category = st.text_input("Category*", value=finding['category'])
-                                    edit_clause = st.text_input("ISO Clause Reference", value=finding['clause_reference'] or "")
-                                
-                                with edit_col2:
-                                    edit_status = st.selectbox("Status", ["open", "closed", "verified"], 
-                                                              index=["open", "closed", "verified"].index(finding['status']))
-                                    edit_due_date = st.date_input("Due Date", value=datetime.strptime(finding['due_date'], "%Y-%m-%d").date() if finding['due_date'] else None)
-                                
-                                edit_description = st.text_area("Description*", value=finding['description'], height=100)
-                                edit_evidence = st.text_area("Evidence", value=finding['evidence'] or "", height=80)
-                                edit_root_cause = st.text_area("Root Cause", value=finding['root_cause'] or "", height=80)
-                                
-                                edit_col_submit, edit_col_cancel = st.columns(2)
-                                with edit_col_submit:
-                                    edit_submitted = st.form_submit_button("💾 Update Finding", type="primary")
-                                with edit_col_cancel:
-                                    cancel_edit = st.form_submit_button("❌ Cancel")
-                                
-                                if cancel_edit:
-                                    st.session_state[f"edit_finding_{finding['id']}"] = False
-                                    st.rerun()
-                                
-                                if edit_submitted:
-                                    if not all([edit_title, edit_severity, edit_category, edit_description]):
-                                        st.error("Please fill in all required fields marked with *")
+                        col3, col4 = st.columns(2)
+                        with col3:
+                            if st.form_submit_button("💾 Save Changes", type="primary"):
+                                try:
+                                    updated_finding = {
+                                        "title": edited_title,
+                                        "category": edited_category,
+                                        "severity": edited_severity,
+                                        "status": edited_status,
+                                        "description": edited_description,
+                                        "evidence": edited_evidence,
+                                        "clause_reference": edited_clause_reference,
+                                        "due_date": edited_due_date.isoformat() if edited_due_date else None,
+                                        "root_cause": edited_root_cause,
+                                        "recommendation": edited_recommendation,
+                                        "risk_level": edited_risk_level,
+                                        "regulatory_impact": edited_regulatory_impact
+                                    }
+                                    
+                                    response = requests.put(
+                                        f"{BACKEND_URL}/findings/{finding['id']}", 
+                                        json=updated_finding, 
+                                        headers=get_auth_headers()
+                                    )
+                                    
+                                    if response.status_code == 200:
+                                        st.success("✅ Finding updated successfully!")
+                                        # Clear selection and rerun to refresh data
+                                        if 'selected_finding_id' in st.session_state:
+                                            del st.session_state.selected_finding_id
+                                        if 'selected_finding_data' in st.session_state:
+                                            del st.session_state.selected_finding_data
+                                        st.rerun()
                                     else:
+                                        error_msg = response.text
                                         try:
-                                            update_data = {
-                                                "title": edit_title,
-                                                "description": edit_description,
-                                                "severity": edit_severity,
-                                                "category": edit_category,
-                                                "clause_reference": edit_clause or None,
-                                                "evidence": edit_evidence or None,
-                                                "status": edit_status,
-                                                "root_cause": edit_root_cause or None,
-                                                "due_date": edit_due_date.isoformat() if edit_due_date else None
-                                            }
-                                            
-                                            response = requests.put(f"{BACKEND_URL}/findings/{finding['id']}", 
-                                                                   json=update_data, headers=get_auth_headers())
-                                            
-                                            if response.status_code == 200:
-                                                st.success("✅ Finding updated successfully!")
-                                                st.session_state[f"edit_finding_{finding['id']}"] = False
-                                                st.rerun()
-                                            else:
-                                                error_msg = response.text
-                                                try:
-                                                    error_json = response.json()
-                                                    if "detail" in error_json:
-                                                        error_msg = error_json["detail"]
-                                                except:
-                                                    pass
-                                                st.error(f"❌ Failed to update finding: {error_msg}")
-                                        except Exception as e:
-                                            st.error(f"❌ Connection error: {e}")
+                                            error_json = response.json()
+                                            if "detail" in error_json:
+                                                error_msg = error_json["detail"]
+                                        except:
+                                            pass
+                                        st.error(f"❌ Failed to update finding: {error_msg}")
+                                except Exception as e:
+                                    st.error(f"❌ Connection error: {e}")
+                        
+                        with col4:
+                            if st.form_submit_button("❌ Cancel"):
+                                # Clear selection
+                                if 'selected_finding_id' in st.session_state:
+                                    del st.session_state.selected_finding_id
+                                if 'selected_finding_data' in st.session_state:
+                                    del st.session_state.selected_finding_data
+                                st.rerun()
             else:
                 st.info("No findings recorded for this audit yet.")
         
