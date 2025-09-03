@@ -40,7 +40,7 @@ class ProjectExportService:
     
     def export_project_documents(
         self, 
-        project_id: int, 
+        project_id: str, 
         export_config: Dict[str, Any],
         user_id: int,
         db: Session
@@ -58,15 +58,12 @@ class ProjectExportService:
             Dict with export results and file information
         """
         try:
-            print(f"DEBUG: Starting export for project_id={project_id}, user_id={user_id}")
-            print(f"DEBUG: Export config: {export_config}")
             
             # Validate project access
             project = self._get_project_with_access_check(project_id, user_id, db)
             if not project:
                 return {"success": False, "error": "Project not found or access denied"}
             
-            print(f"DEBUG: Access granted for project: {project.name}")
             
             # Create temporary directory for export files
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -85,34 +82,24 @@ class ProjectExportService:
                 
                 # Export each module based on configuration
                 if export_config.get("include_documents", False):
-                    print("DEBUG: Exporting documents...")
                     docs_count = self._export_approved_documents(project_id, export_dir, db)
                     export_stats["document_count"] = docs_count
-                    print(f"DEBUG: Exported {docs_count} documents")
                 
                 if export_config.get("include_reviews", False):
-                    print("DEBUG: Exporting reviews...")
                     reviews_count = self._export_project_reviews(project_id, export_dir, db)
                     export_stats["review_count"] = reviews_count
-                    print(f"DEBUG: Exported {reviews_count} reviews")
                 
                 if export_config.get("include_code_reviews", False):
-                    print("DEBUG: Exporting code reviews...")
                     code_reviews_count = self._export_code_reviews(project_id, export_dir, db)
                     export_stats["code_review_count"] = code_reviews_count
-                    print(f"DEBUG: Exported {code_reviews_count} code reviews")
                 
                 if export_config.get("include_design_record", False):
-                    print("DEBUG: Exporting design record...")
                     design_count = self._export_design_record(project_id, export_dir, db)
                     export_stats["design_record_count"] = design_count
-                    print(f"DEBUG: Exported {design_count} design records")
                 
                 if export_config.get("include_audit_report", False):
-                    print("DEBUG: Exporting audit reports...")
                     audit_count = self._export_audit_reports(project_id, export_dir, db)
                     export_stats["audit_report_count"] = audit_count
-                    print(f"DEBUG: Exported {audit_count} audit reports")
                 
                 # Add metadata if requested
                 if export_config.get("include_metadata", True):
@@ -127,15 +114,12 @@ class ProjectExportService:
                     export_stats["audit_report_count"]
                 ])
                 
-                print(f"DEBUG: Total files to export: {export_stats['total_files']}")
                 
                 # Check if export directory has any content
                 has_content = any(export_dir.iterdir()) if export_dir.exists() else False
-                print(f"DEBUG: Export directory has content: {has_content}")
                 
                 if not has_content:
                     # Create at least the metadata file if no other content
-                    print("DEBUG: No content found, creating minimal export with metadata only")
                     if export_config.get("include_metadata", True):
                         self._create_export_metadata(project, export_config, export_stats, export_dir)
                     else:
@@ -156,7 +140,6 @@ class ProjectExportService:
                 if archive_path and archive_path.exists():
                     # Calculate file size
                     export_stats["file_size_mb"] = archive_path.stat().st_size / (1024 * 1024)
-                    print(f"DEBUG: Archive created successfully, size: {export_stats['file_size_mb']:.2f} MB")
                     
                     # Read archive content for download
                     with open(archive_path, "rb") as f:
@@ -170,27 +153,21 @@ class ProjectExportService:
                         **export_stats
                     }
                 else:
-                    print("DEBUG: Failed to create archive")
                     return {"success": False, "error": "Failed to create archive"}
         
         except Exception as e:
             return {"success": False, "error": f"Export failed: {str(e)}"}
     
-    def _get_project_with_access_check(self, project_id: int, user_id: int, db: Session) -> Optional[Project]:
+    def _get_project_with_access_check(self, project_id: str, user_id: int, db: Session) -> Optional[Project]:
         """Verify user has access to project"""
         try:
-            # Convert project_id to int if it's a string
-            if isinstance(project_id, str):
-                project_id = int(project_id)
+            # project_id is a UUID string, no conversion needed
             
-            print(f"DEBUG: Checking access for project_id={project_id}, user_id={user_id}")
             
             project = db.query(Project).filter(Project.id == project_id).first()
             if not project:
-                print(f"DEBUG: Project {project_id} not found in database")
                 return None
             
-            print(f"DEBUG: Found project: {project.name}")
             
             # Check if user is project member or admin
             is_member = db.query(ProjectMember).filter(
@@ -199,28 +176,23 @@ class ProjectExportService:
             ).first()
             
             if is_member:
-                print(f"DEBUG: User {user_id} is a member of project {project_id}")
                 return project
             
             # Check if user is admin
             user = db.query(User).filter(User.id == user_id).first()
             if user and (user.is_admin or user.is_super_admin):
-                print(f"DEBUG: User {user_id} has admin access")
                 return project
             
-            print(f"DEBUG: User {user_id} has no access to project {project_id}")
             return None
             
         except Exception as e:
-            print(f"DEBUG: Error in access check: {str(e)}")
             return None
     
-    def _export_approved_documents(self, project_id: int, export_dir: Path, db: Session) -> int:
+    def _export_approved_documents(self, project_id: str, export_dir: Path, db: Session) -> int:
         """Export all approved documents as PDFs"""
         docs_dir = export_dir / "01_Documents"
         docs_dir.mkdir(exist_ok=True, parents=True)
         
-        print(f"DEBUG: Looking for approved documents for project {project_id}")
         
         # Get approved documents for project
         documents = db.query(Document).filter(
@@ -228,18 +200,14 @@ class ProjectExportService:
             Document.status == "approved"
         ).all()
         
-        print(f"DEBUG: Found {len(documents)} approved documents")
         
         # Also check for any documents (not just approved) for debugging
         all_documents = db.query(Document).filter(Document.project_id == project_id).all()
-        print(f"DEBUG: Total documents in project: {len(all_documents)}")
-        for doc in all_documents:
-            print(f"DEBUG: Document: {doc.name}, Status: {doc.status}")
+        print(f"DEBUG: Found {len(all_documents)} total documents in project")
         
         count = 0
         for doc in documents:
             try:
-                print(f"DEBUG: Generating PDF for document: {doc.name}")
                 pdf_content = self._generate_document_pdf(doc)
                 if pdf_content:
                     safe_name = self._safe_filename(doc.name)
@@ -247,10 +215,9 @@ class ProjectExportService:
                     
                     with open(pdf_path, "wb") as f:
                         f.write(pdf_content)
-                    print(f"DEBUG: Successfully exported document: {safe_name}.pdf")
                     count += 1
                 else:
-                    print(f"DEBUG: Failed to generate PDF for document: {doc.name}")
+                    print(f"Failed to generate PDF for document {doc.name}")
             except Exception as e:
                 print(f"ERROR: Error exporting document {doc.name}: {e}")
         
@@ -258,10 +225,9 @@ class ProjectExportService:
         if documents:
             self._create_document_index(documents, docs_dir)
         
-        print(f"DEBUG: Document export completed, exported {count} documents")
         return count
     
-    def _export_project_reviews(self, project_id: int, export_dir: Path, db: Session) -> int:
+    def _export_project_reviews(self, project_id: str, export_dir: Path, db: Session) -> int:
         """Export all project reviews as PDFs"""
         reviews_dir = export_dir / "02_Project_Reviews"
         reviews_dir.mkdir(exist_ok=True)
@@ -284,7 +250,7 @@ class ProjectExportService:
         
         return count
     
-    def _export_code_reviews(self, project_id: int, export_dir: Path, db: Session) -> int:
+    def _export_code_reviews(self, project_id: str, export_dir: Path, db: Session) -> int:
         """Export all code reviews as PDFs"""
         code_dir = export_dir / "03_Code_Reviews"
         code_dir.mkdir(exist_ok=True)
@@ -311,7 +277,7 @@ class ProjectExportService:
         
         return count
     
-    def _export_design_record(self, project_id: int, export_dir: Path, db: Session) -> int:
+    def _export_design_record(self, project_id: str, export_dir: Path, db: Session) -> int:
         """Export complete design record as PDF"""
         design_dir = export_dir / "04_Design_Record"
         design_dir.mkdir(exist_ok=True)
@@ -329,7 +295,7 @@ class ProjectExportService:
         
         return 0
     
-    def _export_audit_reports(self, project_id: int, export_dir: Path, db: Session) -> int:
+    def _export_audit_reports(self, project_id: str, export_dir: Path, db: Session) -> int:
         """Export audit reports as PDFs"""
         audit_dir = export_dir / "05_Audit_Reports"
         audit_dir.mkdir(exist_ok=True)
@@ -415,7 +381,7 @@ class ProjectExportService:
             print(f"Error generating PDF for document {document.name}: {e}")
             return None
     
-    def _generate_reviews_summary_pdf(self, project_id: int, db: Session) -> Optional[bytes]:
+    def _generate_reviews_summary_pdf(self, project_id: str, db: Session) -> Optional[bytes]:
         """Generate PDF summary of project reviews"""
         try:
             buffer = io.BytesIO()
@@ -475,7 +441,7 @@ class ProjectExportService:
             print(f"Error generating code review PDF: {e}")
             return None
     
-    def _generate_design_record_pdf(self, project_id: int, db: Session) -> Optional[bytes]:
+    def _generate_design_record_pdf(self, project_id: str, db: Session) -> Optional[bytes]:
         """Generate comprehensive design record PDF"""
         try:
             buffer = io.BytesIO()

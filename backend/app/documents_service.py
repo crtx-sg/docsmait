@@ -1,7 +1,7 @@
 # backend/app/documents_service.py
 import uuid
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_
@@ -84,7 +84,7 @@ class DocumentsService:
                 user_id=user_id,
                 document_id=document_id,
                 document_name=name,
-                project_id=int(project_id) if project_id else None,
+                project_id=project_id,
                 db=db
             )
             
@@ -95,7 +95,7 @@ class DocumentsService:
                     document_id=document_id,
                     document_name=name,
                     reviewers=[str(r) for r in reviewers],
-                    project_id=int(project_id) if project_id else None,
+                    project_id=project_id,
                     db=db
                 )
             
@@ -137,7 +137,8 @@ class DocumentsService:
             query = db.query(Document).options(
                 joinedload(Document.creator),
                 joinedload(Document.reviewers),
-                joinedload(Document.reviewer_user)
+                joinedload(Document.reviewer_user),
+                joinedload(Document.reviews)
             ).filter(Document.project_id == project_id)
             
             if status:
@@ -164,6 +165,40 @@ class DocumentsService:
                             "status": reviewer.status
                         })
                 
+                # Get complete comment history (both author and reviewer comments)
+                all_comments = []
+                
+                # Add author comments from revisions
+                if doc.revisions:
+                    for revision in doc.revisions:
+                        if revision.comment and revision.comment.strip():
+                            author_user = db.query(User).filter(User.id == revision.created_by).first()
+                            all_comments.append({
+                                "type": "author",
+                                "commenter": author_user.username if author_user else "Unknown Author",
+                                "comment": revision.comment,
+                                "timestamp": revision.created_at.isoformat() if revision.created_at else None,
+                                "approved": None,  # Author comments don't have approval status
+                                "revision_number": revision.revision_number
+                            })
+                
+                # Add reviewer comments from reviews
+                if doc.reviews:
+                    for review in doc.reviews:
+                        if review.comments and review.comments.strip():
+                            reviewer_user = db.query(User).filter(User.id == review.reviewer_id).first()
+                            all_comments.append({
+                                "type": "reviewer",
+                                "commenter": reviewer_user.username if reviewer_user else "Unknown Reviewer",
+                                "comment": review.comments,
+                                "timestamp": review.reviewed_at.isoformat() if review.reviewed_at else None,
+                                "approved": review.approved,
+                                "revision_number": None  # Reviews don't have revision numbers
+                            })
+                
+                # Sort all comments by timestamp (most recent first)
+                all_comments.sort(key=lambda x: x['timestamp'] if x['timestamp'] else '1900-01-01', reverse=True)
+                
                 doc_dict = {
                     "id": doc.id,
                     "name": doc.name,
@@ -180,7 +215,8 @@ class DocumentsService:
                     "reviewed_by": doc.reviewed_by,
                     "created_by_username": doc.creator.username if doc.creator else None,
                     "reviewed_by_username": doc.reviewer_user.username if doc.reviewer_user else None,
-                    "reviewers": reviewers
+                    "reviewers": reviewers,
+                    "review_comments": all_comments
                 }
                 documents.append(doc_dict)
             
@@ -196,6 +232,7 @@ class DocumentsService:
         """Get a single document by ID"""
         db = next(get_db())
         try:
+            
             document = db.query(Document).options(
                 joinedload(Document.creator),
                 joinedload(Document.reviewers)
@@ -203,6 +240,7 @@ class DocumentsService:
             
             if not document:
                 return None
+            
                 
             # Check if user has access (project member)
             membership = db.query(ProjectMember).filter(
@@ -211,6 +249,7 @@ class DocumentsService:
             
             if not membership:
                 return None
+            
             
             # Get reviewers with their usernames
             reviewers = []
@@ -222,6 +261,57 @@ class DocumentsService:
                         "username": reviewer_user.username,
                         "status": reviewer.status
                     })
+            
+            # Get reviewed_by username if reviewer exists
+            reviewed_by_username = None
+            if document.reviewed_by:
+                reviewer = db.query(User).filter(User.id == document.reviewed_by).first()
+                if reviewer:
+                    reviewed_by_username = reviewer.username
+            
+            # Get complete comment history (both author and reviewer comments)
+            all_comments = []
+            
+            # Manually fetch all revisions for this document
+            revisions = db.query(DocumentRevision).filter(
+                DocumentRevision.document_id == document.id
+            ).order_by(DocumentRevision.revision_number).all()
+            
+            # Manually fetch all reviews for this document  
+            reviews = db.query(DocumentReview).filter(
+                DocumentReview.document_id == document.id
+            ).all()
+            
+            print(f"🔍 GET_DOCUMENT DEBUG: Document {document.name} has {len(revisions)} revisions and {len(reviews)} reviews")
+            
+            # Add author comments from revisions
+            for revision in revisions:
+                if revision.comment and revision.comment.strip():
+                    author_user = db.query(User).filter(User.id == revision.created_by).first()
+                    all_comments.append({
+                        "type": "author",
+                        "commenter": author_user.username if author_user else "Unknown Author",
+                        "comment": revision.comment,
+                        "timestamp": revision.created_at.isoformat() if revision.created_at else None,
+                        "approved": None,  # Author comments don't have approval status
+                        "revision_number": revision.revision_number
+                    })
+            
+            # Add reviewer comments from reviews
+            for review in reviews:
+                if review.comments and review.comments.strip():
+                    reviewer_user = db.query(User).filter(User.id == review.reviewer_id).first()
+                    all_comments.append({
+                        "type": "reviewer",
+                        "commenter": reviewer_user.username if reviewer_user else "Unknown Reviewer",
+                        "comment": review.comments,
+                        "timestamp": review.reviewed_at.isoformat() if review.reviewed_at else None,
+                        "approved": review.approved,
+                        "revision_number": None  # Reviews don't have revision numbers
+                    })
+            
+            # Sort all comments by timestamp (most recent first)
+            all_comments.sort(key=lambda x: x['timestamp'] if x['timestamp'] else '1900-01-01', reverse=True)
             
             return {
                 "id": document.id,
@@ -237,12 +327,15 @@ class DocumentsService:
                 "current_revision": document.current_revision,
                 "reviewed_at": document.reviewed_at.isoformat() if document.reviewed_at else None,
                 "reviewed_by": document.reviewed_by,
+                "reviewed_by_username": reviewed_by_username,
                 "created_by_username": document.creator.username if document.creator else None,
-                "reviewers": reviewers
+                "reviewers": reviewers,
+                "review_comments": all_comments
             }
             
         except Exception as e:
-            print(f"Error getting document: {e}")
+            import traceback
+            traceback.print_exc()
             return None
         finally:
             db.close()
@@ -273,15 +366,18 @@ class DocumentsService:
                 document.name = name
             if document_type:
                 document.document_type = document_type
-            if status:
-                document.status = status
             if content and content != original_content:
                 document.content = content
                 create_revision = True
-                document.current_revision += 1
+            
+            # Check if status changed before updating it
+            status_changed = status and status != original_status
+            if status:
+                document.status = status
             
             # Create new revision if content changed or status changed
-            if create_revision or (status and status != document.status):
+            if create_revision or status_changed:
+                document.current_revision += 1
                 revision_id = str(uuid.uuid4())
                 revision = DocumentRevision(
                     id=revision_id,
@@ -295,22 +391,58 @@ class DocumentsService:
                 db.add(revision)
                 
                 # Update reviewers if provided
-                if status == "request_review" and reviewers is not None:
+                if status == "request_review" and reviewers is not None and len(reviewers) > 0:
+                    print(f"🔍 DEBUG: Explicit reviewers provided: {reviewers}")
                     # Remove old reviewers for this document
-                    db.query(DocumentReviewer).filter(
+                    deleted_count = db.query(DocumentReviewer).filter(
                         DocumentReviewer.document_id == document_id
                     ).delete()
+                    print(f"🔍 DEBUG: Deleted {deleted_count} old reviewer assignments")
                     
                     # Add new reviewers
                     for reviewer_id in reviewers:
                         new_reviewer = DocumentReviewer(
                             document_id=document_id,
                             revision_id=revision_id,
-                            reviewer_id=reviewer_id
+                            reviewer_id=reviewer_id,
+                            status="pending"
                         )
                         db.add(new_reviewer)
+                        print(f"🔍 DEBUG: Added explicit reviewer {reviewer_id} for revision {revision_id}")
+                elif status == "request_review":
+                    # If resubmitting for review without specifying new reviewers,
+                    # copy reviewers from any existing assignments for this document
+                    existing_reviewers = db.query(DocumentReviewer).filter(
+                        DocumentReviewer.document_id == document_id
+                    ).all()
+                    
+                    if existing_reviewers:
+                        # Get unique reviewer IDs to avoid duplicates
+                        reviewer_ids = list(set(r.reviewer_id for r in existing_reviewers))
+                        print(f"🔍 DEBUG: Resubmission - Found {len(reviewer_ids)} unique reviewers for document {document_id}: {reviewer_ids}")
+                        
+                        # Remove all old reviewers for this document
+                        deleted_count = db.query(DocumentReviewer).filter(
+                            DocumentReviewer.document_id == document_id
+                        ).delete()
+                        print(f"🔍 DEBUG: Resubmission - Deleted {deleted_count} old reviewer assignments")
+                        
+                        # Add reviewers to new revision with reset status
+                        for reviewer_id in reviewer_ids:
+                            new_reviewer = DocumentReviewer(
+                                document_id=document_id,
+                                revision_id=revision_id,
+                                reviewer_id=reviewer_id,
+                                status="pending"  # Reset status to pending for resubmission
+                            )
+                            db.add(new_reviewer)
+                            print(f"🔍 DEBUG: Resubmission - Added reviewer {reviewer_id} for revision {revision_id}")
+                    else:
+                        print(f"🔍 DEBUG: Warning - Document {document_id} requesting review but no reviewers found to copy!")
             
+            print(f"🔍 DEBUG: About to commit document update for {document_id}")
             db.commit()
+            print(f"🔍 DEBUG: Successfully committed document update for {document_id}")
             
             # Log document update activity
             changes = {}
@@ -325,7 +457,7 @@ class DocumentsService:
                     document_id=document_id,
                     document_name=document.name,
                     changes=changes,
-                    project_id=int(document.project_id) if document.project_id else None,
+                    project_id=document.project_id,
                     db=db
                 )
             
@@ -364,7 +496,7 @@ class DocumentsService:
                             document_id=document_id,
                             document_name=document.name,
                             reviewers=[str(r) for r in reviewers],
-                            project_id=int(document.project_id) if document.project_id else None,
+                            project_id=document.project_id,
                             db=db
                         )
                         
@@ -533,7 +665,7 @@ class DocumentsService:
                 resource_type=activity_log_service.RESOURCES['DOCUMENT'],
                 resource_id=document_id,
                 resource_name=document.name,
-                project_id=int(document.project_id) if document.project_id else None,
+                project_id=document.project_id,
                 db=db
             )
             
@@ -569,12 +701,24 @@ class DocumentsService:
                 return []
             
             revisions = db.query(DocumentRevision).options(
-                joinedload(DocumentRevision.creator)
+                joinedload(DocumentRevision.creator),
+                joinedload(DocumentRevision.reviewer_assignments)
             ).filter(DocumentRevision.document_id == document_id)\
              .order_by(DocumentRevision.revision_number.desc()).all()
             
             revision_list = []
             for rev in revisions:
+                # Get reviewers for this revision
+                reviewers_info = []
+                for reviewer_assignment in rev.reviewer_assignments:
+                    reviewer_user = db.query(User).filter(User.id == reviewer_assignment.reviewer_id).first()
+                    if reviewer_user:
+                        reviewers_info.append({
+                            "user_id": reviewer_assignment.reviewer_id,
+                            "username": reviewer_user.username,
+                            "status": reviewer_assignment.status
+                        })
+                
                 revision_list.append({
                     "id": rev.id,
                     "revision_number": rev.revision_number,
@@ -583,7 +727,8 @@ class DocumentsService:
                     "comment": rev.comment,
                     "created_by": rev.created_by,
                     "created_by_username": rev.creator.username if rev.creator else None,
-                    "created_at": rev.created_at.isoformat() if rev.created_at else None
+                    "created_at": rev.created_at.isoformat() if rev.created_at else None,
+                    "reviewers": reviewers_info
                 })
             
             return revision_list
@@ -634,6 +779,11 @@ class DocumentsService:
         """Submit a review for a document"""
         db = next(get_db())
         try:
+            # Get document first for later use
+            document = db.query(Document).filter(Document.id == document_id).first()
+            if not document:
+                return {"success": False, "error": "Document not found"}
+            
             # Check if reviewer is assigned to this document
             reviewer_assignment = db.query(DocumentReviewer).filter(
                 and_(
@@ -659,7 +809,9 @@ class DocumentsService:
                 return {"success": False, "error": "You have already submitted a review for this document"}
             
             # Create new review
+            import uuid
             review = DocumentReview(
+                id=str(uuid.uuid4()),
                 document_id=document_id,
                 revision_id=revision_id,
                 reviewer_id=reviewer_id,
@@ -671,6 +823,36 @@ class DocumentsService:
             # Update reviewer status
             reviewer_assignment.status = "approved" if approved else "need_revision"
             
+            # Update document status based on review outcome and all reviewers' status
+            if approved:
+                # Check if all reviewers have approved this revision
+                all_reviewers = db.query(DocumentReviewer).filter(
+                    and_(
+                        DocumentReviewer.document_id == document_id,
+                        DocumentReviewer.revision_id == revision_id
+                    )
+                ).all()
+                
+                all_reviews = db.query(DocumentReview).filter(
+                    and_(
+                        DocumentReview.document_id == document_id,
+                        DocumentReview.revision_id == revision_id
+                    )
+                ).all()
+                
+                # Check if all assigned reviewers have submitted reviews and all approved
+                if len(all_reviews) == len(all_reviewers) and all(r.approved for r in all_reviews):
+                    document.status = "approved"
+                    print(f"🔍 DEBUG: Document {document_id} approved - all {len(all_reviewers)} reviewers have approved")
+                else:
+                    # Keep status as request_review until all reviewers approve
+                    document.status = "request_review" 
+                    print(f"🔍 DEBUG: Document {document_id} still pending - {len(all_reviews)}/{len(all_reviewers)} reviews submitted, approved: {sum(1 for r in all_reviews if r.approved)}")
+            else:
+                # If any reviewer rejects, mark as need_revision
+                document.status = "need_revision"
+                print(f"🔍 DEBUG: Document {document_id} marked as need_revision due to rejection")
+            
             db.commit()
             
             # Log review submission activity
@@ -681,12 +863,11 @@ class DocumentsService:
                 resource_id=str(review.id),
                 resource_name=f"Review of {document.name}" if document else "Document Review",
                 description=f"{'Approved' if approved else 'Rejected'} document review with comments: {comments[:100]}{'...' if len(comments) > 100 else ''}",
-                project_id=int(document.project_id) if document and document.project_id else None,
+                project_id=document.project_id if document else None,
                 db=db
             )
             
-            # Get document and reviewer details for notifications
-            document = db.query(Document).filter(Document.id == document_id).first()
+            # Get reviewer details for notifications
             reviewer = db.query(User).filter(User.id == reviewer_id).first()
             
             # Send email notification for review completion
@@ -764,16 +945,23 @@ class DocumentsService:
             ).filter(Document.project_id == project_id)
             
             # Apply status filter
+            print(f"🔍 REVIEW FILTER DEBUG: Applying status_filter='{status_filter}'")
             if status_filter:
                 if status_filter == "pending":
                     query = query.filter(Document.status == "request_review")
+                    print(f"🔍 REVIEW FILTER DEBUG: Looking for documents with status='request_review'")
                 elif status_filter == "approved":
                     query = query.filter(Document.status == "approved")
+                    print(f"🔍 REVIEW FILTER DEBUG: Looking for documents with status='approved'")
                 elif status_filter == "need_revision":
                     # Documents that have reviews with need_revision
                     query = query.join(DocumentReview).filter(DocumentReview.approved == False)
+                    print(f"🔍 REVIEW FILTER DEBUG: Looking for documents with rejected reviews")
             
             documents = query.all()
+            print(f"🔍 REVIEW FILTER DEBUG: Found {len(documents)} documents after filtering")
+            for doc in documents:
+                print(f"🔍 REVIEW FILTER DEBUG: Document '{doc.name}' has status='{doc.status}', reviews={len(doc.reviews) if doc.reviews else 0}")
             reviews = []
             
             for doc in documents:
@@ -838,21 +1026,36 @@ class DocumentsService:
             query = db.query(DocumentReviewer).options(
                 joinedload(DocumentReviewer.document).joinedload(Document.creator),
                 joinedload(DocumentReviewer.revision)
-            ).filter(
+            ).join(Document).filter(
                 and_(
                     DocumentReviewer.reviewer_id == user_id,
-                    DocumentReviewer.status == "pending"
+                    DocumentReviewer.status == "pending",
+                    Document.status == "request_review"  # Only show documents requesting review
                 )
             )
             
             # Filter by project if specified
             if project_id:
-                query = query.join(Document).filter(Document.project_id == project_id)
+                query = query.filter(Document.project_id == project_id)
+            
+            # Debug: Let's also check the raw query
+            print(f"🔍 DEBUG: Query filter conditions - user_id: {user_id}, project: {project_id}")
+            print(f"🔍 DEBUG: Looking for DocumentReviewer.status=pending AND Document.status=request_review")
             
             assignments = query.all()
+            print(f"🔍 DEBUG: Found {len(assignments)} reviewer assignments for user {user_id} (project: {project_id})")
+            
+            # Additional debugging - let's also check what assignments exist regardless of status
+            all_assignments = db.query(DocumentReviewer).options(
+                joinedload(DocumentReviewer.document)
+            ).filter(DocumentReviewer.reviewer_id == user_id).all()
+            print(f"🔍 DEBUG: Total assignments for user (all statuses): {len(all_assignments)}")
+            for a in all_assignments:
+                print(f"🔍 DEBUG: Assignment - Doc: {a.document.name}, DocStatus: {a.document.status}, ReviewerStatus: {a.status}, RevisionID: {a.revision_id}")
             review_queue = []
             
             for assignment in assignments:
+                print(f"🔍 DEBUG: Doc: {assignment.document.name}, DocStatus: {assignment.document.status}, ReviewerStatus: {assignment.status}, RevisionID: {assignment.revision_id}")
                 doc = assignment.document
                 
                 # Check if user has already submitted a review
@@ -864,8 +1067,69 @@ class DocumentsService:
                     )
                 ).first()
                 
+                print(f"🔍 DEBUG: Existing review for {doc.name} revision {assignment.revision_id}: {'YES' if existing_review else 'NO'}")
+                
                 # Only include if no review submitted yet
                 if not existing_review:
+                    content_length = len(doc.content) if doc.content else 0
+                    print(f"🔍 QUEUE DEBUG: Adding {doc.name} to queue - content_length={content_length}")
+                    if content_length == 0:
+                        print(f"🔍 QUEUE WARNING: Document {doc.name} has EMPTY content!")
+                    
+                    # Get complete comment history for this document
+                    all_comments = []
+                    
+                    # Manually fetch all revisions for this document
+                    revisions = db.query(DocumentRevision).filter(
+                        DocumentRevision.document_id == doc.id
+                    ).order_by(DocumentRevision.revision_number).all()
+                    
+                    # Manually fetch all reviews for this document  
+                    reviews = db.query(DocumentReview).filter(
+                        DocumentReview.document_id == doc.id
+                    ).all()
+                    
+                    # Debug: Check what revisions and reviews are loaded
+                    print(f"🔍 DEBUG: Document {doc.name} has {len(revisions)} revisions")
+                    print(f"🔍 DEBUG: Document {doc.name} has {len(reviews)} reviews")
+                    
+                    # Add author comments from revisions
+                    for revision in revisions:
+                        print(f"🔍 DEBUG: Revision {revision.revision_number} has comment: {'YES' if revision.comment and revision.comment.strip() else 'NO'}")
+                        if revision.comment and revision.comment.strip():
+                            print(f"🔍 DEBUG: Adding author comment from revision {revision.revision_number}: {revision.comment[:50]}...")
+                            author_user = db.query(User).filter(User.id == revision.created_by).first()
+                            all_comments.append({
+                                "type": "author",
+                                "commenter": author_user.username if author_user else "Unknown Author",
+                                "comment": revision.comment,
+                                "timestamp": revision.created_at.isoformat() if revision.created_at else None,
+                                "approved": None,  # Author comments don't have approval status
+                                "revision_number": revision.revision_number
+                            })
+                    
+                    # Add reviewer comments from reviews
+                    for review in reviews:
+                        print(f"🔍 DEBUG: Review by user {review.reviewer_id} has comment: {'YES' if review.comments and review.comments.strip() else 'NO'}")
+                        if review.comments and review.comments.strip():
+                            print(f"🔍 DEBUG: Adding reviewer comment: {review.comments[:50]}...")
+                            reviewer_user = db.query(User).filter(User.id == review.reviewer_id).first()
+                            all_comments.append({
+                                "type": "reviewer",
+                                "commenter": reviewer_user.username if reviewer_user else "Unknown Reviewer",
+                                "comment": review.comments,
+                                "timestamp": review.reviewed_at.isoformat() if review.reviewed_at else None,
+                                "approved": review.approved,
+                                "revision_number": None  # Reviews don't have revision numbers
+                            })
+                    
+                    # Sort all comments by timestamp (most recent first)
+                    all_comments.sort(key=lambda x: x['timestamp'] if x['timestamp'] else '1900-01-01', reverse=True)
+                    
+                    print(f"🔍 DEBUG: Total comments for {doc.name}: {len(all_comments)}")
+                    for i, comment in enumerate(all_comments):
+                        print(f"🔍 DEBUG: Comment {i+1}: {comment['type']} - {comment['comment'][:30]}...")
+                    
                     review_queue.append({
                         "document_id": doc.id,
                         "document_name": doc.name,
@@ -877,7 +1141,8 @@ class DocumentsService:
                         "author_comment": assignment.revision.comment if assignment.revision else "",
                         "submitted_at": doc.updated_at.isoformat() if doc.updated_at else None,
                         "content": doc.content,
-                        "content_preview": doc.content[:300] + "..." if len(doc.content) > 300 else doc.content
+                        "content_preview": doc.content[:300] + "..." if len(doc.content) > 300 else doc.content,
+                        "review_comments": all_comments
                     })
             
             return review_queue

@@ -130,7 +130,13 @@ class Document(Base):
     document_type = Column(String(50), nullable=False, index=True)
     content = Column(Text, nullable=False)
     project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    status = Column(String(20), default="draft", index=True)
+    status = Column(String(20), default="draft", index=True)  # Keep for backward compatibility
+    
+    # New simplified state management
+    document_state = Column(String(20), default="draft")  # draft, review_request, needs_update, approved
+    review_state = Column(String(20), default="none")     # none, under_review
+    current_reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Single reviewer at a time
+    
     template_id = Column(String(36), ForeignKey("templates.id"))
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -144,6 +150,12 @@ class Document(Base):
     template = relationship("Template", back_populates="documents")
     creator = relationship("User", back_populates="created_documents", foreign_keys=[created_by])
     reviewer_user = relationship("User", back_populates="reviewed_documents", foreign_keys=[reviewed_by])
+    current_reviewer = relationship("User", foreign_keys=[current_reviewer_id])  # New simplified reviewer
+    
+    # New simplified comment system
+    comments = relationship("DocumentComment", back_populates="document", cascade="all, delete-orphan")
+    
+    # Keep old complex system for backward compatibility during migration
     revisions = relationship("DocumentRevision", back_populates="document", cascade="all, delete-orphan")
     reviewers = relationship("DocumentReviewer", back_populates="document", cascade="all, delete-orphan")
     reviews = relationship("DocumentReview", back_populates="document", cascade="all, delete-orphan")
@@ -564,6 +576,20 @@ class ComplianceStandard(Base):
     __table_args__ = (UniqueConstraint('project_id', 'standard_name', 'standard_version', name='unique_project_standard'),)
 
 # Training Records
+class DocumentComment(Base):
+    __tablename__ = "document_comments"
+    
+    id = Column(String(36), primary_key=True, index=True)  # UUID as string
+    document_id = Column(String(36), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    comment_text = Column(Text, nullable=False)
+    comment_type = Column(String(20), nullable=False)  # review_request, needs_update, approved
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    document = relationship("Document", back_populates="comments")
+    user = relationship("User")
+
 class TrainingRecord(Base):
     __tablename__ = "training_records"
     
@@ -725,3 +751,191 @@ class NonConformance(Base):
     closure_date = Column(Date, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class SystemRequirement(Base):
+    __tablename__ = "system_requirements"
+    
+    id = Column(String(36), primary_key=True, index=True)  # UUID as string
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    req_id = Column(String(100), nullable=False)  # User-defined requirement ID (REQ-001, etc.)
+    req_title = Column(String(500), nullable=False)
+    req_description = Column(Text, nullable=False)
+    req_type = Column(String(50), nullable=False, index=True)  # functional, non_functional, safety, security, performance, clinical, regulatory
+    req_priority = Column(String(20), nullable=False, index=True)  # critical, high, medium, low
+    req_status = Column(String(20), default="draft", index=True)  # draft, approved, implemented, verified, obsolete
+    req_version = Column(String(20), default="1.0")
+    req_source = Column(String(255))  # Stakeholder, regulation, or standard
+    acceptance_criteria = Column(Text)
+    rationale = Column(Text)
+    assumptions = Column(Text)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    project = relationship("Project")
+    creator = relationship("User", foreign_keys=[created_by])
+    
+    # Constraints
+    __table_args__ = (UniqueConstraint('project_id', 'req_id', name='unique_project_requirement_id'),)
+
+class SystemHazard(Base):
+    __tablename__ = "system_hazards"
+    
+    id = Column(String(36), primary_key=True, index=True)  # UUID as string
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    hazard_id = Column(String(100), nullable=False)  # User-defined hazard ID (HAZ-001, etc.)
+    hazard_title = Column(String(500), nullable=False)
+    hazard_description = Column(Text, nullable=False)
+    hazard_category = Column(String(50), nullable=False, index=True)  # safety, security, operational, environmental, clinical
+    severity_level = Column(String(50), nullable=False, index=True)  # catastrophic, critical, marginal, negligible
+    likelihood = Column(String(50), nullable=False, index=True)  # frequent, probable, occasional, remote, improbable
+    risk_rating = Column(String(20), nullable=False, index=True)  # high, medium, low
+    triggering_conditions = Column(Text)
+    operational_context = Column(String(255))
+    use_error_potential = Column(Boolean, default=False)
+    current_controls = Column(Text)
+    affected_stakeholders = Column(JSON, default=list)  # JSON array of stakeholders
+    asil_level = Column(String(5))  # A, B, C, D, QM
+    sil_level = Column(Integer)  # 1, 2, 3, 4
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    project = relationship("Project")
+    creator = relationship("User", foreign_keys=[created_by])
+    
+    # Constraints
+    __table_args__ = (UniqueConstraint('project_id', 'hazard_id', name='unique_project_hazard_id'),)
+
+class FMEAAnalysis(Base):
+    __tablename__ = "fmea_analyses"
+    
+    id = Column(String(36), primary_key=True, index=True)  # UUID as string
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    fmea_id = Column(String(100), nullable=False)  # User-defined FMEA ID (FMEA-001, etc.)
+    fmea_type = Column(String(50), nullable=False, index=True)  # design_fmea, process_fmea, system_fmea, software_fmea
+    analysis_level = Column(String(50), nullable=False, index=True)  # component, assembly, subsystem, system
+    hierarchy_level = Column(Integer, nullable=False)
+    element_id = Column(String(100), nullable=False)
+    element_function = Column(String(500), nullable=False)
+    performance_standards = Column(Text)
+    fmea_team = Column(JSON, default=list)  # JSON array of team members
+    analysis_date = Column(Date)
+    review_status = Column(String(20), default="draft", index=True)  # draft, under_review, approved, superseded
+    failure_modes = Column(JSON, default=list)  # JSON array of failure mode objects
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    project = relationship("Project")
+    creator = relationship("User", foreign_keys=[created_by])
+    
+    # Constraints
+    __table_args__ = (UniqueConstraint('project_id', 'fmea_id', name='unique_project_fmea_id'),)
+
+class DesignArtifact(Base):
+    __tablename__ = "design_artifacts"
+    
+    id = Column(String(36), primary_key=True, index=True)  # UUID as string
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    design_id = Column(String(100), nullable=False)  # User-defined design ID (DES-001, etc.)
+    design_title = Column(String(500), nullable=False)
+    design_type = Column(String(50), nullable=False, index=True)  # specification, architecture, interface, detailed_design
+    design_description = Column(Text, nullable=False)
+    implementation_approach = Column(Text)
+    architecture_diagrams = Column(JSON, default=list)  # JSON array of diagram references
+    interface_definitions = Column(JSON, default=list)  # JSON array of interface specs
+    design_patterns = Column(JSON, default=list)  # JSON array of design patterns
+    technology_stack = Column(JSON, default=list)  # JSON array of technologies
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    project = relationship("Project")
+    creator = relationship("User", foreign_keys=[created_by])
+    
+    # Constraints
+    __table_args__ = (UniqueConstraint('project_id', 'design_id', name='unique_project_design_id'),)
+
+class TestArtifact(Base):
+    __tablename__ = "test_artifacts"
+    
+    id = Column(String(36), primary_key=True, index=True)  # UUID as string
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    test_id = Column(String(100), nullable=False)  # User-defined test ID (TEST-001, etc.)
+    test_title = Column(String(500), nullable=False)
+    test_type = Column(String(50), nullable=False, index=True)  # unit, integration, system, safety, performance, security, clinical, usability, biocompatibility
+    test_objective = Column(Text, nullable=False)
+    acceptance_criteria = Column(Text, nullable=False)
+    test_environment = Column(String(500))
+    test_execution = Column(JSON)  # JSON object with execution details
+    coverage_metrics = Column(JSON)  # JSON object with coverage data
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    project = relationship("Project")
+    creator = relationship("User", foreign_keys=[created_by])
+    
+    # Constraints
+    __table_args__ = (UniqueConstraint('project_id', 'test_id', name='unique_project_test_id'),)
+
+class ComplianceRecord(Base):
+    __tablename__ = "compliance_records"
+    
+    id = Column(String(36), primary_key=True, index=True)  # UUID as string
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    compliance_id = Column(String(100), nullable=False)  # User-defined compliance ID
+    standard_name = Column(String(100), nullable=False)  # ISO 13485, FDA 510k, etc.
+    standard_version = Column(String(20))
+    compliance_status = Column(String(20), default="in_progress", index=True)  # compliant, non_compliant, in_progress, not_applicable
+    assessment_date = Column(Date)
+    next_review_date = Column(Date)
+    findings = Column(JSON, default=list)  # JSON array of findings
+    gaps = Column(JSON, default=list)  # JSON array of compliance gaps
+    action_items = Column(JSON, default=list)  # JSON array of action items
+    evidence_documents = Column(JSON, default=list)  # JSON array of document references
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    project = relationship("Project")
+    creator = relationship("User", foreign_keys=[created_by])
+    
+    # Constraints
+    __table_args__ = (UniqueConstraint('project_id', 'compliance_id', name='unique_project_compliance_id'),)
+
+class PostMarketRecord(Base):
+    __tablename__ = "post_market_records"
+    
+    id = Column(String(36), primary_key=True, index=True)  # UUID as string
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    record_id = Column(String(100), nullable=False)  # User-defined record ID
+    record_type = Column(String(50), nullable=False, index=True)  # surveillance, complaint, adverse_event, recall, clinical_evaluation
+    incident_date = Column(Date)
+    reported_date = Column(Date)
+    severity_level = Column(String(20), nullable=False, index=True)  # low, medium, high, critical
+    description = Column(Text, nullable=False)
+    root_cause_analysis = Column(Text)
+    corrective_actions = Column(Text)
+    preventive_actions = Column(Text)
+    regulatory_notifications = Column(JSON, default=list)  # JSON array of notifications
+    follow_up_actions = Column(JSON, default=list)  # JSON array of follow-up items
+    closure_date = Column(Date)
+    status = Column(String(20), default="open", index=True)  # open, under_investigation, resolved, closed
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    project = relationship("Project")
+    creator = relationship("User", foreign_keys=[created_by])
+    
+    # Constraints
+    __table_args__ = (UniqueConstraint('project_id', 'record_id', name='unique_project_postmarket_id'),)

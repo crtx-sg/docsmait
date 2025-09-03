@@ -203,11 +203,9 @@ class KnowledgeBaseService:
             chunk_size = config.DEFAULT_CHUNK_SIZE
         
         try:
-            print(f"DEBUG: Starting upload for file {file.filename} to collection {collection_name}")
             # Check if collection exists
             collection = db.query(KBCollection).filter(KBCollection.name == collection_name).first()
             if not collection:
-                print(f"DEBUG: Collection {collection_name} not found")
                 return {"success": False, "error": f"Collection '{collection_name}' not found"}
             
             # Read file content
@@ -215,12 +213,9 @@ class KnowledgeBaseService:
             file.file.seek(0)  # Reset file pointer
             
             # Extract text based on file type
-            print(f"DEBUG: Extracting text from {file.filename} ({file.content_type})")
             text_content = self._extract_text_content(file_content, file.content_type, file.filename)
             if not text_content:
-                print(f"DEBUG: Failed to extract text from {file.filename}")
                 return {"success": False, "error": "Failed to extract text from file"}
-            print(f"DEBUG: Extracted {len(text_content)} characters")
             
             # Create document record in PostgreSQL
             document_id = str(uuid.uuid4())
@@ -236,7 +231,6 @@ class KnowledgeBaseService:
             
             # Process text into chunks and create embeddings (Qdrant operations)
             chunks = self._chunk_text(text_content, chunk_size)
-            print(f"DEBUG: Created {len(chunks)} chunks")
             vectors = []
             
             for i, chunk in enumerate(chunks):
@@ -271,17 +265,13 @@ class KnowledgeBaseService:
             # Update document record
             kb_document.chunk_count = len(vectors)
             kb_document.status = "completed"
-            print(f"DEBUG: Document record updated: {len(vectors)} chunks")
             
             # Update collection stats
             collection.document_count += 1
             collection.total_size_bytes += len(file_content)
             collection.updated_date = datetime.utcnow()
-            print(f"DEBUG: Collection stats updated: {collection.document_count} docs, {collection.total_size_bytes} bytes")
             
-            print(f"DEBUG: Committing to database...")
             db.commit()
-            print(f"DEBUG: Database commit successful!")
             
             processing_time = time.time() - start_time
             
@@ -773,7 +763,6 @@ Answer:"""
         start_time = time.time()
         
         try:
-            print(f"DEBUG: Adding text content '{filename}' to collection {collection_name}")
             
             # Check if collection exists, create if not
             collection = db.query(KBCollection).filter(KBCollection.name == collection_name).first()
@@ -806,7 +795,6 @@ Answer:"""
             
             # Process text into chunks and create embeddings
             chunks = self._chunk_text(text_content, config.DEFAULT_CHUNK_SIZE)
-            print(f"DEBUG: Created {len(chunks)} chunks for {filename}")
             vectors = []
             
             for i, chunk in enumerate(chunks):

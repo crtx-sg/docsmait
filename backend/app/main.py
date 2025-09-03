@@ -1,6 +1,6 @@
 # backend/app/main.py
 from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from . import models, services, auth
 from .user_service import user_service
 from .config import config
@@ -8,6 +8,7 @@ from .kb_service_pg import kb_service
 from .projects_service_pg import projects_service
 from .templates_service_pg import templates_service
 from .documents_service import documents_service
+from .documents_service_v2 import documents_service_v2
 from .ai_service import ai_service
 from .ai_config import ai_config
 from .audit_service import AuditService
@@ -105,12 +106,12 @@ def signup(user_data: models.UserSignup):
     
     # Username uniqueness is handled in user_service.create_user
     
-    # First user becomes admin (implement in user_service if needed)
+    # First user automatically becomes admin (handled in user_service.create_user)
     user = user_service.create_user(
         username=user_data.username,
         email=user_data.email,
         password=user_data.password,
-        is_admin=False  # TODO: Check if first user
+        is_admin=False  # First user logic handled in user_service
     )
     
     if not user:
@@ -353,15 +354,12 @@ def submit_assessment(request: models.AssessmentSubmissionRequest, user_id: int 
 def get_training_results(user_id: int = Depends(auth.verify_token)):
     """Get training results for authenticated user"""
     try:
-        print(f"DEBUG: get_training_results - requesting results for user_id: {user_id} (type: {type(user_id)})")
         
         result = kb_service.get_user_training_results(user_id)
-        print(f"DEBUG: get_user_training_results returned: {result}")
         return result
     except HTTPException:
         raise
     except Exception as e:
-        print(f"DEBUG: Error in get_training_results: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # ========== Projects Management Endpoints ==========
@@ -520,7 +518,7 @@ def delete_project_resource(
 
 @app.post("/projects/{project_id}/export-documents")
 def export_project_documents(
-    project_id: int,
+    project_id: str,
     export_config: dict,
     user_id: int = Depends(auth.verify_token),
     db: Session = Depends(get_db)
@@ -529,8 +527,6 @@ def export_project_documents(
     from fastapi.responses import Response
     
     try:
-        print(f"API DEBUG: Export request for project_id={project_id}, user_id={user_id}")
-        print(f"API DEBUG: Export config received: {export_config}")
         
         # Call the export service
         result = project_export_service.export_project_documents(
@@ -540,7 +536,6 @@ def export_project_documents(
             db=db
         )
         
-        print(f"API DEBUG: Export service result: {result.get('success', False)}")
         
         if not result.get("success", False):
             error_msg = result.get("error", "Export failed")
@@ -945,27 +940,7 @@ def get_document_revisions(document_id: str, user_id: int = Depends(auth.verify_
     
     return response_revisions
 
-@app.post("/documents/{document_id}/reviews")
-def submit_document_review(
-    document_id: str,
-    review: models.DocumentReviewCreate,
-    user_id: int = Depends(auth.verify_token)
-):
-    """Submit a review for a document"""
-    result = documents_service.submit_document_review(
-        document_id=document_id,
-        revision_id=review.revision_id,
-        user_id=user_id,
-        approved=review.approved,
-        comments=review.comments
-    )
-    
-    if not result["success"]:
-        if "not assigned" in result["error"]:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=result["error"])
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result["error"])
-    
-    return result
+# Removed duplicate endpoint - correct one is at line 1186
 
 @app.post("/documents/{document_id}/export")
 def export_document(
@@ -975,7 +950,7 @@ def export_document(
 ):
     """Export document to specified format"""
     if export_request.format == "pdf":
-        result = documents_service.export_document_to_pdf(document_id, user_id)
+        result = documents_service.export_document_pdf(document_id, user_id)
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -986,6 +961,8 @@ def export_document(
         if "not found" in result["error"] or "access denied" in result["error"]:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=result["error"])
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result["error"])
+    
+    return result
 
 # ========== AI Assistant Endpoints ==========
 
@@ -1159,11 +1136,18 @@ def get_user_review_queue(
     user_id: int = Depends(auth.verify_token)
 ):
     """Get review queue for current user"""
-    queue = documents_service.get_review_queue_for_user(
-        user_id=user_id,
-        project_id=project_id
-    )
-    return queue
+    try:
+        queue = documents_service.get_review_queue_for_user(
+            user_id=user_id,
+            project_id=project_id
+        )
+        if queue:
+            first_item = queue[0]
+        return queue
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return []
 
 @app.get("/projects/{project_id}/reviews/submitted")
 def get_submitted_reviews(
@@ -1574,7 +1558,7 @@ def get_my_activities(
     offset: int = Query(0, ge=0),
     action_filter: Optional[str] = Query(None),
     resource_type_filter: Optional[str] = Query(None),
-    project_id_filter: Optional[int] = Query(None),
+    project_id_filter: Optional[str] = Query(None),
     user_id: int = Depends(auth.verify_token),
     db: Session = Depends(get_db)
 ):
@@ -1604,7 +1588,7 @@ def get_my_activities(
 
 @app.get("/activity-logs/project/{project_id}")
 def get_project_activities(
-    project_id: int,
+    project_id: str,
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     user_id_filter: Optional[int] = Query(None),
@@ -1877,4 +1861,862 @@ def get_non_conformances(
     ncs = records_service.get_non_conformances(user_id, {k: v for k, v in filters.items() if v})
     return {"success": True, "non_conformances": ncs}
 
+# ================================
+# SIMPLIFIED DOCUMENT WORKFLOW V2
+# ================================
 
+@app.post("/api/v2/documents")
+def create_document_v2(
+    name: str,
+    document_type: str,
+    content: str,
+    project_id: str,
+    user_id: int = Depends(auth.verify_token)
+):
+    """Create document in Draft state"""
+    result = documents_service_v2.create_document(
+        name=name,
+        document_type=document_type,
+        content=content,
+        project_id=project_id,
+        user_id=user_id
+    )
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+@app.post("/api/v2/documents/{document_id}/submit-for-review")
+def submit_for_review_v2(
+    document_id: str,
+    reviewer_id: int,
+    comment: str,
+    user_id: int = Depends(auth.verify_token)
+):
+    """Author submits document for review"""
+    result = documents_service_v2.submit_for_review(
+        document_id=document_id,
+        reviewer_id=reviewer_id,
+        comment=comment,
+        user_id=user_id
+    )
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+@app.post("/api/v2/documents/{document_id}/submit-review")
+def submit_review_v2(
+    document_id: str,
+    reviewer_comment: str,
+    review_decision: str,  # "needs_update" or "approved"
+    user_id: int = Depends(auth.verify_token)
+):
+    """Reviewer submits review"""
+    result = documents_service_v2.submit_review(
+        document_id=document_id,
+        reviewer_comment=reviewer_comment,
+        review_decision=review_decision,
+        user_id=user_id
+    )
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+@app.get("/api/v2/projects/{project_id}/documents/author")
+def get_documents_for_author_v2(
+    project_id: str,
+    user_id: int = Depends(auth.verify_token)
+):
+    """Get all documents for author"""
+    documents = documents_service_v2.get_documents_for_author(user_id, project_id)
+    return {"documents": documents}
+
+@app.get("/api/v2/projects/{project_id}/documents/reviewer")
+def get_documents_for_reviewer_v2(
+    project_id: str,
+    user_id: int = Depends(auth.verify_token)
+):
+    """Get documents assigned to reviewer"""
+    documents = documents_service_v2.get_documents_for_reviewer(user_id, project_id)
+    return {"documents": documents}
+
+@app.get("/api/v2/projects/{project_id}/documents/approved")
+def get_approved_documents_v2(
+    project_id: str,
+    user_id: int = Depends(auth.verify_token)
+):
+    """Get all approved documents"""
+    documents = documents_service_v2.get_approved_documents(project_id, user_id)
+    return {"documents": documents}
+
+@app.get("/api/v2/documents/{document_id}/revisions")
+def get_document_revisions_v2(
+    document_id: str,
+    user_id: int = Depends(auth.verify_token)
+):
+    """Get revision history for a document"""
+    revisions = documents_service_v2.get_document_revisions(document_id, user_id)
+    return {"revisions": revisions}
+
+@app.post("/api/v2/documents/{document_id}/revisions")
+def create_document_revision_v2(
+    document_id: str,
+    content: str,
+    comment: str = "",
+    user_id: int = Depends(auth.verify_token)
+):
+    """Create a new revision for a document"""
+    result = documents_service_v2.create_revision(
+        document_id=document_id,
+        content=content,
+        user_id=user_id,
+        comment=comment
+    )
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+@app.put("/api/v2/documents/{document_id}/content")
+def update_document_content_v2(
+    document_id: str,
+    content: str,
+    create_revision: bool = True,
+    comment: str = "",
+    user_id: int = Depends(auth.verify_token)
+):
+    """Update document content with optional revision creation"""
+    result = documents_service_v2.update_document_content(
+        document_id=document_id,
+        content=content,
+        user_id=user_id,
+        create_revision=create_revision,
+        comment=comment
+    )
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+# ================================
+# DESIGN RECORD - SYSTEM REQUIREMENTS
+# ================================
+
+@app.get("/design-record/test")
+def test_design_record():
+    """Test endpoint to verify design-record routes are working"""
+    return {"message": "Design Record endpoints are working", "status": "ok"}
+
+@app.get("/design-record/requirements")
+def get_system_requirements(
+    project_id: Optional[str] = Query(None),
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Get system requirements for a project"""
+    from .db_models import SystemRequirement, ProjectMember, User
+    
+    try:
+        query = db.query(SystemRequirement).options(
+            joinedload(SystemRequirement.creator),
+            joinedload(SystemRequirement.project)
+        )
+        
+        if project_id:
+            # Check if user has access to this project
+            is_member = db.query(ProjectMember).filter(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user_id
+            ).first()
+            
+            user = db.query(User).filter(User.id == user_id).first()
+            if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied to project requirements"
+                )
+            
+            query = query.filter(SystemRequirement.project_id == project_id)
+        
+        requirements = query.order_by(SystemRequirement.req_id).all()
+        
+        result = []
+        for req in requirements:
+            result.append({
+                "id": req.id,
+                "req_id": req.req_id,
+                "req_title": req.req_title,
+                "req_description": req.req_description,
+                "req_type": req.req_type,
+                "req_priority": req.req_priority,
+                "req_status": req.req_status,
+                "req_version": req.req_version,
+                "req_source": req.req_source,
+                "acceptance_criteria": req.acceptance_criteria,
+                "rationale": req.rationale,
+                "assumptions": req.assumptions,
+                "project_id": req.project_id,
+                "created_by": req.creator.username if req.creator else "Unknown",
+                "created_at": req.created_at.isoformat() if req.created_at else None,
+                "updated_at": req.updated_at.isoformat() if req.updated_at else None
+            })
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch requirements: {str(e)}"
+        )
+
+@app.post("/design-record/requirements")
+def create_system_requirement(
+    requirement_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Create a new system requirement"""
+    from .db_models import SystemRequirement, ProjectMember, User
+    import uuid
+    
+    try:
+        project_id = requirement_data.get("project_id")
+        if not project_id:
+            raise HTTPException(status_code=400, detail="project_id is required")
+        
+        # Check if user has access to this project
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to create requirements in this project"
+            )
+        
+        # Check if requirement ID already exists in this project
+        existing_req = db.query(SystemRequirement).filter(
+            SystemRequirement.project_id == project_id,
+            SystemRequirement.req_id == requirement_data.get("req_id")
+        ).first()
+        
+        if existing_req:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Requirement ID '{requirement_data.get('req_id')}' already exists in this project"
+            )
+        
+        # Create new requirement
+        requirement_id = str(uuid.uuid4())
+        requirement = SystemRequirement(
+            id=requirement_id,
+            project_id=project_id,
+            req_id=requirement_data.get("req_id"),
+            req_title=requirement_data.get("req_title"),
+            req_description=requirement_data.get("req_description"),
+            req_type=requirement_data.get("req_type"),
+            req_priority=requirement_data.get("req_priority"),
+            req_status=requirement_data.get("req_status", "draft"),
+            req_version=requirement_data.get("req_version", "1.0"),
+            req_source=requirement_data.get("req_source"),
+            acceptance_criteria=requirement_data.get("acceptance_criteria"),
+            rationale=requirement_data.get("rationale"),
+            assumptions=requirement_data.get("assumptions"),
+            created_by=user_id
+        )
+        
+        db.add(requirement)
+        db.commit()
+        db.refresh(requirement)
+        
+        return {
+            "success": True,
+            "requirement_id": requirement_id,
+            "message": f"Requirement {requirement.req_id} created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create requirement: {str(e)}"
+        )
+
+# ================================
+# DESIGN RECORD - HAZARDS & RISKS
+# ================================
+
+@app.get("/design-record/hazards")
+def get_system_hazards(
+    project_id: Optional[str] = Query(None),
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Get system hazards for a project"""
+    from .db_models import SystemHazard, ProjectMember, User
+    
+    try:
+        query = db.query(SystemHazard).options(
+            joinedload(SystemHazard.creator),
+            joinedload(SystemHazard.project)
+        )
+        
+        if project_id:
+            # Check if user has access to this project
+            is_member = db.query(ProjectMember).filter(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user_id
+            ).first()
+            
+            user = db.query(User).filter(User.id == user_id).first()
+            if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied to project hazards"
+                )
+            
+            query = query.filter(SystemHazard.project_id == project_id)
+        
+        hazards = query.order_by(SystemHazard.hazard_id).all()
+        
+        result = []
+        for hazard in hazards:
+            result.append({
+                "id": hazard.id,
+                "hazard_id": hazard.hazard_id,
+                "hazard_title": hazard.hazard_title,
+                "hazard_description": hazard.hazard_description,
+                "hazard_category": hazard.hazard_category,
+                "severity_level": hazard.severity_level,
+                "likelihood": hazard.likelihood,
+                "risk_rating": hazard.risk_rating,
+                "triggering_conditions": hazard.triggering_conditions,
+                "operational_context": hazard.operational_context,
+                "use_error_potential": hazard.use_error_potential,
+                "current_controls": hazard.current_controls,
+                "affected_stakeholders": hazard.affected_stakeholders,
+                "asil_level": hazard.asil_level,
+                "sil_level": hazard.sil_level,
+                "project_id": hazard.project_id,
+                "created_by": hazard.creator.username if hazard.creator else "Unknown",
+                "created_at": hazard.created_at.isoformat() if hazard.created_at else None,
+                "updated_at": hazard.updated_at.isoformat() if hazard.updated_at else None
+            })
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch hazards: {str(e)}"
+        )
+
+@app.post("/design-record/hazards")
+def create_system_hazard(
+    hazard_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Create a new system hazard"""
+    from .db_models import SystemHazard, ProjectMember, User
+    import uuid
+    
+    try:
+        project_id = hazard_data.get("project_id")
+        if not project_id:
+            raise HTTPException(status_code=400, detail="project_id is required")
+        
+        # Check if user has access to this project
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to create hazards in this project"
+            )
+        
+        # Check if hazard ID already exists in this project
+        existing_hazard = db.query(SystemHazard).filter(
+            SystemHazard.project_id == project_id,
+            SystemHazard.hazard_id == hazard_data.get("hazard_id")
+        ).first()
+        
+        if existing_hazard:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Hazard ID '{hazard_data.get('hazard_id')}' already exists in this project"
+            )
+        
+        # Create new hazard
+        hazard_id = str(uuid.uuid4())
+        hazard = SystemHazard(
+            id=hazard_id,
+            project_id=project_id,
+            hazard_id=hazard_data.get("hazard_id"),
+            hazard_title=hazard_data.get("hazard_title"),
+            hazard_description=hazard_data.get("hazard_description"),
+            hazard_category=hazard_data.get("hazard_category"),
+            severity_level=hazard_data.get("severity_level"),
+            likelihood=hazard_data.get("likelihood"),
+            risk_rating=hazard_data.get("risk_rating"),
+            triggering_conditions=hazard_data.get("triggering_conditions"),
+            operational_context=hazard_data.get("operational_context"),
+            use_error_potential=hazard_data.get("use_error_potential", False),
+            current_controls=hazard_data.get("current_controls"),
+            affected_stakeholders=hazard_data.get("affected_stakeholders", []),
+            asil_level=hazard_data.get("asil_level"),
+            sil_level=hazard_data.get("sil_level"),
+            created_by=user_id
+        )
+        
+        db.add(hazard)
+        db.commit()
+        db.refresh(hazard)
+        
+        return {
+            "success": True,
+            "hazard_id": hazard_id,
+            "message": f"Hazard {hazard.hazard_id} created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create hazard: {str(e)}"
+        )
+
+
+
+# ================================
+# DESIGN RECORD - FMEA ANALYSIS
+# ================================
+
+@app.get("/design-record/fmea")
+def get_fmea_analyses(
+    project_id: Optional[str] = Query(None),
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Get FMEA analyses for a project"""
+    from .db_models import FMEAAnalysis, ProjectMember, User
+    
+    try:
+        query = db.query(FMEAAnalysis).options(
+            joinedload(FMEAAnalysis.creator),
+            joinedload(FMEAAnalysis.project)
+        )
+        
+        if project_id:
+            is_member = db.query(ProjectMember).filter(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user_id
+            ).first()
+            
+            user = db.query(User).filter(User.id == user_id).first()
+            if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied to project FMEA analyses"
+                )
+            
+            query = query.filter(FMEAAnalysis.project_id == project_id)
+        
+        fmeas = query.order_by(FMEAAnalysis.fmea_id).all()
+        
+        result = []
+        for fmea in fmeas:
+            result.append({
+                "id": fmea.id,
+                "fmea_id": fmea.fmea_id,
+                "fmea_type": fmea.fmea_type,
+                "analysis_level": fmea.analysis_level,
+                "hierarchy_level": fmea.hierarchy_level,
+                "element_id": fmea.element_id,
+                "element_function": fmea.element_function,
+                "performance_standards": fmea.performance_standards,
+                "fmea_team": fmea.fmea_team,
+                "analysis_date": str(fmea.analysis_date) if fmea.analysis_date else None,
+                "review_status": fmea.review_status,
+                "failure_modes": fmea.failure_modes,
+                "project_id": fmea.project_id,
+                "created_by": fmea.creator.username if fmea.creator else "Unknown",
+                "created_at": fmea.created_at.isoformat() if fmea.created_at else None,
+                "updated_at": fmea.updated_at.isoformat() if fmea.updated_at else None
+            })
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch FMEA analyses: {str(e)}"
+        )
+
+@app.post("/design-record/fmea")
+def create_fmea_analysis(
+    fmea_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Create a new FMEA analysis"""
+    from .db_models import FMEAAnalysis, ProjectMember, User
+    import uuid
+    from datetime import datetime
+    
+    try:
+        project_id = fmea_data.get("project_id")
+        if not project_id:
+            raise HTTPException(status_code=400, detail="project_id is required")
+        
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to create FMEA analyses in this project"
+            )
+        
+        existing_fmea = db.query(FMEAAnalysis).filter(
+            FMEAAnalysis.project_id == project_id,
+            FMEAAnalysis.fmea_id == fmea_data.get("fmea_id")
+        ).first()
+        
+        if existing_fmea:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"FMEA ID '{fmea_data.get('fmea_id')}' already exists in this project"
+            )
+        
+        analysis_date = None
+        if fmea_data.get("analysis_date"):
+            analysis_date = datetime.strptime(fmea_data.get("analysis_date"), "%Y-%m-%d").date()
+        
+        fmea_id = str(uuid.uuid4())
+        fmea = FMEAAnalysis(
+            id=fmea_id,
+            project_id=project_id,
+            fmea_id=fmea_data.get("fmea_id"),
+            fmea_type=fmea_data.get("fmea_type"),
+            analysis_level=fmea_data.get("analysis_level"),
+            hierarchy_level=fmea_data.get("hierarchy_level"),
+            element_id=fmea_data.get("element_id"),
+            element_function=fmea_data.get("element_function"),
+            performance_standards=fmea_data.get("performance_standards"),
+            fmea_team=fmea_data.get("fmea_team", []),
+            analysis_date=analysis_date,
+            review_status=fmea_data.get("review_status", "draft"),
+            failure_modes=fmea_data.get("failure_modes", []),
+            created_by=user_id
+        )
+        
+        db.add(fmea)
+        db.commit()
+        db.refresh(fmea)
+        
+        return {
+            "success": True,
+            "fmea_id": fmea_id,
+            "message": f"FMEA {fmea.fmea_id} created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create FMEA analysis: {str(e)}"
+        )
+
+# ================================
+# DESIGN RECORD - DESIGN ARTIFACTS
+# ================================
+
+@app.get("/design-record/design")
+def get_design_artifacts(
+    project_id: Optional[str] = Query(None),
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Get design artifacts for a project"""
+    from .db_models import DesignArtifact, ProjectMember, User
+    
+    try:
+        query = db.query(DesignArtifact).options(
+            joinedload(DesignArtifact.creator),
+            joinedload(DesignArtifact.project)
+        )
+        
+        if project_id:
+            is_member = db.query(ProjectMember).filter(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user_id
+            ).first()
+            
+            user = db.query(User).filter(User.id == user_id).first()
+            if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied to project design artifacts"
+                )
+            
+            query = query.filter(DesignArtifact.project_id == project_id)
+        
+        designs = query.order_by(DesignArtifact.design_id).all()
+        
+        result = []
+        for design in designs:
+            result.append({
+                "id": design.id,
+                "design_id": design.design_id,
+                "design_title": design.design_title,
+                "design_type": design.design_type,
+                "design_description": design.design_description,
+                "implementation_approach": design.implementation_approach,
+                "architecture_diagrams": design.architecture_diagrams,
+                "interface_definitions": design.interface_definitions,
+                "design_patterns": design.design_patterns,
+                "technology_stack": design.technology_stack,
+                "project_id": design.project_id,
+                "created_by": design.creator.username if design.creator else "Unknown",
+                "created_at": design.created_at.isoformat() if design.created_at else None,
+                "updated_at": design.updated_at.isoformat() if design.updated_at else None
+            })
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch design artifacts: {str(e)}"
+        )
+
+@app.post("/design-record/design")
+def create_design_artifact(
+    design_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Create a new design artifact"""
+    from .db_models import DesignArtifact, ProjectMember, User
+    import uuid
+    
+    try:
+        project_id = design_data.get("project_id")
+        if not project_id:
+            raise HTTPException(status_code=400, detail="project_id is required")
+        
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to create design artifacts in this project"
+            )
+        
+        existing_design = db.query(DesignArtifact).filter(
+            DesignArtifact.project_id == project_id,
+            DesignArtifact.design_id == design_data.get("design_id")
+        ).first()
+        
+        if existing_design:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Design ID '{design_data.get('design_id')}' already exists in this project"
+            )
+        
+        design_id = str(uuid.uuid4())
+        design = DesignArtifact(
+            id=design_id,
+            project_id=project_id,
+            design_id=design_data.get("design_id"),
+            design_title=design_data.get("design_title"),
+            design_type=design_data.get("design_type"),
+            design_description=design_data.get("design_description"),
+            implementation_approach=design_data.get("implementation_approach"),
+            architecture_diagrams=design_data.get("architecture_diagrams", []),
+            interface_definitions=design_data.get("interface_definitions", []),
+            design_patterns=design_data.get("design_patterns", []),
+            technology_stack=design_data.get("technology_stack", []),
+            created_by=user_id
+        )
+        
+        db.add(design)
+        db.commit()
+        db.refresh(design)
+        
+        return {
+            "success": True,
+            "design_id": design_id,
+            "message": f"Design {design.design_id} created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create design artifact: {str(e)}"
+        )
+
+# ================================
+# DESIGN RECORD - TEST ARTIFACTS
+# ================================
+
+@app.get("/design-record/tests")
+def get_test_artifacts(
+    project_id: Optional[str] = Query(None),
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Get test artifacts for a project"""
+    from .db_models import TestArtifact, ProjectMember, User
+    
+    try:
+        query = db.query(TestArtifact).options(
+            joinedload(TestArtifact.creator),
+            joinedload(TestArtifact.project)
+        )
+        
+        if project_id:
+            is_member = db.query(ProjectMember).filter(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user_id
+            ).first()
+            
+            user = db.query(User).filter(User.id == user_id).first()
+            if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied to project test artifacts"
+                )
+            
+            query = query.filter(TestArtifact.project_id == project_id)
+        
+        tests = query.order_by(TestArtifact.test_id).all()
+        
+        result = []
+        for test in tests:
+            result.append({
+                "id": test.id,
+                "test_id": test.test_id,
+                "test_title": test.test_title,
+                "test_type": test.test_type,
+                "test_objective": test.test_objective,
+                "acceptance_criteria": test.acceptance_criteria,
+                "test_environment": test.test_environment,
+                "test_execution": test.test_execution,
+                "coverage_metrics": test.coverage_metrics,
+                "project_id": test.project_id,
+                "created_by": test.creator.username if test.creator else "Unknown",
+                "created_at": test.created_at.isoformat() if test.created_at else None,
+                "updated_at": test.updated_at.isoformat() if test.updated_at else None
+            })
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch test artifacts: {str(e)}"
+        )
+
+@app.post("/design-record/tests")
+def create_test_artifact(
+    test_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Create a new test artifact"""
+    from .db_models import TestArtifact, ProjectMember, User
+    import uuid
+    
+    try:
+        project_id = test_data.get("project_id")
+        if not project_id:
+            raise HTTPException(status_code=400, detail="project_id is required")
+        
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to create test artifacts in this project"
+            )
+        
+        existing_test = db.query(TestArtifact).filter(
+            TestArtifact.project_id == project_id,
+            TestArtifact.test_id == test_data.get("test_id")
+        ).first()
+        
+        if existing_test:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Test ID '{test_data.get('test_id')}' already exists in this project"
+            )
+        
+        test_id = str(uuid.uuid4())
+        test = TestArtifact(
+            id=test_id,
+            project_id=project_id,
+            test_id=test_data.get("test_id"),
+            test_title=test_data.get("test_title"),
+            test_type=test_data.get("test_type"),
+            test_objective=test_data.get("test_objective"),
+            acceptance_criteria=test_data.get("acceptance_criteria"),
+            test_environment=test_data.get("test_environment"),
+            test_execution=test_data.get("test_execution"),
+            coverage_metrics=test_data.get("coverage_metrics"),
+            created_by=user_id
+        )
+        
+        db.add(test)
+        db.commit()
+        db.refresh(test)
+        
+        return {
+            "success": True,
+            "test_id": test_id,
+            "message": f"Test {test.test_id} created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create test artifact: {str(e)}"
+        )

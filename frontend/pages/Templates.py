@@ -40,6 +40,7 @@ st.title("📄 Templates Management")
 
 setup_authenticated_sidebar()
 
+
 # Display persistent success message if present
 if hasattr(st.session_state, 'template_success_message') and hasattr(st.session_state, 'show_success_until'):
     if time.time() < st.session_state.show_success_until:
@@ -107,8 +108,19 @@ def get_template_by_id(template_id):
     return None
 
 def update_template(template_id, template_data):
-    response = requests.put(f"{BACKEND_URL}/templates/{template_id}", json=template_data, headers=get_auth_headers())
-    return response.json(), response.status_code
+    try:
+        response = requests.put(f"{BACKEND_URL}/templates/{template_id}", json=template_data, headers=get_auth_headers())
+        if response.status_code == 200:
+            return response.json(), response.status_code
+        else:
+            # Handle non-200 responses
+            try:
+                error_json = response.json()
+                return {"error": f"Server error: {error_json}"}, response.status_code
+            except:
+                return {"error": f"Server returned {response.status_code}: {response.text}"}, response.status_code
+    except Exception as e:
+        return {"error": f"Network error: {str(e)}"}, None
 
 def delete_template(template_id):
     response = requests.delete(f"{BACKEND_URL}/templates/{template_id}", headers=get_auth_headers())
@@ -206,7 +218,7 @@ if search_term and templates:
 if templates:
     st.markdown(f"**Found {len(templates)} templates**")
     
-    main_col1, main_col2 = st.columns([1, 1])  # Equal width columns
+    main_col1, main_col2 = st.columns([2, 3])  # Template List:Document Editor ratio 2:3
     
     with main_col1:
         st.markdown("### Templates List")
@@ -225,10 +237,21 @@ if templates:
                 action_col1, action_col2, action_col3 = st.columns(3)
                 
                 with action_col1:
-                    if st.button("✏️ Edit", key=f"edit_{template['id']}"):
-                        st.session_state.edit_template_id = template['id']
-                        st.session_state.show_edit_in_editor = True
-                        st.rerun()
+                    # Check if user can edit this template
+                    from auth_utils import get_current_user
+                    current_user = get_current_user()
+                    can_edit = (current_user and 
+                               (current_user.get('is_admin', False) or 
+                                current_user.get('id') == template.get('created_by')))
+                    
+                    if can_edit:
+                        if st.button("✏️ Edit", key=f"edit_{template['id']}"):
+                            st.session_state.edit_template_id = template['id']
+                            st.session_state.show_edit_in_editor = True
+                            st.rerun()
+                    else:
+                        st.button("🔒 Edit", key=f"edit_{template['id']}", disabled=True, 
+                                help="You can only edit templates you created or have admin privileges")
                 
                 with action_col2:
                     if st.button("📄 PDF", key=f"export_{template['id']}"):
@@ -255,11 +278,35 @@ if templates:
                 st.markdown(f"**Editing:** {template['name']}")
                 
                 with st.form("editor_form"):
-                    # Basic template info
+                    # Basic template info - each field gets full width for visibility
                     edit_name = st.text_input("Name", value=template['name'])
+                    
                     edit_status = st.selectbox("Status", ["active", "draft", "request_review", "approved"], 
                                              index=["active", "draft", "request_review", "approved"].index(template['status']))
+                    
+                    # Document type selection - full width for visibility
+                    document_types = get_document_types()
+                    current_doc_type = template['document_type']
+                    doc_type_values = [dt["value"] for dt in document_types]
+                    doc_type_labels = [dt["label"] for dt in document_types]
+                    
+                    try:
+                        current_index = doc_type_values.index(current_doc_type)
+                    except ValueError:
+                        # If not found, default to first option
+                        current_index = 0
+                    
+                    edit_document_type = st.selectbox(
+                        "Document Type",
+                        options=doc_type_values,
+                        format_func=lambda x: doc_type_labels[doc_type_values.index(x)] if x in doc_type_values else x,
+                        index=current_index,
+                        key=f"doc_type_inline_{template['id']}"
+                    )
+                    
+                    # Tags and description fields
                     edit_tags = st.text_input("Tags", value=", ".join(template['tags']))
+                    edit_description = st.text_area("Description", value=template['description'], height=60)
                     
                     # Editor
                     edit_content = st_ace(
@@ -275,24 +322,35 @@ if templates:
                     col1, col2 = st.columns(2)
                     with col1:
                         if st.form_submit_button("💾 Save", type="primary"):
-                            template_data = {
-                                "name": edit_name,
-                                "description": template['description'],
-                                "document_type": template['document_type'],
-                                "content": edit_content,
-                                "tags": [tag.strip() for tag in edit_tags.split(",") if tag.strip()],
-                                "status": edit_status
-                            }
-                            
-                            result, status_code = update_template(st.session_state.edit_template_id, template_data)
-                            
-                            if status_code == 200:
-                                st.session_state.template_success_message = f"Template '{edit_name}' updated successfully!"
-                                st.session_state.show_success_until = time.time() + 5
-                                st.session_state.show_edit_in_editor = False
-                                st.rerun()
+                            # Validate required fields
+                            if not edit_name or not edit_name.strip():
+                                st.error("Template name is required")
+                            elif not edit_content or not edit_content.strip():
+                                st.error("Template content is required")
                             else:
-                                st.error(f"Failed to update: {result.get('error', 'Unknown error')}")
+                                template_data = {
+                                    "name": edit_name.strip(),
+                                    "description": edit_description.strip() if edit_description else "",
+                                    "document_type": edit_document_type,
+                                    "content": edit_content.strip(),
+                                    "tags": [tag.strip() for tag in edit_tags.split(",") if tag.strip()] if edit_tags else [],
+                                    "status": edit_status
+                                }
+                                
+                                result, status_code = update_template(st.session_state.edit_template_id, template_data)
+                                
+                                if status_code == 200:
+                                    st.session_state.template_success_message = f"Template '{edit_name}' updated successfully!"
+                                    st.session_state.show_success_until = time.time() + 5
+                                    st.session_state.show_edit_in_editor = False
+                                    st.rerun()
+                                else:
+                                    error_msg = result.get('error', 'Unknown error')
+                                    if status_code == 403:
+                                        st.error("🚫 **Permission Denied**: You can only edit templates that you created, or you need admin privileges.")
+                                        st.info("💡 **Tip**: If you need to modify this template, contact the template creator or an administrator.")
+                                    else:
+                                        st.error(f"Failed to update: {error_msg}")
                     
                     with col2:
                         if st.form_submit_button("❌ Cancel"):

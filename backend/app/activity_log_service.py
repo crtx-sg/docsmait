@@ -82,7 +82,7 @@ class ActivityLogService:
         resource_name: Optional[str] = None,
         description: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        project_id: Optional[int] = None,
+        project_id: Optional[str] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
         db: Optional[Session] = None
@@ -145,7 +145,7 @@ class ActivityLogService:
         end_date: Optional[datetime] = None,
         action_filter: Optional[str] = None,
         resource_type_filter: Optional[str] = None,
-        project_id_filter: Optional[int] = None,
+        project_id_filter: Optional[str] = None,
         db: Optional[Session] = None
     ) -> List[Dict[str, Any]]:
         """Get activities for a specific user"""
@@ -178,7 +178,7 @@ class ActivityLogService:
 
     def get_project_activities(
         self,
-        project_id: int,
+        project_id: str,
         limit: int = 100,
         offset: int = 0,
         start_date: Optional[datetime] = None,
@@ -425,7 +425,7 @@ class ActivityLogService:
         }
 
     # Convenience methods for common activities
-    def log_document_created(self, user_id: int, document_id: str, document_name: str, project_id: Optional[int] = None, db: Optional[Session] = None):
+    def log_document_created(self, user_id: int, document_id: str, document_name: str, project_id: Optional[str] = None, db: Optional[Session] = None):
         """Log document creation"""
         return self.log_activity(
             user_id=user_id,
@@ -437,7 +437,7 @@ class ActivityLogService:
             db=db
         )
     
-    def log_document_updated(self, user_id: int, document_id: str, document_name: str, changes: Dict[str, Any], project_id: Optional[int] = None, db: Optional[Session] = None):
+    def log_document_updated(self, user_id: int, document_id: str, document_name: str, changes: Dict[str, Any], project_id: Optional[str] = None, db: Optional[Session] = None):
         """Log document update"""
         return self.log_activity(
             user_id=user_id,
@@ -450,7 +450,7 @@ class ActivityLogService:
             db=db
         )
     
-    def log_document_review_submitted(self, user_id: int, document_id: str, document_name: str, reviewers: List[str], project_id: Optional[int] = None, db: Optional[Session] = None):
+    def log_document_review_submitted(self, user_id: int, document_id: str, document_name: str, reviewers: List[str], project_id: Optional[str] = None, db: Optional[Session] = None):
         """Log document submitted for review"""
         return self.log_activity(
             user_id=user_id,
@@ -463,7 +463,7 @@ class ActivityLogService:
             db=db
         )
     
-    def log_project_created(self, user_id: int, project_id: int, project_name: str, db: Optional[Session] = None):
+    def log_project_created(self, user_id: int, project_id: str, project_name: str, db: Optional[Session] = None):
         """Log project creation"""
         return self.log_activity(
             user_id=user_id,

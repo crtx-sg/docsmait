@@ -45,7 +45,7 @@ class ProjectsService:
             # Log project creation activity
             activity_log_service.log_project_created(
                 user_id=created_by,
-                project_id=int(project_id.replace('-', '').replace('_', '')[:10], 16) % 1000000000,  # Convert UUID to int for compatibility
+                project_id=project_id,  # project_id is now correctly handled as UUID string
                 project_name=name,
                 db=db
             )
@@ -221,7 +221,7 @@ class ProjectsService:
                 resource_id=project_id,
                 resource_name=project_name,
                 description=f"Added {new_user.username} to project with role {role}",
-                project_id=int(project_id.replace('-', '').replace('_', '')[:10], 16) % 1000000000,
+                project_id=project_id,
                 db=db
             )
             
@@ -285,8 +285,20 @@ class ProjectsService:
         return {"success": False, "error": "Delete project not implemented yet"}
     
     def add_project_member(self, project_id: str, user_id: int, member_user_id: int, role: str) -> Dict[str, Any]:
-        """Add project member (placeholder - use add_member method)"""
-        return self.add_member(project_id, user_id, f"user_{member_user_id}@example.com", role)
+        """Add project member by looking up user email from user_id"""
+        db = next(get_db())
+        try:
+            # Look up the actual user email from the user_id
+            user = db.query(User).filter(User.id == member_user_id).first()
+            if not user:
+                return {"success": False, "error": f"User with ID {member_user_id} not found"}
+            
+            # Use the real user email
+            return self.add_member(project_id, user_id, user.email, role)
+        except Exception as e:
+            return {"success": False, "error": f"Failed to add project member: {str(e)}"}
+        finally:
+            db.close()
     
     def remove_project_member(self, project_id: str, user_id: int, target_user_id: int) -> Dict[str, Any]:
         """Remove project member (placeholder - not implemented yet)"""
@@ -326,7 +338,7 @@ class ProjectsService:
                 resource_id=resource_id,
                 resource_name=f"Resource: {name}",
                 description=f"Added {resource_type} resource to project",
-                project_id=int(project_id.replace('-', '').replace('_', '')[:10], 16) % 1000000000,
+                project_id=project_id,
                 db=db
             )
             

@@ -202,7 +202,7 @@ class DocumentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     document_type: str = Field(..., pattern="^(planning_documents|process_documents|specifications|records|templates|policies|manuals)$")
     content: str = Field(default="", min_length=0)
-    status: str = Field(default="draft", pattern="^(active|draft|request_review|approved)$")
+    status: str = Field(default="draft", pattern="^(active|draft|request_review|approved|need_revision)$")
     template_id: Optional[str] = Field(default=None)
     comment: Optional[str] = Field(default="", max_length=1000)
     reviewers: Optional[List[int]] = Field(default=None)
@@ -211,7 +211,7 @@ class DocumentUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     document_type: Optional[str] = Field(default=None, pattern="^(planning_documents|process_documents|specifications|records|templates|policies|manuals)$")
     content: Optional[str] = Field(default=None, min_length=0)
-    status: Optional[str] = Field(default=None, pattern="^(active|draft|request_review|approved)$")
+    status: Optional[str] = Field(default=None, pattern="^(active|draft|request_review|approved|need_revision)$")
     comment: Optional[str] = Field(default="", max_length=1000)
     reviewers: Optional[List[int]] = Field(default=None)
 

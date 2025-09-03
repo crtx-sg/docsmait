@@ -116,14 +116,12 @@ def submit_assessment(question_ids, answers):
 def get_user_training_results():
     """Get training results for current user"""
     try:
-        print(f"DEBUG Frontend: Requesting training results for authenticated user")
         
         response = requests.get(
             f"{BACKEND_URL}/training/results",
             headers=get_auth_headers()
         )
         
-        print(f"DEBUG Frontend: Response status: {response.status_code}")
         
         if response.status_code == 200:
             return response.json()

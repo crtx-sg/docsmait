@@ -13,7 +13,7 @@ Features:
 - Processes all .md files recursively
 - Extracts metadata from YAML frontmatter or content
 - Auto-increments version for existing templates (1.0 → 1.1 → 1.2)
-- Creates templates with document_type='Process Documents'
+- Creates templates with document_type normalized (e.g., 'process_documents' → 'Process Documents')
 - Handles duplicate names by updating existing templates
 
 Usage:
@@ -76,6 +76,19 @@ class TemplateImporter:
             raise ValueError("Admin user required for template import")
             
         logger.info(f"Using user '{self.system_user.username}' as template creator")
+    
+    def _normalize_document_type(self, document_type: str) -> str:
+        """Convert frontend document type format to database format (same as TemplatesService)"""
+        mapping = {
+            "planning_documents": "Planning Documents",
+            "process_documents": "Process Documents", 
+            "specifications": "Specifications",
+            "records": "Records",
+            "templates": "Templates",
+            "policies": "Policies",
+            "manuals": "Manuals"
+        }
+        return mapping.get(document_type, document_type)
     
     def extract_frontmatter(self, content: str) -> Tuple[Dict, str]:
         """Extract YAML frontmatter from markdown content"""
@@ -166,7 +179,7 @@ class TemplateImporter:
             template_data = {
                 'name': frontmatter.get('name', filename_without_ext),
                 'description': self.extract_description(content_body, frontmatter, filename_without_ext),
-                'document_type': frontmatter.get('document_type', 'Process Documents'),
+                'document_type': self._normalize_document_type(frontmatter.get('document_type', 'process_documents')),
                 'content': raw_content,  # Store full content including frontmatter
                 'tags': frontmatter.get('tags', self.generate_tags_from_path(file_path)),
                 'version': frontmatter.get('version', self.get_next_version(frontmatter.get('name', filename_without_ext))),

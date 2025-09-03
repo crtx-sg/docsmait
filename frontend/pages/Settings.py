@@ -184,7 +184,7 @@ with settings_tabs[0]:
                     if result.get("success"):
                         st.success("✅ SMTP settings updated successfully!")
                         st.balloons()
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         st.error(f"❌ Failed to update SMTP settings: {result.get('error', 'Unknown error')}")
 
@@ -233,7 +233,7 @@ with settings_tabs[1]:
                 else:
                     st.success(f"✅ Admin user '{new_username}' created successfully!")
                     st.balloons()
-                    st.experimental_rerun()
+                    st.rerun()
     
     # List existing users
     st.markdown("#### Current Users")

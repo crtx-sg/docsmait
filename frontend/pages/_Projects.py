@@ -95,11 +95,13 @@ def get_project_details(project_id):
 def add_project_member(project_id, user_id, role="member"):
     """Add member to project"""
     try:
+        print(f"🔍 DEBUG: Adding member by ID - project_id: {project_id}, user_id: {user_id}, role: {role}")
         response = requests.post(
             f"{BACKEND_URL}/projects/{project_id}/members",
             json={"user_id": user_id, "role": role},
             headers=get_auth_headers()
         )
+        print(f"🔍 DEBUG: Member addition by ID response - status: {response.status_code}, body: {response.text[:200]}")
         return response.status_code == 200, response.json() if response.status_code == 200 else response.text
     except Exception as e:
         return False, str(e)
@@ -118,11 +120,14 @@ def get_all_users():
 def add_project_member_by_email(project_id, member_email, role="member"):
     """Add member to project by email address"""
     try:
+        print(f"🔍 DEBUG: Adding member - project_id: {project_id}, email: {member_email}, role: {role}")
         response = requests.post(
             f"{BACKEND_URL}/projects/{project_id}/members/by-email",
             json={"email": member_email, "role": role},
             headers=get_auth_headers()
         )
+        print(f"🔍 DEBUG: Member addition response - status: {response.status_code}, body: {response.text[:200]}")
+        
         if response.status_code == 200:
             return True, response.json()
         else:
@@ -737,6 +742,10 @@ with tab3:
                             # Filter out users who are already members of this project
                             current_member_emails = {member["email"] for member in project_details.get("members", [])}
                             available_users = [user for user in all_users if user["email"] not in current_member_emails]
+                            
+                            print(f"🔍 DEBUG: All users: {[u['email'] for u in all_users]}")
+                            print(f"🔍 DEBUG: Current member emails: {current_member_emails}")
+                            print(f"🔍 DEBUG: Available users: {[u['email'] for u in available_users]}")
                             
                             if not available_users:
                                 st.info("ℹ️ All registered users are already members of this project.")

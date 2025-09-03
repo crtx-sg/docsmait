@@ -33,7 +33,7 @@ class TemplatesService:
                 id=template_id,
                 name=name.strip(),
                 description=description,
-                document_type=document_type,
+                document_type=self._normalize_document_type(document_type),
                 content=content,
                 tags=tags,  # SQLAlchemy will handle JSON serialization
                 created_by=created_by,
@@ -211,7 +211,7 @@ class TemplatesService:
             if description is not None:
                 template.description = description
             if document_type:
-                template.document_type = document_type
+                template.document_type = self._normalize_document_type(document_type)
             if content:
                 template.content = content
             if tags is not None:
