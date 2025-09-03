@@ -76,21 +76,26 @@ Docsmait is built using a modern, scalable microservices-inspired architecture w
 #### 2.1.1 Structure and Components
 ```
 frontend/
-├── app.py                    # Main application entry point
-├── auth_utils.py            # Authentication utilities
-├── config.py               # Frontend configuration
-└── pages/                  # Page components
-    ├── Auth.py             # Authentication page
-    ├── _Projects.py        # Project management
-    ├── Documents.py        # Document management
-    ├── Templates.py        # Template management
-    ├── _Knowledge_Base.py  # Knowledge base interface
-    ├── Reviews.py          # Review workflows
-    ├── Audit.py           # Audit management
-    ├── Code.py            # Code review management
-    ├── AISettings.py      # AI configuration
-    ├── Settings.py        # System settings
-    └── Help.py           # Help and documentation
+├── app.py                         # Main application entry point
+├── auth_utils.py                  # Authentication utilities
+├── config.py                     # Frontend configuration
+└── pages/                        # Page components
+    ├── Auth.py                   # Authentication page
+    ├── _Projects.py              # Project management
+    ├── Documents.py              # Document management
+    ├── Templates.py              # Template management
+    ├── _Knowledge_Base.py        # Knowledge base interface
+    ├── Reviews.py                # Review workflows
+    ├── Audit.py                  # Audit management
+    ├── Code.py                   # Code review management
+    ├── DesignRecord.py           # Design record management
+    ├── Records.py                # ISO 13485 records management
+    ├── Records_Management.py     # Records management module
+    ├── Activity_Logs.py          # Activity log tracking
+    ├── AISettings.py             # AI configuration
+    ├── Settings.py               # System settings
+    ├── _Training.py              # Training management
+    └── Help.py                   # Help and documentation
 ```
 
 #### 2.1.2 Key Features
@@ -99,6 +104,10 @@ frontend/
 - **Real-time Updates**: Dynamic content loading and state management
 - **Role-based Views**: UI components adapt to user permissions
 - **Error Handling**: User-friendly error messages and validation feedback
+- **Interactive Tables**: st.dataframe implementation with single-row selection
+- **Comprehensive Forms**: Full editing capability for all data fields
+- **Export Capabilities**: Multiple format export including Markdown
+- **Knowledge Base Integration**: Intelligent updates and project summaries
 
 #### 2.1.3 State Management
 ```python
@@ -118,22 +127,25 @@ def get_current_user():
 #### 2.2.1 API Layer Structure
 ```
 backend/app/
-├── main.py                 # FastAPI application and routes
-├── auth.py                # JWT authentication
-├── models.py              # Pydantic request/response models
-├── db_models.py           # SQLAlchemy database models
-├── database_config.py     # Database connection config
-└── services/              # Business logic services
-    ├── user_service.py
-    ├── projects_service_pg.py
-    ├── documents_service.py
-    ├── templates_service_pg.py
-    ├── kb_service_pg.py
-    ├── audit_service.py
-    ├── code_review_service.py
-    ├── ai_service.py
-    ├── email_service.py
-    └── settings_service.py
+├── main.py                     # FastAPI application and routes
+├── auth.py                    # JWT authentication
+├── models.py                  # Pydantic request/response models
+├── db_models.py               # SQLAlchemy database models
+├── database_config.py         # Database connection config
+├── database_service.py        # Database service layer
+├── activity_log_service.py    # Activity logging service
+├── records_service.py         # Records management service
+├── project_export_service.py  # Project export functionality
+├── user_service.py           # User management service
+├── projects_service_pg.py    # Project management service
+├── documents_service.py      # Document management service
+├── templates_service_pg.py   # Template management service
+├── kb_service_pg.py          # Knowledge base service
+├── audit_service.py          # Audit management service
+├── code_review_service.py    # Code review service
+├── ai_service.py             # AI integration service
+├── email_service.py          # Email notification service
+└── settings_service.py       # System settings service
 ```
 
 #### 2.2.2 API Design Patterns
@@ -161,7 +173,37 @@ backend/app/
 ├── DELETE /{id}                    # Delete document
 └── POST /{id}/reviews              # Submit review
 
-# Similar patterns for templates, audits, kb, code reviews
+/design-records/           # Design record management
+├── POST /projects/{id}/requirements   # Create requirement
+├── GET  /projects/{id}/requirements   # List requirements
+├── PUT  /requirements/{id}            # Update requirement
+├── GET  /projects/{id}/hazards        # List hazards
+├── POST /projects/{id}/hazards        # Create hazard
+├── GET  /projects/{id}/fmea           # FMEA analysis
+├── POST /projects/{id}/traceability   # Update traceability
+└── GET  /projects/{id}/export/{type}  # Export design record
+
+/records/                  # ISO 13485 records management
+├── GET  /suppliers                    # List suppliers
+├── POST /suppliers                    # Create supplier
+├── PUT  /suppliers/{id}              # Update supplier
+├── GET  /parts                       # List parts
+├── POST /parts                       # Create part
+├── GET  /lab-equipment               # List lab equipment
+├── GET  /customer-complaints         # List complaints
+└── GET  /non-conformances           # List non-conformances
+
+/activity-logs/            # Activity logging
+├── GET  /                           # List activity logs
+├── POST /                           # Create activity log
+└── GET  /export                     # Export activity logs
+
+/kb/                      # Knowledge base
+├── POST /collections                # Create collection
+├── GET  /collections                # List collections
+├── POST /upload                     # Upload document
+├── POST /chat                       # Chat with KB
+└── POST /update-project-summary     # Update project data
 ```
 
 **Request/Response Model Pattern:**
@@ -182,6 +224,32 @@ class DocumentResponse(BaseModel):
     created_by_username: str
     created_at: datetime
     reviewers: List[dict] = []
+
+class RequirementCreate(BaseModel):
+    requirement_id: str = Field(..., min_length=1, max_length=50)
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(..., min_length=1)
+    category: str = Field(..., pattern="^(functional|performance|safety|usability|...)$")
+    priority: str = Field(..., pattern="^(low|medium|high|critical)$")
+    verification_method: str = Field(..., pattern="^(test|inspection|analysis|demonstration)$")
+    risk_level: str = Field(..., pattern="^(low|medium|high)$")
+
+class HazardCreate(BaseModel):
+    hazard_id: str = Field(..., min_length=1, max_length=50)
+    hazardous_situation: str = Field(..., min_length=1)
+    foreseeable_sequence: str = Field(..., min_length=1)
+    harm: str = Field(..., min_length=1)
+    severity: str = Field(..., pattern="^(negligible|minor|serious|critical|catastrophic)$")
+    probability: str = Field(..., pattern="^(improbable|remote|occasional|probable|frequent)$")
+    risk_level: str = Field(..., pattern="^(low|medium|high)$")
+    safety_integrity: str = Field(..., pattern="^(A|B|C|D|1|2|3|4|None)$")
+
+class RecordCreate(BaseModel):
+    record_type: str = Field(..., pattern="^(supplier|parts|lab_equipment|customer_complaints|non_conformances)$")
+    name: str = Field(..., min_length=1, max_length=200)
+    status: str = Field(..., pattern="^(active|pending|approved|rejected|...)$")
+    created_date: datetime = Field(default_factory=datetime.utcnow)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 ```
 
 #### 2.2.3 Authentication and Authorization
@@ -257,26 +325,44 @@ class DocumentsService:
 
 **Core Entity Relationships:**
 ```
-Users ←─────┐
-     │      │
-     └──→ Projects ←─────┐
-           │             │
-           ├──→ ProjectMembers
-           │
-           ├──→ Documents ←─────┐
-           │    │               │
-           │    ├──→ DocumentRevisions
-           │    ├──→ DocumentReviewers
-           │    └──→ DocumentReviews
-           │
-           ├──→ Templates ←─────┐
-           │    │               │
-           │    └──→ TemplateApprovals
-           │
-           ├──→ Audits ←─────┐
-           │    │            │
+Users ←─────────────────┐
+     │                  │
+     └──→ Projects ←─────┼─────────────┐
+           │             │             │
+           ├──→ ProjectMembers         │
+           │                          │
+           ├──→ Documents ←─────┐      │
+           │    │               │      │
+           │    ├──→ DocumentRevisions │
+           │    ├──→ DocumentReviewers │
+           │    └──→ DocumentReviews   │
+           │                          │
+           ├──→ Templates ←─────┐      │
+           │    │               │      │
+           │    └──→ TemplateApprovals │
+           │                          │
+           ├──→ DesignRecords ←─────┐  │
+           │    ├──→ Requirements    │  │
+           │    ├──→ Hazards        │  │
+           │    ├──→ FMEAAnalysis   │  │
+           │    ├──→ TestArtifacts  │  │
+           │    ├──→ DesignArtifacts│  │
+           │    ├──→ Traceability   │  │
+           │    └──→ Compliance     │  │
+           │                          │
+           ├──→ Records ←─────┐        │
+           │    ├──→ Suppliers        │
+           │    ├──→ Parts           │
+           │    ├──→ LabEquipment    │
+           │    ├──→ CustomerComplaints
+           │    └──→ NonConformances │
+           │                          │
+           ├──→ ActivityLogs          │
+           │                          │
+           ├──→ Audits ←─────┐        │
+           │    │            │        │
            │    └──→ Findings ←──→ CorrectiveActions
-           │
+           │                          │
            └──→ Repositories ←──→ PullRequests ←──→ CodeReviews
 ```
 
@@ -302,6 +388,84 @@ class Document(Base, BaseModel):
     creator = relationship("User", foreign_keys=[created_by])
     reviewers = relationship("DocumentReviewer", back_populates="document")
     revisions = relationship("DocumentRevision", back_populates="document")
+
+# Design Record Models
+class Requirement(Base, BaseModel):
+    __tablename__ = "requirements"
+    
+    requirement_id = Column(String(50), nullable=False)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=False)
+    category = Column(String(50), nullable=False)
+    priority = Column(String(20), nullable=False)
+    verification_method = Column(String(50), nullable=False)
+    risk_level = Column(String(20), nullable=False)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
+    
+    project = relationship("Project", back_populates="requirements")
+
+class Hazard(Base, BaseModel):
+    __tablename__ = "hazards"
+    
+    hazard_id = Column(String(50), nullable=False)
+    hazardous_situation = Column(Text, nullable=False)
+    foreseeable_sequence = Column(Text, nullable=False)
+    harm = Column(Text, nullable=False)
+    severity = Column(String(20), nullable=False)
+    probability = Column(String(20), nullable=False)
+    risk_level = Column(String(20), nullable=False)
+    safety_integrity = Column(String(10))
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
+    
+    project = relationship("Project", back_populates="hazards")
+
+# Records Management Models
+class Supplier(Base, BaseModel):
+    __tablename__ = "suppliers"
+    
+    supplier_id = Column(String(50), nullable=False)
+    name = Column(String(200), nullable=False)
+    contact_person = Column(String(200))
+    email = Column(String(100))
+    phone = Column(String(50))
+    address = Column(Text)
+    certification_status = Column(String(50))
+    approval_status = Column(String(50))
+    performance_rating = Column(String(20))
+    quality_rating = Column(String(20))
+    risk_level = Column(String(20))
+
+class Part(Base, BaseModel):
+    __tablename__ = "parts"
+    
+    part_number = Column(String(100), nullable=False)
+    description = Column(String(500))
+    supplier_id = Column(String(36), ForeignKey("suppliers.id"))
+    udi = Column(String(100))
+    lot_number = Column(String(100))
+    serial_number = Column(String(100))
+    expiration_date = Column(Date)
+    received_date = Column(Date)
+    current_stock = Column(Integer, default=0)
+    minimum_stock = Column(Integer, default=0)
+    location = Column(String(200))
+    status = Column(String(50))
+    unit_cost = Column(Numeric(10, 2))
+    
+    supplier = relationship("Supplier", back_populates="parts")
+
+class ActivityLog(Base, BaseModel):
+    __tablename__ = "activity_logs"
+    
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    action = Column(String(100), nullable=False)
+    details = Column(Text)
+    ip_address = Column(String(45))
+    user_agent = Column(Text)
+    project_id = Column(String(36), ForeignKey("projects.id"))
+    
+    user = relationship("User", back_populates="activity_logs")
+    project = relationship("Project", back_populates="activity_logs")
 ```
 
 #### 2.4.3 Database Connection Management

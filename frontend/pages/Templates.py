@@ -3,6 +3,7 @@ import streamlit as st
 import requests
 import json
 import time
+import pandas as pd
 from datetime import datetime
 from streamlit_ace import st_ace
 from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers, BACKEND_URL
@@ -222,51 +223,44 @@ if templates:
     
     with main_col1:
         st.markdown("### Templates List")
-    
-        for template in templates:        
-            # Create expandable section for each template (no status icons)
-            with st.expander(f"{template['name']} - {template['document_type'].replace('_', ' ').title()} (v{template['version']})"):
-                
-                # Template details in compact format
-                st.markdown(f"**Desc:** {template['description'][:60]}..." if len(template['description']) > 60 else f"**Desc:** {template['description']}")
-                st.markdown(f"**Status:** {template['status'].title()} | **Created:** {template['created_at'][:10]} | **By:** {template['created_by_username']}")
-                if template['tags']:
-                    st.markdown(f"**Tags:** {', '.join(template['tags'])}")
-                
-                # Action buttons in single row
-                action_col1, action_col2, action_col3 = st.columns(3)
-                
-                with action_col1:
-                    # Check if user can edit this template
-                    from auth_utils import get_current_user
-                    current_user = get_current_user()
-                    can_edit = (current_user and 
-                               (current_user.get('is_admin', False) or 
-                                current_user.get('id') == template.get('created_by')))
-                    
-                    if can_edit:
-                        if st.button("✏️ Edit", key=f"edit_{template['id']}"):
-                            st.session_state.edit_template_id = template['id']
-                            st.session_state.show_edit_in_editor = True
-                            st.rerun()
-                    else:
-                        st.button("🔒 Edit", key=f"edit_{template['id']}", disabled=True, 
-                                help="You can only edit templates you created or have admin privileges")
-                
-                with action_col2:
-                    if st.button("📄 PDF", key=f"export_{template['id']}"):
-                        with st.spinner("Generating PDF..."):
-                            result, status_code = export_template_pdf(template['id'])
-                            if status_code == 200:
-                                st.success("PDF ready for download!")
-                            else:
-                                st.error(f"Export failed: {result.get('error', 'Unknown error')}")
-                
-                with action_col3:
-                    if st.button("🗑️ Del", key=f"delete_{template['id']}", type="secondary"):
-                        st.session_state.delete_template_id = template['id']
-                        st.session_state.show_delete_confirm = True
-                        st.rerun()
+        
+        # Prepare data for dataframe - only File, Description, Status columns
+        df_data = []
+        for template in templates:
+            # Truncate description for display
+            desc_display = template['description'][:60] + "..." if len(template['description']) > 60 else template['description']
+            
+            df_row = {
+                'File': f"{template['name']} (v{template['version']})",
+                'Description': desc_display,
+                'Status': template['status'].title()
+            }
+            df_data.append(df_row)
+        
+        # Create DataFrame for templates
+        df = pd.DataFrame(df_data)
+        
+        # Display with selection capability
+        selected_indices = st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            height=400
+        )
+        
+        st.caption("💡 Select a row to edit the template")
+        
+        # Handle template selection for editing
+        if selected_indices and len(selected_indices.selection.rows) > 0:
+            selected_idx = selected_indices.selection.rows[0]
+            template_id = templates[selected_idx]['id']
+            # Only rerun if this is a different template
+            if st.session_state.get('edit_template_id') != template_id:
+                st.session_state.edit_template_id = template_id
+                st.session_state.show_edit_in_editor = True
+                st.rerun()
     
     with main_col2:
         st.markdown("### Document Editor")

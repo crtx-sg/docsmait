@@ -4,6 +4,7 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers, BACKEND_URL
+from config import DATAFRAME_HEIGHT, DEFAULT_EXPORT_FORMAT
 
 require_auth()
 
@@ -67,12 +68,39 @@ with tab1:
     if activities:
         st.write(f"**Found {len(activities)} activities**")
         
+        # Prepare data for st.dataframe
+        grid_data = []
         for activity in activities:
-            with st.expander(f"{activity.get('action', 'Unknown')} - {activity.get('timestamp', '')[:19]}"):
-                st.write(f"**User:** {activity.get('username', 'Unknown')}")
-                st.write(f"**Action:** {activity.get('action', 'N/A')}")
-                st.write(f"**Resource:** {activity.get('resource_type', 'N/A')}")
-                st.write(f"**Description:** {activity.get('description', 'N/A')}")
+            grid_row = {
+                'timestamp': activity.get('timestamp', '')[:19],
+                'user': activity.get('username', 'Unknown'),
+                'action': activity.get('action', 'N/A'),
+                'resource': activity.get('resource_type', 'N/A'),
+                'description': activity.get('description', 'N/A')
+            }
+            grid_data.append(grid_row)
+        
+        # Create DataFrame for activity logs
+        df_data = []
+        for row in grid_data:
+            df_row = {
+                'Timestamp': row['timestamp'],
+                'User': row['user'],
+                'Action': row['action'],
+                'Resource Type': row['resource'],
+                'Description': row['description']
+            }
+            df_data.append(df_row)
+        
+        df = pd.DataFrame(df_data)
+        
+        # Display DataFrame
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            height=DATAFRAME_HEIGHT
+        )
     else:
         st.info("No activities found.")
 

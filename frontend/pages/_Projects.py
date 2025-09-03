@@ -809,17 +809,49 @@ with tab3:
                 
                 with res_tab2:
                     if glossary_resources:
+                        # Create DataFrame for glossary resources
+                        glos_df_data = []
                         for resource in glossary_resources:
-                            with st.expander(f"📖 {resource['name']}"):
-                                st.write(f"**Added by:** {resource['uploaded_by_username']}")
-                                st.write(f"**Date:** {resource['uploaded_at'][:10]}")
-                                if resource["content"]:
-                                    st.markdown("**Content:**")
-                                    st.text(resource["content"])
+                            uploaded_date = resource.get('uploaded_at', resource.get('created_at', 'Unknown'))
+                            if uploaded_date != 'Unknown':
+                                uploaded_date = uploaded_date[:10]
+                            
+                            glos_df_row = {
+                                'Name': resource['name'],
+                                'Added By': resource.get('uploaded_by_username', resource.get('uploaded_by', 'Unknown')),
+                                'Date': uploaded_date,
+                                'Content': (resource["content"][:50] + "..." if resource["content"] and len(resource["content"]) > 50 else resource["content"] or "No content")
+                            }
+                            glos_df_data.append(glos_df_row)
+                        
+                        glos_df = pd.DataFrame(glos_df_data)
+                        
+                        # Display DataFrame
+                        glos_selected_indices = st.dataframe(
+                            glos_df,
+                            use_container_width=True,
+                            hide_index=True,
+                            on_select="rerun",
+                            selection_mode="single-row",
+                            height=300
+                        )
+                        
+                        st.caption("💡 Select a row to view/delete glossary resource")
+                        
+                        # Handle selection for deletion
+                        if glos_selected_indices and len(glos_selected_indices.selection.rows) > 0:
+                            selected_idx = glos_selected_indices.selection.rows[0]
+                            selected_resource = glossary_resources[selected_idx]
+                            
+                            # Show full content and delete option
+                            with st.expander("Selected Glossary Resource", expanded=True):
+                                st.markdown(f"**Name:** {selected_resource['name']}")
+                                st.markdown(f"**Content:**")
+                                st.text(selected_resource["content"] if selected_resource["content"] else "No content")
                                 
-                                if project_details.get("is_creator", False) or resource["uploaded_by"] == project_details.get("current_user_id"):
-                                    if st.button(f"🗑️ Delete", key=f"del_glos_{resource['id']}"):
-                                        success, result = delete_project_resource(project_id, resource["id"])
+                                if project_details.get("is_creator", False) or selected_resource["uploaded_by"] == project_details.get("current_user_id"):
+                                    if st.button(f"🗑️ Delete {selected_resource['name']}", key=f"del_glos_{selected_resource['id']}"):
+                                        success, result = delete_project_resource(project_id, selected_resource["id"])
                                         if success:
                                             st.success("Resource deleted!")
                                             st.rerun()
@@ -830,17 +862,49 @@ with tab3:
                 
                 with res_tab3:
                     if reference_resources:
+                        # Create DataFrame for reference resources
+                        ref_df_data = []
                         for resource in reference_resources:
-                            with st.expander(f"📄 {resource['name']}"):
-                                st.write(f"**Added by:** {resource['uploaded_by_username']}")
-                                st.write(f"**Date:** {resource['uploaded_at'][:10]}")
-                                if resource["content"]:
-                                    st.markdown("**Content:**")
-                                    st.text(resource["content"])
+                            uploaded_date = resource.get('uploaded_at', resource.get('created_at', 'Unknown'))
+                            if uploaded_date != 'Unknown':
+                                uploaded_date = uploaded_date[:10]
+                            
+                            ref_df_row = {
+                                'Name': resource['name'],
+                                'Added By': resource.get('uploaded_by_username', resource.get('uploaded_by', 'Unknown')),
+                                'Date': uploaded_date,
+                                'Content': (resource["content"][:50] + "..." if resource["content"] and len(resource["content"]) > 50 else resource["content"] or "No content")
+                            }
+                            ref_df_data.append(ref_df_row)
+                        
+                        ref_df = pd.DataFrame(ref_df_data)
+                        
+                        # Display DataFrame
+                        ref_selected_indices = st.dataframe(
+                            ref_df,
+                            use_container_width=True,
+                            hide_index=True,
+                            on_select="rerun",
+                            selection_mode="single-row",
+                            height=300
+                        )
+                        
+                        st.caption("💡 Select a row to view/delete reference resource")
+                        
+                        # Handle selection for deletion
+                        if ref_selected_indices and len(ref_selected_indices.selection.rows) > 0:
+                            selected_idx = ref_selected_indices.selection.rows[0]
+                            selected_resource = reference_resources[selected_idx]
+                            
+                            # Show full content and delete option
+                            with st.expander("Selected Reference Resource", expanded=True):
+                                st.markdown(f"**Name:** {selected_resource['name']}")
+                                st.markdown(f"**Content:**")
+                                st.text(selected_resource["content"] if selected_resource["content"] else "No content")
                                 
-                                if project_details.get("is_creator", False) or resource["uploaded_by"] == project_details.get("current_user_id"):
-                                    if st.button(f"🗑️ Delete", key=f"del_ref_{resource['id']}"):
-                                        success, result = delete_project_resource(project_id, resource["id"])
+                                if project_details.get("is_creator", False) or selected_resource["uploaded_by"] == project_details.get("current_user_id"):
+                                    if st.button(f"🗑️ Delete {selected_resource['name']}", key=f"del_ref_{selected_resource['id']}"):
+                                        success, result = delete_project_resource(project_id, selected_resource["id"])
                                         if success:
                                             st.success("Resource deleted!")
                                             st.rerun()
@@ -851,17 +915,49 @@ with tab3:
                 
                 with res_tab4:
                     if book_resources:
+                        # Create DataFrame for book resources
+                        book_df_data = []
                         for resource in book_resources:
-                            with st.expander(f"📚 {resource['name']}"):
-                                st.write(f"**Added by:** {resource['uploaded_by_username']}")
-                                st.write(f"**Date:** {resource['uploaded_at'][:10]}")
-                                if resource["content"]:
-                                    st.markdown("**Content:**")
-                                    st.text(resource["content"])
+                            uploaded_date = resource.get('uploaded_at', resource.get('created_at', 'Unknown'))
+                            if uploaded_date != 'Unknown':
+                                uploaded_date = uploaded_date[:10]
+                            
+                            book_df_row = {
+                                'Name': resource['name'],
+                                'Added By': resource.get('uploaded_by_username', resource.get('uploaded_by', 'Unknown')),
+                                'Date': uploaded_date,
+                                'Content': (resource["content"][:50] + "..." if resource["content"] and len(resource["content"]) > 50 else resource["content"] or "No content")
+                            }
+                            book_df_data.append(book_df_row)
+                        
+                        book_df = pd.DataFrame(book_df_data)
+                        
+                        # Display DataFrame
+                        book_selected_indices = st.dataframe(
+                            book_df,
+                            use_container_width=True,
+                            hide_index=True,
+                            on_select="rerun",
+                            selection_mode="single-row",
+                            height=300
+                        )
+                        
+                        st.caption("💡 Select a row to view/delete book resource")
+                        
+                        # Handle selection for deletion
+                        if book_selected_indices and len(book_selected_indices.selection.rows) > 0:
+                            selected_idx = book_selected_indices.selection.rows[0]
+                            selected_resource = book_resources[selected_idx]
+                            
+                            # Show full content and delete option
+                            with st.expander("Selected Book Resource", expanded=True):
+                                st.markdown(f"**Name:** {selected_resource['name']}")
+                                st.markdown(f"**Content:**")
+                                st.text(selected_resource["content"] if selected_resource["content"] else "No content")
                                 
-                                if project_details.get("is_creator", False) or resource["uploaded_by"] == project_details.get("current_user_id"):
-                                    if st.button(f"🗑️ Delete", key=f"del_book_{resource['id']}"):
-                                        success, result = delete_project_resource(project_id, resource["id"])
+                                if project_details.get("is_creator", False) or selected_resource["uploaded_by"] == project_details.get("current_user_id"):
+                                    if st.button(f"🗑️ Delete {selected_resource['name']}", key=f"del_book_{selected_resource['id']}"):
+                                        success, result = delete_project_resource(project_id, selected_resource["id"])
                                         if success:
                                             st.success("Resource deleted!")
                                             st.rerun()

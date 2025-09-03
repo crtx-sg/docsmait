@@ -2225,9 +2225,398 @@ def test_system_recovery_scenarios():
     print("✅ System recovery scenarios tested successfully")
 ```
 
-## 6. Test Execution and Reporting
+## 6. New Features Test Cases
 
-### 6.1 Test Automation Framework
+### 6.1 Design Record Management Tests
+
+#### Test Suite: RequirementsService
+```python
+class TestRequirementsService:
+    
+    def test_create_requirement_success(self):
+        """Test successful requirement creation with all fields"""
+        # Given
+        user = create_test_user("engineer@example.com")
+        project = create_test_project("Medical Device Project", user.id)
+        
+        requirement_data = {
+            "requirement_id": "REQ-SYS-001",
+            "title": "System shall power on within 5 seconds",
+            "description": "The system must complete initialization and be ready for operation within 5 seconds of power on",
+            "category": "performance",
+            "priority": "high",
+            "verification_method": "test",
+            "risk_level": "medium",
+            "parent_requirement": None,
+            "child_requirements": [],
+            "depends_on": [],
+            "compliance_standards": ["ISO 13485", "IEC 62304"]
+        }
+        
+        # When
+        result = requirements_service.create_requirement(
+            project_id=project.id,
+            requirement_data=requirement_data,
+            user_id=user.id
+        )
+        
+        # Then
+        assert result["success"] is True
+        assert "requirement_id" in result
+        
+        # Verify requirement exists in database
+        requirement = get_requirement_by_id(result["requirement_id"])
+        assert requirement.requirement_id == "REQ-SYS-001"
+        assert requirement.category == "performance"
+        assert requirement.priority == "high"
+        assert requirement.verification_method == "test"
+    
+    def test_create_hazard_with_risk_analysis(self):
+        """Test hazard creation with comprehensive risk analysis"""
+        # Given
+        user = create_test_user("safety@example.com")
+        project = create_test_project("Medical Device Safety", user.id)
+        
+        hazard_data = {
+            "hazard_id": "HAZ-001",
+            "hazardous_situation": "Device overheating during operation",
+            "foreseeable_sequence": "Cooling fan failure leads to processor overheating",
+            "harm": "Patient thermal burn during procedure",
+            "severity": "serious",
+            "probability": "occasional",
+            "risk_level": "high",
+            "safety_integrity": "B",
+            "operational_context": "Operating room environment",
+            "triggering_conditions": ["Fan failure", "Blocked ventilation"],
+            "stakeholders_affected": ["Patient", "Operator"],
+            "use_error_potential": "Medium"
+        }
+        
+        # When
+        result = hazards_service.create_hazard(
+            project_id=project.id,
+            hazard_data=hazard_data,
+            user_id=user.id
+        )
+        
+        # Then
+        assert result["success"] is True
+        hazard = get_hazard_by_id(result["hazard_id"])
+        assert hazard.hazard_id == "HAZ-001"
+        assert hazard.severity == "serious"
+        assert hazard.risk_level == "high"
+        assert hazard.safety_integrity == "B"
+    
+    def test_design_record_export_markdown(self):
+        """Test comprehensive design record export to Markdown"""
+        # Given
+        user = create_test_user("export@example.com")
+        project = create_test_project("Export Test Project", user.id)
+        
+        # Create complete design record data
+        create_test_requirements(project.id, user.id, count=5)
+        create_test_hazards(project.id, user.id, count=3)
+        create_test_fmea(project.id, user.id)
+        create_test_traceability(project.id, user.id)
+        
+        # When
+        result = export_service.export_design_record(
+            project_id=project.id,
+            export_type="markdown",
+            report_types=["complete_design_record", "requirements_traceability", "risk_management_summary"],
+            user_id=user.id
+        )
+        
+        # Then
+        assert result["success"] is True
+        assert "export_url" in result
+        assert result["format"] == "markdown"
+        
+        # Verify markdown content
+        markdown_content = read_exported_file(result["export_url"])
+        assert "# Design Record" in markdown_content
+        assert "## Requirements Management" in markdown_content
+        assert "## Risk Analysis" in markdown_content
+        assert "| Requirement ID |" in markdown_content  # Table format
+```
+
+### 6.2 Records Management Tests
+
+#### Test Suite: RecordsService  
+```python
+class TestRecordsService:
+    
+    def test_supplier_management_complete_workflow(self):
+        """Test complete supplier management workflow"""
+        # Given
+        user = create_test_user("quality@example.com")
+        
+        supplier_data = {
+            "supplier_id": "SUP-001",
+            "name": "MedTech Components Inc.",
+            "contact_person": "John Smith",
+            "email": "john@medtech.com",
+            "phone": "+1-555-0123",
+            "address": "123 Industrial Blvd, City, State 12345",
+            "certification_status": "ISO 13485:2016",
+            "approval_status": "pending",
+            "performance_rating": "not_assessed",
+            "quality_rating": "not_assessed",
+            "on_time_delivery_rate": 0,
+            "risk_level": "medium"
+        }
+        
+        # When - Create supplier
+        result = records_service.create_supplier(supplier_data, user.id)
+        
+        # Then
+        assert result["success"] is True
+        supplier = get_supplier_by_id(result["supplier_id"])
+        assert supplier.name == "MedTech Components Inc."
+        assert supplier.approval_status == "pending"
+        
+        # When - Update supplier performance
+        update_data = {
+            "performance_rating": "good",
+            "quality_rating": "excellent", 
+            "on_time_delivery_rate": 95,
+            "approval_status": "approved"
+        }
+        result = records_service.update_supplier(supplier.id, update_data, user.id)
+        
+        # Then
+        assert result["success"] is True
+        updated_supplier = get_supplier_by_id(supplier.id)
+        assert updated_supplier.performance_rating == "good"
+        assert updated_supplier.approval_status == "approved"
+    
+    def test_customer_complaints_mdr_workflow(self):
+        """Test customer complaint with MDR reporting workflow"""
+        # Given
+        user = create_test_user("complaints@example.com")
+        
+        complaint_data = {
+            "complaint_id": "COMP-2024-001",
+            "customer_name": "City General Hospital",
+            "product_id": "DEV-001",
+            "lot_number": "LOT123",
+            "serial_number": "SN2024001",
+            "complaint_description": "Device alarm failed to activate during low battery condition",
+            "date_received": "2024-01-20",
+            "severity": "serious",
+            "mdr_reportable": True,
+            "investigation_status": "open",
+            "root_cause": "pending_investigation",
+            "corrective_action": "pending",
+            "response_date": None,
+            "reporter": "Dr. Sarah Johnson"
+        }
+        
+        # When
+        result = records_service.create_customer_complaint(complaint_data, user.id)
+        
+        # Then
+        assert result["success"] is True
+        complaint = get_complaint_by_id(result["complaint_id"])
+        assert complaint.mdr_reportable is True
+        assert complaint.investigation_status == "open"
+        
+        # Test investigation update
+        investigation_update = {
+            "investigation_status": "in_progress",
+            "root_cause": "Software bug in alarm subroutine",
+            "corrective_action": "Software patch v2.1 developed and tested"
+        }
+        result = records_service.update_complaint(complaint.id, investigation_update, user.id)
+        
+        updated_complaint = get_complaint_by_id(complaint.id)
+        assert updated_complaint.investigation_status == "in_progress"
+        assert "Software bug" in updated_complaint.root_cause
+```
+
+### 6.3 Activity Logging Tests
+
+#### Test Suite: ActivityLoggingService  
+```python
+class TestActivityLoggingService:
+    
+    def test_activity_logging_comprehensive(self):
+        """Test comprehensive activity logging across all modules"""
+        # Given
+        user = create_test_user("active@example.com")
+        project = create_test_project("Logged Project", user.id)
+        
+        # When - Perform various activities
+        activities = [
+            ("create_document", {"document_name": "Test Procedure"}),
+            ("update_requirement", {"requirement_id": "REQ-001"}),
+            ("create_hazard", {"hazard_id": "HAZ-001"}),
+            ("export_design_record", {"export_type": "markdown"}),
+            ("update_supplier", {"supplier_id": "SUP-001"}),
+        ]
+        
+        logged_activities = []
+        for action, details in activities:
+            result = activity_service.log_activity(
+                user_id=user.id,
+                action=action,
+                details=json.dumps(details),
+                project_id=project.id,
+                ip_address="192.168.1.100",
+                user_agent="Mozilla/5.0 Test Browser"
+            )
+            logged_activities.append(result)
+        
+        # Then
+        for result in logged_activities:
+            assert result["success"] is True
+        
+        # Verify all activities logged
+        user_activities = activity_service.get_user_activities(user.id)
+        assert len(user_activities) == 5
+        
+        # Verify activity details
+        activity_types = [activity["action"] for activity in user_activities]
+        assert "create_document" in activity_types
+        assert "update_requirement" in activity_types
+        assert "export_design_record" in activity_types
+    
+    def test_activity_log_export_for_audit(self):
+        """Test activity log export for audit purposes"""
+        # Given
+        user = create_test_user("auditor@example.com")
+        project = create_test_project("Audit Project", user.id)
+        
+        # Create audit-relevant activities
+        audit_activities = [
+            "document_approved",
+            "requirement_modified", 
+            "hazard_risk_updated",
+            "compliance_status_changed",
+            "supplier_approved"
+        ]
+        
+        for activity in audit_activities:
+            activity_service.log_activity(
+                user_id=user.id,
+                action=activity,
+                details=f"Audit trail for {activity}",
+                project_id=project.id
+            )
+        
+        # When
+        result = activity_service.export_activity_logs(
+            project_id=project.id,
+            date_range={"start": "2024-01-01", "end": "2024-12-31"},
+            export_format="csv"
+        )
+        
+        # Then
+        assert result["success"] is True
+        assert "export_url" in result
+        assert result["format"] == "csv"
+        
+        # Verify export content
+        csv_content = read_exported_file(result["export_url"])
+        for activity in audit_activities:
+            assert activity in csv_content
+```
+
+### 6.4 Interactive Interface Tests
+
+#### Test Suite: InteractiveTableFeatures
+```python
+class TestInteractiveTableFeatures:
+    
+    def test_st_dataframe_selection_behavior(self):
+        """Test st.dataframe single-row selection functionality"""
+        # Given
+        user = create_test_user("ui_tester@example.com")
+        project = create_test_project("UI Test Project", user.id)
+        
+        # Create test data
+        requirements = create_test_requirements(project.id, user.id, count=5)
+        
+        # When - Simulate dataframe interaction
+        selected_row = simulate_dataframe_selection(requirements, row_index=2)
+        
+        # Then - Verify selection behavior
+        assert selected_row is not None
+        assert selected_row["requirement_id"] == requirements[2]["requirement_id"]
+        
+        # Test form population with selected data
+        form_data = populate_edit_form(selected_row)
+        assert form_data["requirement_id"] == requirements[2]["requirement_id"]
+        assert form_data["title"] == requirements[2]["title"]
+    
+    def test_comprehensive_form_editing(self):
+        """Test comprehensive form editing with all fields"""
+        # Given
+        user = create_test_user("form_tester@example.com")
+        project = create_test_project("Form Test Project", user.id)
+        requirement = create_test_requirement(project.id, "REQ-FORM-001", user.id)
+        
+        # When - Update all fields through form
+        updated_data = {
+            "title": "Updated System Requirement",
+            "description": "Updated requirement description",
+            "category": "safety",
+            "priority": "critical",
+            "verification_method": "inspection",
+            "risk_level": "high",
+            "compliance_standards": ["ISO 13485", "ISO 14971", "IEC 62304"]
+        }
+        
+        result = requirements_service.update_requirement(
+            requirement.id,
+            updated_data,
+            user.id
+        )
+        
+        # Then - Verify all fields updated
+        assert result["success"] is True
+        updated_req = get_requirement_by_id(requirement.id)
+        assert updated_req.title == "Updated System Requirement"
+        assert updated_req.category == "safety"
+        assert updated_req.priority == "critical"
+        assert updated_req.verification_method == "inspection"
+    
+    def test_real_time_updates_after_changes(self):
+        """Test real-time UI updates after data changes"""
+        # Given
+        user = create_test_user("realtime_tester@example.com")
+        project = create_test_project("Realtime Test Project", user.id)
+        
+        # When - Create new requirement
+        new_requirement = requirements_service.create_requirement(
+            project.id,
+            {
+                "requirement_id": "REQ-RT-001",
+                "title": "Realtime Test Requirement"
+            },
+            user.id
+        )
+        
+        # Then - Verify UI state updates
+        ui_state = get_ui_state(project.id, "requirements")
+        assert any(req["requirement_id"] == "REQ-RT-001" for req in ui_state["data"])
+        
+        # When - Update requirement
+        requirements_service.update_requirement(
+            new_requirement["requirement_id"],
+            {"title": "Updated Realtime Requirement"},
+            user.id
+        )
+        
+        # Then - Verify UI reflects changes
+        updated_ui_state = get_ui_state(project.id, "requirements")
+        updated_req = next(req for req in updated_ui_state["data"] if req["requirement_id"] == "REQ-RT-001")
+        assert updated_req["title"] == "Updated Realtime Requirement"
+```
+
+## 7. Test Execution and Reporting
+
+### 7.1 Test Automation Framework
 ```python
 # conftest.py - Test configuration and fixtures
 import pytest
@@ -2297,7 +2686,7 @@ pytest.main([
 ])
 ```
 
-### 6.2 Performance Testing Configuration
+### 7.2 Performance Testing Configuration
 ```python
 # pytest.ini - Test configuration
 [tool:pytest]
@@ -2324,7 +2713,7 @@ markers =
     unit: marks tests as unit tests
 ```
 
-### 6.3 Continuous Integration Pipeline
+### 7.3 Continuous Integration Pipeline
 ```yaml
 # .github/workflows/test.yml
 name: Docsmait Test Suite

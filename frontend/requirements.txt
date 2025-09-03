@@ -3,3 +3,4 @@ streamlit
 requests
 streamlit-ace
 PyJWT
+pandas

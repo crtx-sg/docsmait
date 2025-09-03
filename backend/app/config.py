@@ -85,6 +85,40 @@ class Config:
     LOG_PROMPTS: bool = os.getenv("LOG_PROMPTS", "true").lower() == "true"
     USAGE_RETENTION_DAYS: int = int(os.getenv("USAGE_RETENTION_DAYS", "90"))
     
+    # === Activity Logging Configuration ===
+    ACTIVITY_LOG_RETENTION_DAYS: int = int(os.getenv("ACTIVITY_LOG_RETENTION_DAYS", "365"))
+    LOG_IP_ADDRESSES: bool = os.getenv("LOG_IP_ADDRESSES", "true").lower() == "true"
+    LOG_USER_AGENTS: bool = os.getenv("LOG_USER_AGENTS", "true").lower() == "true"
+    ACTIVITY_LOG_BATCH_SIZE: int = int(os.getenv("ACTIVITY_LOG_BATCH_SIZE", "1000"))
+    
+    # === Design Record Configuration ===
+    DEFAULT_RISK_LEVELS: list = ["low", "medium", "high", "critical"]
+    DEFAULT_SEVERITY_LEVELS: list = ["negligible", "minor", "serious", "critical", "catastrophic"]
+    DEFAULT_PROBABILITY_LEVELS: list = ["improbable", "remote", "occasional", "probable", "frequent"]
+    DEFAULT_VERIFICATION_METHODS: list = ["test", "inspection", "analysis", "demonstration"]
+    REQUIREMENT_ID_PREFIX: str = os.getenv("REQUIREMENT_ID_PREFIX", "REQ")
+    HAZARD_ID_PREFIX: str = os.getenv("HAZARD_ID_PREFIX", "HAZ")
+    
+    # === Records Management Configuration ===
+    SUPPLIER_ID_PREFIX: str = os.getenv("SUPPLIER_ID_PREFIX", "SUP")
+    PART_NUMBER_PREFIX: str = os.getenv("PART_NUMBER_PREFIX", "PRT")
+    EQUIPMENT_ID_PREFIX: str = os.getenv("EQUIPMENT_ID_PREFIX", "EQP")
+    COMPLAINT_ID_PREFIX: str = os.getenv("COMPLAINT_ID_PREFIX", "COMP")
+    NC_ID_PREFIX: str = os.getenv("NC_ID_PREFIX", "NC")
+    DEFAULT_CALIBRATION_FREQUENCY_DAYS: int = int(os.getenv("DEFAULT_CALIBRATION_FREQUENCY_DAYS", "365"))
+    
+    # === Export Configuration ===
+    DEFAULT_EXPORT_FORMAT: str = os.getenv("DEFAULT_EXPORT_FORMAT", "csv")
+    EXPORT_BATCH_SIZE: int = int(os.getenv("EXPORT_BATCH_SIZE", "1000"))
+    MAX_EXPORT_RECORDS: int = int(os.getenv("MAX_EXPORT_RECORDS", "10000"))
+    EXPORT_TIMEOUT_SECONDS: int = int(os.getenv("EXPORT_TIMEOUT_SECONDS", "300"))
+    
+    # === Compliance Standards ===
+    MEDICAL_DEVICE_STANDARDS: list = ["ISO 13485:2016", "ISO 14971:2019", "IEC 62304:2006", "FDA 21 CFR Part 820"]
+    AUTOMOTIVE_STANDARDS: list = ["ISO 26262", "ASPICE", "MISRA C"]
+    INDUSTRIAL_STANDARDS: list = ["IEC 61508", "IEC 61511", "DO-178C"]
+    AVIATION_STANDARDS: list = ["DO-178C", "DO-254", "ARP4754A"]
+    
     
     # === API Configuration ===
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")

@@ -343,13 +343,73 @@ with tab3:
             findings = get_findings(selected_audit["id"])
             
             if findings:
-                
+                # Prepare data for st.dataframe
+                findings_grid_data = []
                 for finding in findings:
-                    with st.expander(f"{finding['finding_number']}: {finding['title']} ({finding['severity'].upper()})"):
+                    findings_row = {
+                        'finding_number': finding['finding_number'],
+                        'title': finding['title'],
+                        'category': finding['category'],
+                        'severity': finding['severity'].upper(),
+                        'status': finding['status'].title(),
+                        'identified_by': finding['identified_by_username'],
+                        'identified_date': finding['identified_date'],
+                        'due_date': finding.get('due_date', 'N/A'),
+                        'corrective_actions': finding['corrective_actions_count'],
+                        'full_finding_data': finding
+                    }
+                    findings_grid_data.append(findings_row)
+                
+                # Create DataFrame for findings
+                findings_df_data = []
+                for row in findings_grid_data:
+                    findings_df_row = {
+                        'Finding #': row['finding_number'],
+                        'Title': row['title'],
+                        'Category': row['category'],
+                        'Severity': row['severity'],
+                        'Status': row['status'],
+                        'Identified By': row['identified_by'],
+                        'Date': row['identified_date'],
+                        'Due Date': row['due_date'],
+                        'Actions': row['corrective_actions']
+                    }
+                    findings_df_data.append(findings_df_row)
+                
+                findings_df = pd.DataFrame(findings_df_data)
+                
+                # Display with selection capability
+                findings_selected_indices = st.dataframe(
+                    findings_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    height=400
+                )
+                
+                st.caption("💡 Select a row to view finding details")
+                
+                # Handle findings selection
+                if findings_selected_indices and len(findings_selected_indices.selection.rows) > 0:
+                    selected_idx = findings_selected_indices.selection.rows[0]
+                    finding = findings_grid_data[selected_idx]['full_finding_data']
+                    # Only update if different finding selected
+                    if st.session_state.get('selected_finding_id') != finding.get('id'):
+                        st.session_state.selected_finding_id = finding.get('id')
+                        st.session_state.selected_finding_data = finding
+                        st.rerun()
+                
+                # Show detailed view for selected finding
+                if st.session_state.get('selected_finding_data'):
+                    finding = st.session_state.selected_finding_data
+                    with st.expander("📋 Selected Finding Details", expanded=True):
                         col1, col2 = st.columns(2)
                         with col1:
+                            st.markdown(f"**Finding:** {finding['finding_number']}: {finding['title']}")
                             st.markdown(f"**Category:** {finding['category']}")
                             st.markdown(f"**Status:** {finding['status'].title()}")
+                            st.markdown(f"**Severity:** {finding['severity'].upper()}")
                             st.markdown(f"**Identified By:** {finding['identified_by_username']}")
                             st.markdown(f"**Date:** {finding['identified_date']}")
                         

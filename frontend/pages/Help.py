@@ -19,6 +19,8 @@ help_tabs = st.tabs([
     "🏠 Getting Started", 
     "📋 Projects", 
     "🔬 Design Record", 
+    "📋 Records Management",
+    "📊 Activity Logs",
     "📄 Templates", 
     "📁 Documents", 
     "💻 Code", 
@@ -53,7 +55,16 @@ with help_tabs[0]:
         - Risk and hazard analysis (FMEA)
         - Design artifacts and documentation
         - Test management and validation
+        - Interactive traceability matrix
         - Compliance tracking and evidence management
+        - Professional exports (Markdown, CSV, Excel, PDF, JSON)
+        
+        **📋 Records Management (ISO 13485)**
+        - Supplier performance and quality tracking
+        - Parts inventory with UDI and lot tracking
+        - Lab equipment calibration management
+        - Customer complaints and MDR reporting
+        - Non-conformances with CAPA integration
         
         **📄 Template Management**
         - Pre-built document templates
@@ -78,15 +89,30 @@ with help_tabs[0]:
         - Peer review workflows
         - Approval tracking and signatures
         - Review history and audit trails
+        
+        **📊 Activity Logging & Audit Trail**
+        - Comprehensive user activity tracking
+        - Tamper-proof audit logs with 5+ year retention
+        - IP address and user agent tracking
+        - Export capabilities for external audits
+        
+        **🎯 Interactive Interface Features**
+        - st.dataframe tables with single-row selection
+        - Comprehensive editing forms for all fields
+        - Real-time data updates
+        - Consistent 400px table heights for optimal visibility
         """)
     
     st.markdown("### 🚀 Quick Start Guide")
     st.markdown("""
     1. **Start with Projects**: Navigate to Projects and create your first project
     2. **Set up Design Record**: Use Design Record to manage requirements and risks
-    3. **Create Templates**: Set up document templates for consistency
-    4. **Upload Documents**: Add your existing documents to the system
-    5. **Enable Reviews**: Set up review workflows for quality control
+    3. **Configure Records Management**: Set up suppliers, parts inventory, and lab equipment
+    4. **Monitor Activity**: Use Activity Logs to track all system activities
+    5. **Create Templates**: Set up document templates for consistency
+    6. **Upload Documents**: Add your existing documents to the system
+    7. **Enable Reviews**: Set up review workflows for quality control
+    8. **Export Data**: Use the professional export features for regulatory submissions
     """)
 
 # Projects Tab
@@ -250,6 +276,12 @@ with help_tabs[2]:
         - Risk assessment updates based on field data
         - **NEW**: Update Knowledge Base function in Export tab
         - Comprehensive JSON payload generation for knowledge base integration
+        
+        **Modern Interface Features**:
+        - Interactive st.dataframe tables with single-row selection
+        - Consistent 400px table heights for optimal visibility
+        - Real-time data updates after changes
+        - Professional Markdown table export for documentation
         """)
     
     st.markdown("### 🧠 Export & Knowledge Base Integration")
@@ -261,9 +293,221 @@ with help_tabs[2]:
     - Enables cross-referencing and semantic search capabilities
     - Preserves data relationships and creates comprehensive knowledge graphs
     """)
+    
+    st.markdown("### 📊 Professional Export Capabilities")
+    export_cols = st.columns(2)
+    
+    with export_cols[0]:
+        st.markdown("""
+        **Export Formats Available**:
+        - **CSV**: Standard comma-separated values
+        - **Excel**: Professional spreadsheet format
+        - **PDF**: Print-ready documents
+        - **JSON**: Structured data format
+        - **Markdown**: Professional table format for documentation
+        """)
+    
+    with export_cols[1]:
+        st.markdown("""
+        **Export Types**:
+        - Complete Design Record
+        - Requirements Traceability Report
+        - Risk Management Summary
+        - FMEA Analysis Report
+        - Compliance Evidence Package
+        - Test Execution Summary
+        - Post-Market Surveillance Report
+        - Regulatory Submission Package
+        """)
+
+# Records Management Tab
+with help_tabs[3]:
+    st.markdown("## 📋 Records Management (ISO 13485)")
+    
+    st.markdown("### Overview")
+    st.markdown("""
+    The Records Management module provides comprehensive ISO 13485 compliant record keeping 
+    for medical device organizations including supplier management, parts inventory, 
+    lab equipment, customer complaints, and non-conformances.
+    """)
+    
+    records_subtabs = st.tabs([
+        "🏭 Suppliers", 
+        "📦 Parts & Inventory", 
+        "🔬 Lab Equipment", 
+        "📞 Customer Complaints", 
+        "⚠️ Non-Conformances"
+    ])
+    
+    with records_subtabs[0]:
+        st.markdown("### 🏭 Supplier Management")
+        st.markdown("""
+        **Purpose**: Manage supplier qualification, performance tracking, and risk assessment
+        
+        **Key Features**:
+        - Supplier contact information and certification tracking
+        - Performance ratings (poor, fair, good, excellent)
+        - Quality ratings and on-time delivery tracking
+        - Risk level assessment (low, medium, high)
+        - Approval status management (pending, approved, conditional, rejected)
+        - Contract management and certification status
+        
+        **Interface Features**:
+        - 2:3 width ratio between dataframe and add form
+        - Professional table interface with st.dataframe selection
+        - Comprehensive editing forms for all supplier data
+        """)
+    
+    with records_subtabs[1]:
+        st.markdown("### 📦 Parts & Inventory Management")
+        st.markdown("""
+        **Purpose**: Track parts inventory with UDI compliance and lot/serial number traceability
+        
+        **Key Features**:
+        - UDI (Unique Device Identification) tracking
+        - Lot number and serial number management
+        - Expiration date and received date tracking
+        - Current stock and minimum stock level management
+        - Storage location tracking
+        - Unit cost and inventory valuation
+        - Status control (In Stock, Quarantined, Expired, Disposed)
+        - Supplier linking for supply chain traceability
+        
+        **Compliance**: Supports FDA UDI requirements for medical device traceability
+        """)
+    
+    with records_subtabs[2]:
+        st.markdown("### 🔬 Lab Equipment & Calibration")
+        st.markdown("""
+        **Purpose**: Manage laboratory equipment calibration schedules and maintenance
+        
+        **Key Features**:
+        - Equipment identification and location tracking
+        - Calibration frequency and schedule management
+        - Last calibration and next calibration due tracking
+        - Calibration standards and compliance notes
+        - Technician assignment and responsibility tracking
+        - Calibration results and adjustments documentation
+        - Status monitoring (Calibrated, Due, Overdue, Out of Service)
+        
+        **Standards**: Supports ISO 13485 calibration and maintenance requirements
+        """)
+    
+    with records_subtabs[3]:
+        st.markdown("### 📞 Customer Complaints Management")
+        st.markdown("""
+        **Purpose**: Handle customer complaints with MDR (Medical Device Reporting) compliance
+        
+        **Key Features**:
+        - Customer complaint intake and tracking
+        - Product identification with lot/serial numbers
+        - MDR reportability assessment and tracking
+        - Investigation status management (Open, In Progress, Completed, Closed)
+        - Root cause analysis documentation
+        - Corrective action planning and tracking
+        - Response date and customer communication tracking
+        - Severity classification for risk assessment
+        
+        **Regulatory**: Supports FDA MDR and EU MDR reporting requirements
+        """)
+    
+    with records_subtabs[4]:
+        st.markdown("### ⚠️ Non-Conformances Management")
+        st.markdown("""
+        **Purpose**: Track non-conformances with CAPA (Corrective and Preventive Action) integration
+        
+        **Key Features**:
+        - Non-conformance identification and classification
+        - Severity levels (Critical, Major, Minor)
+        - Risk assessment and impact analysis
+        - Disposition management (Use As Is, Rework, Scrap, Return)
+        - CAPA system integration for systematic improvement
+        - Status tracking (Open, In Progress, Closed)
+        - Root cause analysis and corrective action documentation
+        
+        **Quality System**: Integrates with ISO 13485 quality management requirements
+        """)
+    
+    st.markdown("### 💻 Interface Features")
+    st.markdown("""
+    **Modern Design**:
+    - **2:3 Layout**: Optimized dataframe to form width ratio for efficient data entry
+    - **Interactive Selection**: Click any row to select for editing
+    - **Comprehensive Forms**: Full access to all table columns and fields
+    - **Real-time Updates**: Immediate data refresh after changes
+    - **Advanced Filtering**: Filter by status, category, date range with search functionality
+    """)
+
+# Activity Logs Tab
+with help_tabs[4]:
+    st.markdown("## 📊 Activity Logging & Audit Trail")
+    
+    st.markdown("### Overview")
+    st.markdown("""
+    The Activity Logging module provides comprehensive audit trail capabilities 
+    with tamper-proof logging of all user activities for regulatory compliance 
+    and security monitoring.
+    """)
+    
+    st.markdown("### 🎯 Key Features")
+    st.markdown("""
+    - **Comprehensive Tracking**: Log all significant user actions with timestamps
+    - **User Identification**: Track user ID, action type, and detailed descriptions
+    - **Security Monitoring**: Capture IP addresses and user agents for security analysis
+    - **Project Correlation**: Link activities to specific projects and modules
+    - **Audit Compliance**: Tamper-proof logs with 5+ year retention for regulatory requirements
+    - **Export Capabilities**: CSV export for external audit purposes
+    - **Advanced Filtering**: Filter by user, project, action type, and date range
+    - **Search Functionality**: Powerful search across all activity details
+    """)
+    
+    st.markdown("### 📋 Activity Types Tracked")
+    activity_cols = st.columns(2)
+    
+    with activity_cols[0]:
+        st.markdown("""
+        **Document Management**:
+        - Document creation, updates, deletions
+        - Version control actions
+        - Document approvals and reviews
+        - Template usage and modifications
+        
+        **Design Record Activities**:
+        - Requirements creation and updates
+        - Hazard analysis modifications
+        - FMEA updates and revisions
+        - Traceability link changes
+        - Compliance status updates
+        """)
+    
+    with activity_cols[1]:
+        st.markdown("""
+        **Records Management**:
+        - Supplier updates and approvals
+        - Parts inventory changes
+        - Equipment calibration records
+        - Customer complaint handling
+        - Non-conformance processing
+        
+        **System Activities**:
+        - User login/logout events
+        - Configuration changes
+        - Export operations
+        - Knowledge base updates
+        """)
+    
+    st.markdown("### 🔒 Security & Compliance")
+    st.markdown("""
+    - **Tamper-Proof**: Activity logs are immutable once created
+    - **Retention Policy**: Configurable retention (default: 5+ years for regulatory compliance)
+    - **Privacy Controls**: IP address and user agent logging can be configured
+    - **Audit Export**: Generate audit reports for external compliance requirements
+    - **Correlation**: Link related activities across different modules and projects
+    - **Batch Processing**: Efficient handling of high-volume activity logging
+    """)
 
 # Templates Tab
-with help_tabs[3]:
+with help_tabs[5]:
     st.markdown("## 📄 Templates Management")
     
     st.markdown("### Overview")
@@ -321,7 +565,7 @@ with help_tabs[3]:
         """)
 
 # Documents Tab
-with help_tabs[4]:
+with help_tabs[6]:
     st.markdown("## 📁 Document Management")
     
     st.markdown("### Overview")
@@ -351,7 +595,7 @@ with help_tabs[4]:
     """)
 
 # Code Tab
-with help_tabs[5]:
+with help_tabs[7]:
     st.markdown("## 💻 Code Management")
     
     st.markdown("### Overview")
@@ -379,7 +623,7 @@ with help_tabs[5]:
     """)
 
 # Reviews Tab
-with help_tabs[6]:
+with help_tabs[8]:
     st.markdown("## 🔍 Review System")
     
     st.markdown("### Overview")
@@ -407,7 +651,7 @@ with help_tabs[6]:
     """)
 
 # Audit Tab
-with help_tabs[7]:
+with help_tabs[9]:
     st.markdown("## 📊 Audit Module")
     
     st.markdown("### Overview")
@@ -435,7 +679,7 @@ with help_tabs[7]:
     """)
 
 # Training Tab
-with help_tabs[8]:
+with help_tabs[10]:
     st.markdown("## 🎓 Training Module")
     
     st.markdown("### Overview")
@@ -464,7 +708,7 @@ with help_tabs[8]:
     """)
 
 # Knowledge Base Tab
-with help_tabs[9]:
+with help_tabs[11]:
     st.markdown("## 📚 Knowledge Base")
     
     st.markdown("### Overview")
@@ -515,4 +759,39 @@ with help_cols[2]:
     st.markdown("- Knowledge Base: [Browse Articles]")
     st.markdown("- Feature Requests: [Submit Ideas]")
 
-st.info("💡 **Tip**: Use the search functionality in each module to quickly find specific items, and check the notifications panel for important updates and pending tasks.")
+st.markdown("---")
+st.markdown("### 🆕 What's New in Docsmait")
+
+new_features_cols = st.columns(2)
+
+with new_features_cols[0]:
+    st.markdown("""
+    **🔬 Enhanced Design Record System**:
+    - Interactive st.dataframe tables with single-row selection
+    - Professional Markdown export for regulatory submissions
+    - Comprehensive traceability matrix with rationale documentation
+    - Real-time data updates and consistent 400px table heights
+    
+    **📋 New Records Management Module**:
+    - Complete ISO 13485 compliant record keeping
+    - Supplier performance and quality tracking
+    - UDI-compliant parts inventory management
+    - Lab equipment calibration tracking
+    """)
+
+with new_features_cols[1]:
+    st.markdown("""
+    **📊 Activity Logging & Audit Trail**:
+    - Comprehensive user activity tracking
+    - Tamper-proof audit logs with 5+ year retention
+    - Export capabilities for external audits
+    - IP address and user agent tracking for security
+    
+    **💻 Modern Interface Improvements**:
+    - 2:3 width ratio layout for optimal data entry
+    - Advanced filtering and search functionality
+    - Multi-format export (CSV, Excel, PDF, JSON, Markdown)
+    - Configuration-driven UI constants
+    """)
+
+st.info("💡 **Tip**: Use the search functionality in each module to quickly find specific items, check the new Activity Logs for comprehensive audit trails, and explore the enhanced export capabilities for professional regulatory documentation.")

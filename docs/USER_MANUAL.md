@@ -20,9 +20,10 @@
    - [6.4 Template Management](#64-template-management)
    - [6.5 Document Management](#65-document-management)
    - [6.6 Code Review Management](#66-code-review-management)
-   - [6.7 Specification Management](#67-specification-management)
-   - [6.8 Audit Management](#68-audit-management)
-   - [6.9 AI Configuration](#69-ai-configuration)
+   - [6.7 Design Record Management](#67-design-record-management)
+   - [6.8 Records Management](#68-records-management)
+   - [6.9 Audit Management](#69-audit-management)
+   - [6.10 AI Configuration](#610-ai-configuration)
 7. [Advanced Features](#7-advanced-features)
 8. [Troubleshooting](#8-troubleshooting)
 9. [API Reference](#9-api-reference)
@@ -642,76 +643,200 @@ Integrates with Git repositories to manage code review processes.
 - **Merge Conflict Detection**: Identify and resolve conflicts
 - **Automated Testing Integration**: Link with CI/CD pipelines
 
-### 6.7 Specification Management
+### 6.7 Design Record Management
 
-Comprehensive requirements and risk management system supporting multiple safety standards.
+Comprehensive design record system supporting lifecycle documentation for regulated industries with full traceability and compliance features.
+
+#### Design Record Components
+
+**Design Record** provides a complete lifecycle documentation system with the following modules:
+
+1. **Requirements Management**:
+   - **Interactive Tables**: st.dataframe with single-row selection for editing
+   - **Full Editing**: Click any requirement to edit all fields in a comprehensive form
+   - **Traceability Fields**: Parent requirements, child requirements, dependencies
+   - **Verification Methods**: Test, inspection, analysis, demonstration
+   - **Risk Level Integration**: Low, medium, high risk classification
+   - **Compliance Standards**: Link to applicable regulatory standards
+
+2. **Hazards & Risk Analysis**:
+   - **Selectable Risk Tables**: Click to select and edit hazard details
+   - **Risk Assessment**: Severity level, likelihood, and risk rating matrices
+   - **Safety Integrity**: ASIL, SIL, DAL, Medical Risk Class support
+   - **Mitigation Tracking**: Current controls and residual risk management
+   - **Context Information**: Operational context and triggering conditions
+   - **Stakeholder Impact**: Affected stakeholders and use error potential
+
+3. **FMEA Analysis**:
+   - **Failure Mode Management**: Design FMEA, Process FMEA, System FMEA, Software FMEA
+   - **Element Analysis**: Element ID, function, and performance standards
+   - **Hierarchy Levels**: Component, assembly, subsystem, system analysis
+   - **Team Management**: FMEA team members and review status
+   - **Analysis Levels**: Multiple analysis depth levels
+
+4. **Design Artifacts**:
+   - **Design Documentation**: Specifications, architecture, interfaces, detailed design
+   - **Implementation Tracking**: Technology stack and design patterns
+   - **Architecture Management**: Diagrams and interface definitions
+   - **Safety Measures**: Safety barriers and fail-safe behaviors
+
+5. **Test Artifacts**:
+   - **Comprehensive Testing**: Unit, integration, system, safety, performance, security, clinical, usability, biocompatibility
+   - **Execution Tracking**: Test status, results, and execution details
+   - **Coverage Metrics**: Requirements coverage percentages
+   - **Test Environment**: Environment specifications and configurations
+
+6. **Traceability Management**:
+   - **Requirements to Hazards**: Interactive traceability matrix
+   - **Selectable Mapping**: Click to edit traceability relationships
+   - **Multi-select Linking**: Link requirements to multiple hazards
+   - **Rationale Documentation**: Traceability reasoning and justification
+   - **Cross-references**: Bidirectional traceability links
+
+7. **Compliance Management**:
+   - **Standards Tracking**: ISO 13485, ISO 14971, IEC 62304, ISO 26262, FDA 21 CFR Part 820
+   - **Compliance Status**: Compliant, partially compliant, non-compliant, not assessed
+   - **Evidence Management**: Compliance evidence and references
+   - **Review Tracking**: Last review dates and next review planning
+
+8. **Post-Market Surveillance**:
+   - **Adverse Events**: Event tracking with severity and investigation status
+   - **Field Actions**: Corrective actions and effectiveness assessment
+   - **Regulatory Reporting**: FDA and Notified Body notification tracking
+
+#### Modern Interface Features
+
+1. **Interactive Data Tables**:
+   - **st.dataframe Implementation**: Modern table interface with selection
+   - **Single-row Selection**: Click any row to select for editing
+   - **Comprehensive Forms**: Full editing capability for all fields
+   - **Real-time Updates**: Immediate data refresh after changes
+   - **Consistent Heights**: 400px tables for optimal visibility
+
+2. **Enhanced Export Capabilities**:
+   - **Multiple Formats**: CSV, Excel, PDF, JSON, **Markdown**
+   - **Markdown Tables**: Professional markdown table format for documentation
+   - **Report Types**: Complete Design Record, Requirements Traceability, Risk Management Summary, FMEA Analysis, Compliance Evidence, Test Execution Summary, Post-Market Surveillance, Regulatory Submission Package
+   - **Filtered Exports**: Date range and status filtering
+   - **Metadata Inclusion**: Complete audit trail in exports
+
+3. **Knowledge Base Integration**:
+   - **Intelligent Updates**: Design record data integration with knowledge base
+   - **Project Summaries**: Automated project data aggregation
+   - **Multi-endpoint Support**: Robust API endpoint detection
+   - **Graceful Degradation**: Simulated success when backend unavailable
 
 #### Multi-Domain Support
 
-1. **Automotive (ISO 26262)**:
-   - **ASIL Levels**: A, B, C, D classification
-   - **Functional Safety**: Safety goals and requirements
-   - **Hazard Analysis**: HAZOP integration
-   - **V-Model**: Requirements traceability
+1. **Medical Devices (ISO 13485/14971)**:
+   - **Risk Management**: ISO 14971 compliant risk analysis
+   - **Design Controls**: FDA 21 CFR Part 820 compliance
+   - **Clinical Evaluation**: Efficacy and safety documentation
+   - **Post-Market Surveillance**: Ongoing monitoring and reporting
 
-2. **Medical Devices (ISO 13485/14971)**:
-   - **Risk Management**: ISO 14971 compliant
-   - **Design Controls**: FDA 21 CFR Part 820
-   - **Clinical Evaluation**: Efficacy and safety
-   - **Post-Market Surveillance**: Ongoing monitoring
+2. **Automotive (ISO 26262)**:
+   - **ASIL Levels**: A, B, C, D functional safety classification
+   - **Functional Safety**: Safety goals and requirements management
+   - **Hazard Analysis**: HAZOP integration and analysis
+   - **V-Model**: Complete requirements to verification traceability
 
 3. **Industrial (IEC 61508)**:
-   - **SIL Levels**: 1, 2, 3, 4 classification
-   - **Systematic Capability**: SC ratings
-   - **Hardware Fault Tolerance**: Redundancy planning
-   - **Software Safety**: SIL-rated software development
+   - **SIL Levels**: 1, 2, 3, 4 safety integrity classification
+   - **Systematic Capability**: SC ratings and assessments
+   - **Hardware Fault Tolerance**: Redundancy planning and analysis
+   - **Software Safety**: SIL-rated software development lifecycle
 
 4. **Aviation (DO-178C)**:
-   - **DAL Levels**: A, B, C, D, E classification
-   - **Software Considerations**: Airworthiness requirements  
-   - **Certification Basis**: Compliance demonstration
-   - **Configuration Management**: Change control
+   - **DAL Levels**: A, B, C, D, E design assurance classification
+   - **Software Considerations**: Airworthiness requirements compliance
+   - **Certification Basis**: Compliance demonstration and evidence
+   - **Configuration Management**: Change control and traceability
 
-#### Requirements Management
+#### Workflow Benefits
+- **Streamlined Editing**: No more expanding/collapsing - direct table selection
+- **Comprehensive Forms**: All fields editable in logical groupings
+- **Visual Consistency**: Uniform interface across all record types
+- **Professional Export**: Publication-ready markdown documentation
+- **Audit Trail**: Complete change history and version control
 
-1. **System Requirements**:
-   - **Unique IDs**: `REQ-[PROJECT]-YYYY-NNNN` format
-   - **Traceability**: Parent-child relationships
-   - **Verification Methods**: Test, inspection, analysis, demonstration
-   - **Priority Levels**: Critical, High, Medium, Low
+### 6.8 Records Management
 
-2. **Associated Hazards**:
-   - **Risk IDs**: `RISK-[PROJECT]-YYYY-NNNN` format
-   - **Risk Assessment**: Probability × Severity matrices
-   - **Mitigation Strategies**: Risk reduction measures
-   - **Residual Risk**: Post-mitigation risk levels
+Comprehensive ISO 13485 compliant records management system for regulatory compliance and quality assurance.
 
-3. **Safety Measures**:
-   - **Control Types**: Prevention, Detection, Mitigation
-   - **Implementation Status**: Planned, Implemented, Verified
-   - **Effectiveness Metrics**: Quantitative risk reduction
-   - **Validation Requirements**: Proof of effectiveness
+#### Records Categories
 
-4. **Verification Activities**:
-   - **Test Procedures**: Detailed test protocols
-   - **Acceptance Criteria**: Pass/fail criteria
-   - **Test Results**: Evidence collection
-   - **Verification Status**: Complete/Incomplete tracking
+**Records Management** provides structured tracking of all quality and compliance records with interactive editing capabilities:
 
-#### Project-Specific Features
-- **Project Selection**: All specifications tied to projects
-- **Audit Trail**: Complete change history with timestamps
-- **Unique ID Generation**: Automatic ID assignment per project
-- **Cross-References**: Requirements-to-tests traceability
-- **Impact Analysis**: Change impact assessment
+1. **Supplier Management**:
+   - **Interactive Supplier Tables**: Click to select and edit supplier details
+   - **Performance Tracking**: Performance ratings, quality ratings, on-time delivery rates
+   - **Risk Assessment**: Risk level classification and audit scheduling
+   - **Certification Management**: Certification status and contract details
+   - **Contact Management**: Complete supplier contact information
+   - **Compliance Status**: Approval status tracking (Pending, Approved, Conditional, Rejected)
 
-#### Compliance Standards
-- **Template Library**: Pre-configured templates for each standard
-- **Checklist Integration**: Compliance verification checklists
-- **Report Generation**: Automated compliance reports
-- **Regulatory Mapping**: Map requirements to regulations
+2. **Parts & Inventory**:
+   - **Inventory Tables**: Selectable parts with comprehensive editing
+   - **UDI Tracking**: Unique Device Identification and lot/serial number management
+   - **Stock Management**: Current stock, minimum levels, and location tracking
+   - **Expiration Management**: Expiration dates and received dates
+   - **Status Control**: In Stock, Quarantined, Expired, Disposed status tracking
+   - **Cost Tracking**: Unit costs and inventory valuations
 
-### 6.8 Audit Management
+3. **Lab Equipment**:
+   - **Equipment Tables**: Calibration and maintenance tracking
+   - **Calibration Management**: Last calibration, next calibration, frequency tracking
+   - **Status Monitoring**: Calibrated, Due, Overdue, Out of Service status
+   - **Technician Assignment**: Calibration technician and responsibility tracking
+   - **Standards Documentation**: Calibration standards and compliance notes
+   - **Results Recording**: Calibration results and adjustment tracking
+
+4. **Customer Complaints**:
+   - **Complaint Tables**: Complaint tracking with MDR reportability
+   - **Investigation Management**: Investigation status and root cause analysis
+   - **Product Traceability**: Product ID, lot number, and serial number linking
+   - **Response Tracking**: Response dates and corrective action management
+   - **MDR Compliance**: Medical Device Reporting compliance tracking
+   - **Resolution Documentation**: Complete complaint resolution workflow
+
+5. **Non-Conformances**:
+   - **NC Tables**: Non-conformance tracking and management
+   - **Severity Classification**: Critical, Major, Minor non-conformance levels
+   - **Risk Assessment**: Risk level determination and impact analysis
+   - **Disposition Management**: Use As Is, Rework, Scrap, Return decisions
+   - **CAPA Integration**: Corrective and Preventive Action linkage
+   - **Status Tracking**: Open, In Progress, Closed status management
+
+#### Interface Features
+
+1. **Modern Table Interface**:
+   - **2:3 Width Ratio**: Optimized layout with 2:3 ratio between dataframe and add form
+   - **st.dataframe Implementation**: Professional table interface with selection
+   - **Single-row Selection**: Click any row for comprehensive editing
+   - **Consistent Heights**: 400px tables for optimal data visibility
+   - **Real-time Updates**: Immediate refresh after data changes
+
+2. **Comprehensive Editing**:
+   - **Full Field Access**: All table columns and related fields editable
+   - **Form Validation**: Data type validation and required field checking
+   - **Dropdown Controls**: Standardized values for consistency
+   - **Date Management**: Proper date field handling and validation
+   - **Status Workflows**: Controlled status transitions and approvals
+
+3. **Filtering and Search**:
+   - **Advanced Filters**: Status, category, date range filtering
+   - **Search Capability**: Text search across all record fields
+   - **Quick Access**: Streamlined record location and selection
+   - **Export Functions**: CSV, Excel, PDF export capabilities
+
+#### Compliance Features
+- **ISO 13485 Alignment**: Full compliance with quality management requirements
+- **FDA 21 CFR Part 820**: Design controls and record keeping compliance
+- **Audit Trail**: Complete change history and version tracking
+- **Document Control**: Controlled record creation and approval processes
+- **Regulatory Reporting**: Automated compliance report generation
+
+### 6.9 Audit Management
 
 ISO 13485:2016 compliant audit management system for quality and compliance auditing.
 

@@ -1,6 +1,7 @@
 # Reviews Page - Focused on Review Functionality
 import streamlit as st
 import requests
+import pandas as pd
 from streamlit_ace import st_ace
 from auth_utils import get_auth_headers, get_current_user, setup_authenticated_sidebar, BACKEND_URL
 
@@ -171,28 +172,64 @@ with col1:
     else:
         st.caption(f"📄 {len(review_docs)} document(s) pending review")
         
+        # Prepare data for st.dataframe
+        grid_data = []
         for doc in review_docs:
-            doc_name = doc.get('name', doc.get('document_name', 'Unknown Document'))
-            with st.expander(f"📄 {doc_name}", expanded=False):
-                st.markdown(f"**Type:** {doc['document_type'].replace('_', ' ').title()}")
-                st.markdown(f"**Author:** {doc['author']}")
-                # Use V2 status format
-                doc_state = doc.get('document_state', 'review_request')
-                review_state = doc.get('review_state', 'under_review')
-                st.markdown(f"**Status:** {format_status_v2(doc_state, review_state)}", unsafe_allow_html=True)
-                st.markdown(f"**Submitted:** {doc.get('updated_at', doc.get('submitted_at', 'N/A'))[:10]}")
-                
-                # Show latest comment from comment history
-                comments = doc.get('comment_history', [])
-                if comments:
-                    latest_comment = comments[0]  # V2 API returns sorted by most recent first
-                    if latest_comment.get('type') == 'Review Request':
-                        st.markdown(f"**Author's Message:** _{latest_comment['comment'][:100]}{'...' if len(latest_comment['comment']) > 100 else ''}_")
-                
-                doc_id = doc.get('id', doc.get('document_id'))
-                if st.button("👀 Review", key=f"review_{doc_id}"):
-                    st.session_state.selected_review_doc = doc
-                    st.rerun()
+            # Get latest comment for display
+            comments = doc.get('comment_history', [])
+            latest_comment = ""
+            if comments:
+                comment = comments[0]  # V2 API returns sorted by most recent first
+                if comment.get('type') == 'Review Request':
+                    latest_comment = comment['comment'][:100] + ('...' if len(comment['comment']) > 100 else '')
+            
+            grid_row = {
+                'id': doc.get('id', doc.get('document_id')),
+                'name': doc.get('name', doc.get('document_name', 'Unknown Document')),
+                'document_type': doc['document_type'],
+                'author': doc['author'],
+                'status': doc.get('document_state', 'review_request'),
+                'submitted': doc.get('updated_at', doc.get('submitted_at', 'N/A'))[:10] if doc.get('updated_at', doc.get('submitted_at', 'N/A')) != 'N/A' else 'N/A',
+                'author_message': latest_comment,
+                'full_doc_data': doc  # Store full doc data for selection
+            }
+            grid_data.append(grid_row)
+        
+        # Create DataFrame
+        df_data = []
+        for row in grid_data:
+            df_row = {
+                'Document Name': row['name'],
+                'Type': row['document_type'].replace('_', ' ').title(),
+                'Author': row['author'],
+                'Status': row['status'].replace('_', ' ').title(),
+                'Submitted': row['submitted'],
+                'Author Message': row['author_message'][:50] + "..." if len(row['author_message']) > 50 else row['author_message']
+            }
+            df_data.append(df_row)
+        
+        df = pd.DataFrame(df_data)
+        
+        # Display with selection capability
+        selected_indices = st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            height=300
+        )
+        
+        st.caption("💡 Select a row to review the document")
+        
+        # Handle selection
+        if selected_indices and len(selected_indices.selection.rows) > 0:
+            selected_idx = selected_indices.selection.rows[0]
+            full_doc = grid_data[selected_idx]['full_doc_data']
+            # Only rerun if this is a different document
+            if st.session_state.get('selected_review_doc', {}).get('id') != full_doc.get('id'):
+                st.session_state.selected_review_doc = full_doc
+                st.rerun()
 
 with col2:
     st.subheader("📄 Review Editor")

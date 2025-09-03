@@ -132,12 +132,31 @@ QDRANT_URL=http://qdrant:6333
 - Timeline and milestone management
 
 ### 🔬 Design Record System
-- **Requirements**: Functional, safety, performance, regulatory
-- **Risk Analysis**: Hazard identification, FMEA, risk mitigation
-- **Design Artifacts**: Specifications, architecture, interfaces
-- **Test Management**: Planning, execution, validation protocols
-- **Traceability**: Complete lifecycle traceability matrix
-- **Compliance**: Multi-standard compliance tracking
+- **Requirements Management**: Comprehensive requirements with unique IDs, priority levels, verification methods
+- **Risk Analysis**: Hazard identification, FMEA, risk mitigation with safety integrity levels (ASIL, SIL, DAL)
+- **Design Artifacts**: Specifications, architecture, interfaces, detailed design documentation
+- **Test Management**: Unit, integration, system, safety, clinical, biocompatibility testing
+- **Traceability Matrix**: Interactive requirements-to-hazards traceability with rationale documentation
+- **Compliance Tracking**: ISO 13485, ISO 14971, IEC 62304, ISO 26262, FDA 21 CFR Part 820
+- **Post-Market Surveillance**: Adverse events, field actions, regulatory reporting
+- **Interactive Interface**: st.dataframe tables with single-row selection and comprehensive editing
+- **Professional Exports**: Markdown, CSV, Excel, PDF, JSON formats with filtered reporting
+
+### 📋 ISO 13485 Records Management
+- **Supplier Management**: Performance tracking, quality ratings, risk assessment, certification status
+- **Parts & Inventory**: UDI tracking, lot/serial numbers, expiration management, stock control
+- **Lab Equipment**: Calibration tracking, maintenance schedules, technician assignments
+- **Customer Complaints**: MDR reportability, investigation management, root cause analysis
+- **Non-Conformances**: CAPA integration, severity classification, disposition management
+- **2:3 Interface Layout**: Optimized dataframe to form ratio for efficient data entry
+- **Advanced Filtering**: Status, category, date range filtering with comprehensive search
+
+### 📊 Activity Logging & Audit Trail
+- **Comprehensive Tracking**: All user actions logged with timestamps and details
+- **Audit Compliance**: Tamper-proof logs with 5+ year retention for regulatory requirements
+- **Export Capabilities**: CSV export for external audit purposes
+- **Security Tracking**: IP addresses and user agents captured for security analysis
+- **Project Correlation**: Activity linking across different modules and projects
 
 ### 📄 Template Management  
 - Pre-built industry templates

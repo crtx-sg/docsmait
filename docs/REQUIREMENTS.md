@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-Docsmait is an AI-powered document and compliance management system designed for organizations requiring structured document management, quality assurance, audit compliance, and regulatory adherence. The system integrates knowledge base capabilities, automated document generation, review workflows, audit management, and code review processes.
+Docsmait is an AI-powered document and compliance management system designed for organizations requiring structured document management, quality assurance, audit compliance, and regulatory adherence. The system integrates knowledge base capabilities, automated document generation, review workflows, audit management, design record management, ISO 13485 records management, activity logging, and code review processes with modern interactive interfaces and comprehensive export capabilities.
 
 ## 2. Business Requirements
 
@@ -13,6 +13,10 @@ Docsmait is an AI-powered document and compliance management system designed for
 - **Quality Assurance**: Implement robust review and approval workflows
 - **Audit Readiness**: Maintain audit trails and support compliance auditing processes
 - **Process Automation**: Reduce manual effort through AI-powered document generation and management
+- **Design Record Management**: Comprehensive lifecycle documentation for regulated industries
+- **Records Management**: ISO 13485 compliant records tracking and management
+- **Traceability**: Complete requirements-to-testing traceability with risk management
+- **Export and Reporting**: Professional documentation export in multiple formats including Markdown
 
 ### 2.2 Target Users
 1. **Quality Managers**: Document approval, compliance oversight, audit management
@@ -21,6 +25,10 @@ Docsmait is an AI-powered document and compliance management system designed for
 4. **Project Managers**: Project document coordination, team collaboration
 5. **Auditors**: Audit execution, findings management, corrective action tracking
 6. **System Administrators**: User management, system configuration, maintenance
+7. **Design Engineers**: Requirements management, risk analysis, FMEA, traceability
+8. **Quality Assurance**: Records management, supplier management, non-conformance tracking
+9. **Clinical Affairs**: Post-market surveillance, adverse event management
+10. **Compliance Officers**: Design controls, regulatory compliance, audit preparation
 
 ### 2.3 Business Value Propositions
 - **Compliance Assurance**: Maintain regulatory compliance with automated tracking
@@ -289,37 +297,140 @@ Docsmait is an AI-powered document and compliance management system designed for
 - **REQ-EN-010**: System must notify reviewers when documents are assigned for review
 - **REQ-EN-011**: Document status changes must trigger email notifications to stakeholders
 - **REQ-EN-012**: Review completion must notify document creators with outcomes
-- **REQ-EN-013**: Notification emails must include relevant document and reviewer information
-- **REQ-EN-014**: Email content must be contextual and actionable
 
-#### 3.10.4 Audit and Code Review Notifications
-- **REQ-EN-015**: Audit scheduling must send notifications to all stakeholders
-- **REQ-EN-016**: Code review assignments must notify designated reviewers
-- **REQ-EN-017**: System must send notifications for audit findings and corrective actions
-- **REQ-EN-018**: Notification timing must be configurable for different event types
+### 3.11 Design Record Management
 
-### 3.11 System Configuration and Administration
+#### 3.11.1 Requirements Management
+- **REQ-DR-001**: System must support comprehensive requirements management with unique identifiers
+- **REQ-DR-002**: Requirements must be categorized by type (functional, performance, safety, usability, interface)
+- **REQ-DR-003**: Each requirement must have priority level (low, medium, high, critical)
+- **REQ-DR-004**: Requirements must specify verification methods (test, inspection, analysis, demonstration)
+- **REQ-DR-005**: System must track requirement dependencies and parent-child relationships
+- **REQ-DR-006**: Requirements must integrate with risk assessment and traceability
 
-#### 3.11.1 System Settings Management
-- **REQ-SC-001**: System must provide centralized configuration management
-- **REQ-SC-002**: Settings must be categorized (SMTP, AI, security, general)
-- **REQ-SC-003**: Configuration changes must be tracked with audit history
-- **REQ-SC-004**: Settings must support different data types (text, numeric, boolean, JSON)
-- **REQ-SC-005**: Critical settings must require administrator approval
+#### 3.11.2 Hazards and Risk Analysis
+- **REQ-DR-007**: System must manage hazard identification with unique hazard IDs
+- **REQ-DR-008**: Hazards must document hazardous situations, sequences, and potential harm
+- **REQ-DR-009**: Risk assessment must include severity and probability classifications
+- **REQ-DR-010**: System must support safety integrity levels (ASIL, SIL, DAL, Medical Risk Class)
+- **REQ-DR-011**: Risk mitigation strategies must be tracked with effectiveness measures
+- **REQ-DR-012**: Post-mitigation residual risk must be calculated and documented
 
-#### 3.11.2 User Administration
-- **REQ-SC-006**: Super administrators must manage user roles and permissions
-- **REQ-SC-007**: System must support bulk user operations and management
-- **REQ-SC-008**: User activity must be monitored and logged
-- **REQ-SC-009**: Account security settings must be enforceable system-wide
-- **REQ-SC-010**: User access must be auditable and reportable
+#### 3.11.3 FMEA Analysis
+- **REQ-DR-013**: System must support multiple FMEA types (Design, Process, System, Software)
+- **REQ-DR-014**: FMEA must include element identification and functional analysis
+- **REQ-DR-015**: Failure modes must be linked to causes, effects, and controls
+- **REQ-DR-016**: FMEA must calculate Risk Priority Numbers (RPN) automatically
+- **REQ-DR-017**: System must track FMEA team members and review status
+- **REQ-DR-018**: FMEA analysis must support multiple hierarchy levels
 
-#### 3.11.3 System Maintenance
-- **REQ-SC-011**: System must provide automated cleanup and maintenance capabilities
-- **REQ-SC-012**: Database optimization must be schedulable and configurable
-- **REQ-SC-013**: System must support backup and restore functionality
-- **REQ-SC-014**: Performance monitoring and alerting must be available
-- **REQ-SC-015**: System health checks must be automated and reportable
+#### 3.11.4 Design and Test Artifacts
+- **REQ-DR-019**: System must manage design documentation (specifications, architecture, interfaces)
+- **REQ-DR-020**: Test artifacts must cover all testing types (unit, integration, system, safety, clinical)
+- **REQ-DR-021**: Test execution must be tracked with status and results
+- **REQ-DR-022**: Coverage metrics must show requirements-to-test traceability percentages
+- **REQ-DR-023**: Test environments must be documented with configurations and standards
+
+#### 3.11.5 Traceability Management
+- **REQ-DR-024**: System must provide interactive requirements-to-hazards traceability matrix
+- **REQ-DR-025**: Traceability relationships must be selectable and editable
+- **REQ-DR-026**: Multi-select linking must allow requirements to link to multiple hazards
+- **REQ-DR-027**: Traceability rationale must be documented for all relationships
+- **REQ-DR-028**: Bidirectional traceability must be maintained automatically
+
+#### 3.11.6 Compliance Management
+- **REQ-DR-029**: System must track compliance to multiple standards (ISO 13485, ISO 14971, IEC 62304, ISO 26262, FDA 21 CFR Part 820)
+- **REQ-DR-030**: Compliance status must be tracked (compliant, partially compliant, non-compliant, not assessed)
+- **REQ-DR-031**: Evidence must be linked to compliance requirements with references
+- **REQ-DR-032**: Review dates and next review planning must be tracked
+- **REQ-DR-033**: Compliance gaps must be identified and tracked for resolution
+
+#### 3.11.7 Post-Market Surveillance
+- **REQ-DR-034**: System must track adverse events with severity classifications
+- **REQ-DR-035**: Field actions must be managed with effectiveness assessments
+- **REQ-DR-036**: Regulatory reporting must track FDA and Notified Body notifications
+- **REQ-DR-037**: Post-market data must integrate with risk management processes
+- **REQ-DR-038**: Trend analysis must be performed on post-market data
+
+#### 3.11.8 Interactive Interface Features
+- **REQ-DR-039**: System must use st.dataframe for interactive table interfaces with single-row selection
+- **REQ-DR-040**: All data entry forms must provide comprehensive field editing
+- **REQ-DR-041**: Tables must maintain consistent 400px height for optimal visibility
+- **REQ-DR-042**: Real-time updates must occur immediately after data changes
+- **REQ-DR-043**: Export capabilities must include multiple formats (CSV, Excel, PDF, JSON, Markdown)
+
+#### 3.11.9 Export and Reporting
+- **REQ-DR-044**: System must generate professional Markdown tables for documentation
+- **REQ-DR-045**: Export types must include Complete Design Record, Requirements Traceability, Risk Management Summary
+- **REQ-DR-046**: FMEA Analysis, Compliance Evidence, and Test Execution Summary exports must be available
+- **REQ-DR-047**: Post-Market Surveillance and Regulatory Submission Package exports must be supported
+- **REQ-DR-048**: Filtered exports must support date range and status filtering with metadata inclusion
+
+### 3.12 Records Management (ISO 13485)
+
+#### 3.12.1 Supplier Management
+- **REQ-RM-001**: System must manage supplier records with performance tracking
+- **REQ-RM-002**: Supplier performance must include ratings, quality ratings, and on-time delivery rates
+- **REQ-RM-003**: Risk assessment must classify suppliers by risk levels
+- **REQ-RM-004**: Certification management must track status and contract details
+- **REQ-RM-005**: Contact management must maintain complete supplier information
+- **REQ-RM-006**: Approval status must be tracked (Pending, Approved, Conditional, Rejected)
+
+#### 3.12.2 Parts and Inventory Management
+- **REQ-RM-007**: Parts inventory must support UDI tracking and lot/serial number management
+- **REQ-RM-008**: Stock management must track current stock, minimum levels, and locations
+- **REQ-RM-009**: Expiration management must handle expiration dates and received dates
+- **REQ-RM-010**: Status control must track (In Stock, Quarantined, Expired, Disposed) status
+- **REQ-RM-011**: Cost tracking must include unit costs and inventory valuations
+- **REQ-RM-012**: Supplier linking must connect parts to approved suppliers
+
+#### 3.12.3 Lab Equipment Management
+- **REQ-RM-013**: Equipment tracking must manage calibration and maintenance schedules
+- **REQ-RM-014**: Calibration management must track last calibration, next calibration, and frequency
+- **REQ-RM-015**: Status monitoring must track (Calibrated, Due, Overdue, Out of Service) status
+- **REQ-RM-016**: Technician assignment must track calibration technicians and responsibility
+- **REQ-RM-017**: Standards documentation must maintain calibration standards and compliance notes
+- **REQ-RM-018**: Results recording must capture calibration results and adjustments
+
+#### 3.12.4 Customer Complaints Management
+- **REQ-RM-019**: Complaint tracking must include MDR reportability assessment
+- **REQ-RM-020**: Investigation management must track status and root cause analysis
+- **REQ-RM-021**: Product traceability must link Product ID, lot numbers, and serial numbers
+- **REQ-RM-022**: Response tracking must manage response dates and corrective actions
+- **REQ-RM-023**: MDR compliance must support Medical Device Reporting requirements
+- **REQ-RM-024**: Resolution documentation must provide complete workflow tracking
+
+#### 3.12.5 Non-Conformances Management
+- **REQ-RM-025**: Non-conformance tracking must classify by severity (Critical, Major, Minor)
+- **REQ-RM-026**: Risk assessment must determine risk levels and impact analysis
+- **REQ-RM-027**: Disposition management must support (Use As Is, Rework, Scrap, Return) decisions
+- **REQ-RM-028**: CAPA integration must link to Corrective and Preventive Action systems
+- **REQ-RM-029**: Status tracking must manage (Open, In Progress, Closed) status transitions
+- **REQ-RM-030**: Root cause analysis must be documented for all non-conformances
+
+#### 3.12.6 Records Interface Features
+- **REQ-RM-031**: Modern table interface must use 2:3 width ratio between dataframe and forms
+- **REQ-RM-032**: Professional table interface must implement st.dataframe with selection
+- **REQ-RM-033**: Comprehensive editing must allow access to all table columns and fields
+- **REQ-RM-034**: Form validation must include data type validation and required field checking
+- **REQ-RM-035**: Dropdown controls must standardize values for consistency
+- **REQ-RM-036**: Advanced filtering must support status, category, and date range filtering
+
+### 3.13 Activity Logging
+
+#### 3.13.1 Activity Tracking
+- **REQ-AL-001**: System must log all significant user actions with timestamps
+- **REQ-AL-002**: Activity logs must include user identification, action type, and details
+- **REQ-AL-003**: IP address and user agent must be captured for security tracking
+- **REQ-AL-004**: Project-specific activities must be linked to appropriate projects
+- **REQ-AL-005**: System must provide activity filtering and search capabilities
+
+#### 3.13.2 Audit Trail Requirements
+- **REQ-AL-006**: Complete audit trail must be maintained for compliance purposes
+- **REQ-AL-007**: Activity logs must be tamper-proof and immutable once created
+- **REQ-AL-008**: Log retention must meet regulatory requirements (minimum 5 years)
+- **REQ-AL-009**: System must support activity log export for external audit purposes
+- **REQ-AL-010**: Activity correlation must link related actions across different modules
 
 ## 4. Non-Functional Requirements
 
@@ -408,20 +519,25 @@ Docsmait is an AI-powered document and compliance management system designed for
 - **REQ-DA-008**: Training records with assessment results
 - **REQ-DA-009**: System configuration with change history
 - **REQ-DA-010**: Email notification logs with delivery status
+- **REQ-DA-011**: Design record models (Requirements, Hazards, FMEA, Test Artifacts, Design Artifacts, Traceability, Compliance)
+- **REQ-DA-012**: Records management models (Suppliers, Parts, Lab Equipment, Customer Complaints, Non-Conformances)
+- **REQ-DA-013**: Activity log models with user actions and system events
+- **REQ-DA-014**: Post-market surveillance models with adverse events and field actions
+- **REQ-DA-015**: Traceability matrix models with relationship mapping and rationale documentation
 
 ### 6.2 Data Integrity
-- **REQ-DA-011**: Foreign key constraints must maintain referential integrity
-- **REQ-DA-012**: Data validation must occur at both client and server levels
-- **REQ-DA-013**: Concurrent access must be handled with appropriate locking
-- **REQ-DA-014**: Data corruption detection and recovery mechanisms
-- **REQ-DA-015**: Regular data consistency checks and reporting
+- **REQ-DA-016**: Foreign key constraints must maintain referential integrity
+- **REQ-DA-017**: Data validation must occur at both client and server levels
+- **REQ-DA-018**: Concurrent access must be handled with appropriate locking
+- **REQ-DA-019**: Data corruption detection and recovery mechanisms
+- **REQ-DA-020**: Regular data consistency checks and reporting
 
 ### 6.3 Data Privacy
-- **REQ-DA-016**: Personal data must be handled according to privacy regulations
-- **REQ-DA-017**: Data anonymization capabilities for reporting and analytics
-- **REQ-DA-018**: User consent tracking for data processing activities
-- **REQ-DA-019**: Data retention policies with automated cleanup
-- **REQ-DA-020**: Right to data portability and deletion support
+- **REQ-DA-021**: Personal data must be handled according to privacy regulations
+- **REQ-DA-022**: Data anonymization capabilities for reporting and analytics
+- **REQ-DA-023**: User consent tracking for data processing activities
+- **REQ-DA-024**: Data retention policies with automated cleanup
+- **REQ-DA-025**: Right to data portability and deletion support
 
 ## 7. Compliance and Regulatory Requirements
 

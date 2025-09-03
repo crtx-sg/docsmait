@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime, date
 from typing import Dict, Any
 from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers, BACKEND_URL
+from config import DATAFRAME_HEIGHT, DEFAULT_EXPORT_FORMAT
 
 require_auth()
 
@@ -112,7 +113,7 @@ with tab1:
     st.subheader("🏢 Supplier Management")
     st.markdown("*Manage supplier information, evaluations, and performance per ISO 13485*")
     
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([2, 3])
     
     with col1:
         st.markdown("### 📋 Supplier List")
@@ -145,20 +146,112 @@ with tab1:
             suppliers = suppliers_response.get("suppliers", [])
             
             if suppliers:
-                # Display suppliers in expandable cards
+                # Prepare data for DataFrame
+                supplier_grid_data = []
                 for supplier in suppliers:
-                    with st.expander(f"🏢 {supplier['supplier_name']} ({supplier.get('approval_status', 'N/A')})"):
-                        sup_col1, sup_col2 = st.columns(2)
-                        with sup_col1:
-                            st.write(f"**Contact:** {supplier.get('contact_person', 'N/A')}")
-                            st.write(f"**Email:** {supplier.get('contact_email', 'N/A')}")
-                            st.write(f"**Phone:** {supplier.get('contact_phone', 'N/A')}")
-                            st.write(f"**Risk Level:** {supplier.get('risk_level', 'N/A')}")
-                        with sup_col2:
-                            st.write(f"**Performance Rating:** {supplier.get('performance_rating', 'N/A')}")
-                            st.write(f"**On-Time Delivery:** {supplier.get('on_time_delivery_rate', 'N/A')}%")
-                            st.write(f"**Quality Rating:** {supplier.get('quality_rating', 'N/A')}")
-                            st.write(f"**Last Audit:** {supplier.get('last_audit_date', 'N/A')}")
+                    supplier_row = {
+                        'Supplier Name': supplier.get('supplier_name', 'N/A'),
+                        'Status': supplier.get('approval_status', 'N/A'),
+                        'Risk Level': supplier.get('risk_level', 'N/A'),
+                        'Performance': f"{supplier.get('performance_rating', 0)}%",
+                        'Quality': f"{supplier.get('quality_rating', 0)}%",
+                        'Contact': supplier.get('contact_person', 'N/A'),
+                        'full_supplier_data': supplier
+                    }
+                    supplier_grid_data.append(supplier_row)
+                
+                supplier_df_data = []
+                for row in supplier_grid_data:
+                    supplier_df_row = {
+                        'Supplier Name': row['Supplier Name'],
+                        'Status': row['Status'],
+                        'Risk Level': row['Risk Level'],
+                        'Performance': row['Performance'],
+                        'Quality': row['Quality'],
+                        'Contact': row['Contact']
+                    }
+                    supplier_df_data.append(supplier_df_row)
+                
+                supplier_df = pd.DataFrame(supplier_df_data)
+                
+                # Display with selection capability
+                supplier_selected_indices = st.dataframe(
+                    supplier_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    height=DATAFRAME_HEIGHT
+                )
+                
+                st.caption("💡 Select a row to edit supplier details")
+                
+                # Handle supplier selection
+                if supplier_selected_indices and len(supplier_selected_indices.selection.rows) > 0:
+                    selected_idx = supplier_selected_indices.selection.rows[0]
+                    supplier = supplier_grid_data[selected_idx]['full_supplier_data']
+                    # Only update if different supplier selected
+                    if st.session_state.get('selected_supplier_id') != supplier.get('supplier_id'):
+                        st.session_state.selected_supplier_id = supplier.get('supplier_id')
+                        st.session_state.selected_supplier_data = supplier
+                        st.rerun()
+                
+                # Show editable details for selected supplier
+                if st.session_state.get('selected_supplier_data'):
+                    supplier = st.session_state.selected_supplier_data
+                    st.markdown("---")
+                    st.markdown("### 📝 Edit Selected Supplier")
+                    
+                    with st.form("edit_supplier_form"):
+                        col_a, col_b = st.columns(2)
+                        
+                        with col_a:
+                            edited_name = st.text_input("Supplier Name", value=supplier.get('supplier_name', ''))
+                            edited_contact = st.text_input("Contact Person", value=supplier.get('contact_person', ''))
+                            edited_email = st.text_input("Contact Email", value=supplier.get('contact_email', ''))
+                            edited_phone = st.text_input("Contact Phone", value=supplier.get('contact_phone', ''))
+                        
+                        with col_b:
+                            edited_status = st.selectbox("Approval Status", ["Pending", "Approved", "Conditional", "Rejected"],
+                                                       index=["Pending", "Approved", "Conditional", "Rejected"].index(supplier.get('approval_status', 'Pending')))
+                            edited_risk = st.selectbox("Risk Level", ["Low", "Medium", "High"],
+                                                     index=["Low", "Medium", "High"].index(supplier.get('risk_level', 'Low')))
+                            edited_performance = st.number_input("Performance Rating", min_value=0.0, max_value=100.0, 
+                                                               value=supplier.get('performance_rating', 0.0), step=0.1)
+                            edited_quality = st.number_input("Quality Rating", min_value=0.0, max_value=100.0,
+                                                            value=supplier.get('quality_rating', 0.0), step=0.1)
+                        
+                        edited_address = st.text_area("Address", value=supplier.get('address', ''))
+                        edited_certifications = st.text_area("Certifications", value=supplier.get('certification_status', ''))
+                        edited_contract = st.text_area("Contract Details", value=supplier.get('contract_details', ''))
+                        
+                        if st.form_submit_button("💾 Save Changes", type="primary"):
+                            updated_supplier = {
+                                "supplier_name": edited_name,
+                                "address": edited_address,
+                                "contact_person": edited_contact,
+                                "contact_email": edited_email,
+                                "contact_phone": edited_phone,
+                                "approval_status": edited_status,
+                                "risk_level": edited_risk,
+                                "certification_status": edited_certifications,
+                                "performance_rating": edited_performance,
+                                "quality_rating": edited_quality,
+                                "contract_details": edited_contract
+                            }
+                            
+                            result = make_api_call(f"records/suppliers/{supplier.get('supplier_id')}", "PUT", updated_supplier)
+                            
+                            if result.get("success"):
+                                st.success("✅ Supplier updated successfully!")
+                                # Clear selection to refresh data
+                                if 'selected_supplier_id' in st.session_state:
+                                    del st.session_state.selected_supplier_id
+                                if 'selected_supplier_data' in st.session_state:
+                                    del st.session_state.selected_supplier_data
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Error updating supplier: {result.get('error', 'Unknown error')}")
             else:
                 st.info("No suppliers found matching the criteria")
         else:
@@ -219,7 +312,7 @@ with tab2:
     st.subheader("📦 Parts & Inventory Management")
     st.markdown("*Track parts and inventory with traceability for medical devices*")
     
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([2, 3])
     
     with col1:
         st.markdown("### 📋 Inventory List")
@@ -252,21 +345,111 @@ with tab2:
             parts = inventory_response.get("parts", [])
             
             if parts:
+                # Prepare data for DataFrame
+                parts_grid_data = []
                 for part in parts:
-                    status_color = {"In Stock": "🟢", "Quarantined": "🟡", "Expired": "🔴", "Disposed": "⚫"}.get(part.get('status', ''), "⚪")
+                    parts_row = {
+                        'Part Number': part.get('part_number', 'N/A'),
+                        'Description': part.get('description', 'N/A')[:30] + '...' if len(part.get('description', '')) > 30 else part.get('description', 'N/A'),
+                        'Status': part.get('status', 'N/A'),
+                        'Stock': part.get('quantity_in_stock', 0),
+                        'Min Level': part.get('minimum_stock_level', 0),
+                        'Location': part.get('location', 'N/A'),
+                        'full_part_data': part
+                    }
+                    parts_grid_data.append(parts_row)
+                
+                parts_df_data = []
+                for row in parts_grid_data:
+                    parts_df_row = {
+                        'Part Number': row['Part Number'],
+                        'Description': row['Description'],
+                        'Status': row['Status'],
+                        'Stock': row['Stock'],
+                        'Min Level': row['Min Level'],
+                        'Location': row['Location']
+                    }
+                    parts_df_data.append(parts_df_row)
+                
+                parts_df = pd.DataFrame(parts_df_data)
+                
+                # Display with selection capability
+                parts_selected_indices = st.dataframe(
+                    parts_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    height=DATAFRAME_HEIGHT
+                )
+                
+                st.caption("💡 Select a row to edit part details")
+                
+                # Handle part selection
+                if parts_selected_indices and len(parts_selected_indices.selection.rows) > 0:
+                    selected_idx = parts_selected_indices.selection.rows[0]
+                    part = parts_grid_data[selected_idx]['full_part_data']
+                    # Only update if different part selected
+                    if st.session_state.get('selected_part_id') != part.get('part_id'):
+                        st.session_state.selected_part_id = part.get('part_id')
+                        st.session_state.selected_part_data = part
+                        st.rerun()
+                
+                # Show editable details for selected part
+                if st.session_state.get('selected_part_data'):
+                    part = st.session_state.selected_part_data
+                    st.markdown("---")
+                    st.markdown("### 📝 Edit Selected Part")
                     
-                    with st.expander(f"{status_color} {part['part_number']} - {part.get('description', 'N/A')[:50]}"):
-                        part_col1, part_col2 = st.columns(2)
-                        with part_col1:
-                            st.write(f"**UDI:** {part.get('udi', 'N/A')}")
-                            st.write(f"**Lot Number:** {part.get('lot_number', 'N/A')}")
-                            st.write(f"**Serial Number:** {part.get('serial_number', 'N/A')}")
-                            st.write(f"**Location:** {part.get('location', 'N/A')}")
-                        with part_col2:
-                            st.write(f"**Stock Quantity:** {part.get('quantity_in_stock', 0)}")
-                            st.write(f"**Minimum Level:** {part.get('minimum_stock_level', 0)}")
-                            st.write(f"**Cost:** ${part.get('cost', 0)}")
-                            st.write(f"**Expiration:** {part.get('expiration_date', 'N/A')}")
+                    with st.form("edit_part_form"):
+                        col_a, col_b = st.columns(2)
+                        
+                        with col_a:
+                            edited_part_number = st.text_input("Part Number", value=part.get('part_number', ''))
+                            edited_udi = st.text_input("UDI Code", value=part.get('udi', ''))
+                            edited_lot = st.text_input("Lot Number", value=part.get('lot_number', ''))
+                            edited_serial = st.text_input("Serial Number", value=part.get('serial_number', ''))
+                            edited_location = st.text_input("Storage Location", value=part.get('location', ''))
+                        
+                        with col_b:
+                            edited_status = st.selectbox("Status", ["In Stock", "Quarantined", "Expired", "Disposed"],
+                                                       index=["In Stock", "Quarantined", "Expired", "Disposed"].index(part.get('status', 'In Stock')))
+                            edited_stock = st.number_input("Stock Quantity", min_value=0, value=part.get('quantity_in_stock', 0), step=1)
+                            edited_min_level = st.number_input("Minimum Level", min_value=0, value=part.get('minimum_stock_level', 0), step=1)
+                            edited_cost = st.number_input("Unit Cost", min_value=0.0, value=part.get('cost', 0.0), step=0.01)
+                            edited_exp_date = st.text_input("Expiration Date", value=part.get('expiration_date', ''))
+                        
+                        edited_description = st.text_area("Description", value=part.get('description', ''))
+                        edited_received_date = st.text_input("Received Date", value=part.get('received_date', ''))
+                        
+                        if st.form_submit_button("💾 Save Changes", type="primary"):
+                            updated_part = {
+                                "part_number": edited_part_number,
+                                "description": edited_description,
+                                "udi": edited_udi,
+                                "lot_number": edited_lot,
+                                "serial_number": edited_serial,
+                                "quantity_in_stock": edited_stock,
+                                "minimum_stock_level": edited_min_level,
+                                "location": edited_location,
+                                "expiration_date": edited_exp_date,
+                                "status": edited_status,
+                                "received_date": edited_received_date,
+                                "cost": edited_cost
+                            }
+                            
+                            result = make_api_call(f"records/parts-inventory/{part.get('part_id')}", "PUT", updated_part)
+                            
+                            if result.get("success"):
+                                st.success("✅ Part updated successfully!")
+                                # Clear selection to refresh data
+                                if 'selected_part_id' in st.session_state:
+                                    del st.session_state.selected_part_id
+                                if 'selected_part_data' in st.session_state:
+                                    del st.session_state.selected_part_data
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Error updating part: {result.get('error', 'Unknown error')}")
             else:
                 st.info("No inventory items found")
         else:
@@ -340,7 +523,7 @@ with tab3:
     st.subheader("🔬 Lab Equipment Calibration")
     st.markdown("*Track equipment calibration for accuracy and ISO 13485 compliance*")
     
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([2, 3])
     
     with col1:
         st.markdown("### 📋 Equipment List")
@@ -373,26 +556,111 @@ with tab3:
             equipment_list = equipment_response.get("equipment", [])
             
             if equipment_list:
+                # Prepare data for DataFrame
+                equipment_grid_data = []
                 for equipment in equipment_list:
-                    status_color = {
-                        "Calibrated": "🟢", 
-                        "Due": "🟡", 
-                        "Overdue": "🔴", 
-                        "Out of Service": "⚫"
-                    }.get(equipment.get('calibration_status', ''), "⚪")
+                    equipment_row = {
+                        'Equipment Name': equipment.get('equipment_name', 'N/A'),
+                        'Serial Number': equipment.get('serial_number', 'N/A'),
+                        'Status': equipment.get('calibration_status', 'N/A'),
+                        'Location': equipment.get('location', 'N/A'),
+                        'Frequency': equipment.get('calibration_frequency', 'N/A'),
+                        'Next Cal': equipment.get('next_calibration_date', 'N/A'),
+                        'full_equipment_data': equipment
+                    }
+                    equipment_grid_data.append(equipment_row)
+                
+                equipment_df_data = []
+                for row in equipment_grid_data:
+                    equipment_df_row = {
+                        'Equipment Name': row['Equipment Name'],
+                        'Serial Number': row['Serial Number'],
+                        'Status': row['Status'],
+                        'Location': row['Location'],
+                        'Frequency': row['Frequency'],
+                        'Next Cal': row['Next Cal']
+                    }
+                    equipment_df_data.append(equipment_df_row)
+                
+                equipment_df = pd.DataFrame(equipment_df_data)
+                
+                # Display with selection capability
+                equipment_selected_indices = st.dataframe(
+                    equipment_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    height=DATAFRAME_HEIGHT
+                )
+                
+                st.caption("💡 Select a row to edit equipment details")
+                
+                # Handle equipment selection
+                if equipment_selected_indices and len(equipment_selected_indices.selection.rows) > 0:
+                    selected_idx = equipment_selected_indices.selection.rows[0]
+                    equipment = equipment_grid_data[selected_idx]['full_equipment_data']
+                    # Only update if different equipment selected
+                    if st.session_state.get('selected_equipment_id') != equipment.get('equipment_id'):
+                        st.session_state.selected_equipment_id = equipment.get('equipment_id')
+                        st.session_state.selected_equipment_data = equipment
+                        st.rerun()
+                
+                # Show editable details for selected equipment
+                if st.session_state.get('selected_equipment_data'):
+                    equipment = st.session_state.selected_equipment_data
+                    st.markdown("---")
+                    st.markdown("### 📝 Edit Selected Equipment")
                     
-                    with st.expander(f"{status_color} {equipment['equipment_name']} ({equipment.get('calibration_status', 'N/A')})"):
-                        eq_col1, eq_col2 = st.columns(2)
-                        with eq_col1:
-                            st.write(f"**Serial Number:** {equipment.get('serial_number', 'N/A')}")
-                            st.write(f"**Location:** {equipment.get('location', 'N/A')}")
-                            st.write(f"**Frequency:** {equipment.get('calibration_frequency', 'N/A')}")
-                            st.write(f"**Technician:** {equipment.get('technician', 'N/A')}")
-                        with eq_col2:
-                            st.write(f"**Last Calibration:** {equipment.get('last_calibration_date', 'N/A')}")
-                            st.write(f"**Next Calibration:** {equipment.get('next_calibration_date', 'N/A')}")
-                            st.write(f"**Adjustment Made:** {'Yes' if equipment.get('adjustment_made') else 'No'}")
-                            st.write(f"**Standards Used:** {equipment.get('standards_used', 'N/A')}")
+                    with st.form("edit_equipment_form"):
+                        col_a, col_b = st.columns(2)
+                        
+                        with col_a:
+                            edited_name = st.text_input("Equipment Name", value=equipment.get('equipment_name', ''))
+                            edited_serial = st.text_input("Serial Number", value=equipment.get('serial_number', ''))
+                            edited_location = st.text_input("Location", value=equipment.get('location', ''))
+                            edited_frequency = st.text_input("Calibration Frequency", value=equipment.get('calibration_frequency', ''))
+                            edited_technician = st.text_input("Technician", value=equipment.get('technician', ''))
+                        
+                        with col_b:
+                            edited_status = st.selectbox("Calibration Status", ["Calibrated", "Due", "Overdue", "Out of Service"],
+                                                       index=["Calibrated", "Due", "Overdue", "Out of Service"].index(equipment.get('calibration_status', 'Calibrated')))
+                            edited_last_cal = st.text_input("Last Calibration Date", value=equipment.get('last_calibration_date', ''))
+                            edited_next_cal = st.text_input("Next Calibration Date", value=equipment.get('next_calibration_date', ''))
+                            edited_adjustment = st.checkbox("Adjustment Made", value=equipment.get('adjustment_made', False))
+                        
+                        edited_standards = st.text_area("Standards Used", value=equipment.get('standards_used', ''))
+                        edited_results = st.text_area("Calibration Results", value=equipment.get('results', ''))
+                        edited_compliance = st.text_area("Compliance Notes", value=equipment.get('compliance_notes', ''))
+                        
+                        if st.form_submit_button("💾 Save Changes", type="primary"):
+                            updated_equipment = {
+                                "equipment_name": edited_name,
+                                "serial_number": edited_serial,
+                                "location": edited_location,
+                                "calibration_frequency": edited_frequency,
+                                "last_calibration_date": edited_last_cal,
+                                "next_calibration_date": edited_next_cal,
+                                "calibration_status": edited_status,
+                                "technician": edited_technician,
+                                "standards_used": edited_standards,
+                                "results": edited_results,
+                                "adjustment_made": edited_adjustment,
+                                "compliance_notes": edited_compliance
+                            }
+                            
+                            result = make_api_call(f"records/lab-equipment/{equipment.get('equipment_id')}", "PUT", updated_equipment)
+                            
+                            if result.get("success"):
+                                st.success("✅ Equipment updated successfully!")
+                                # Clear selection to refresh data
+                                if 'selected_equipment_id' in st.session_state:
+                                    del st.session_state.selected_equipment_id
+                                if 'selected_equipment_data' in st.session_state:
+                                    del st.session_state.selected_equipment_data
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Error updating equipment: {result.get('error', 'Unknown error')}")
             else:
                 st.info("No equipment found")
         else:
@@ -451,7 +719,7 @@ with tab4:
     st.subheader("😟 Customer Complaints")
     st.markdown("*Handle customer complaints per FDA 21 CFR 820 requirements*")
     
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([2, 3])
     
     with col1:
         st.markdown("### 📋 Complaints List")
@@ -484,29 +752,113 @@ with tab4:
             complaints = complaints_response.get("complaints", [])
             
             if complaints:
+                # Prepare data for DataFrame
+                complaints_grid_data = []
                 for complaint in complaints:
-                    status_color = {"Open": "🔴", "Under Investigation": "🟡", "Closed": "🟢"}.get(complaint.get('status', ''), "⚪")
-                    mdr_indicator = "🚨 MDR" if complaint.get('mdr_reportable') else ""
+                    complaints_row = {
+                        'ID': complaint.get('complaint_id', 'N/A'),
+                        'Complainant': complaint.get('complainant_name', 'Anonymous'),
+                        'Status': complaint.get('status', 'N/A'),
+                        'Product ID': complaint.get('product_id', 'N/A'),
+                        'Received': complaint.get('received_date', 'N/A'),
+                        'MDR': 'Yes' if complaint.get('mdr_reportable') else 'No',
+                        'full_complaint_data': complaint
+                    }
+                    complaints_grid_data.append(complaints_row)
+                
+                complaints_df_data = []
+                for row in complaints_grid_data:
+                    complaints_df_row = {
+                        'ID': row['ID'],
+                        'Complainant': row['Complainant'],
+                        'Status': row['Status'],
+                        'Product ID': row['Product ID'],
+                        'Received': row['Received'],
+                        'MDR': row['MDR']
+                    }
+                    complaints_df_data.append(complaints_df_row)
+                
+                complaints_df = pd.DataFrame(complaints_df_data)
+                
+                # Display with selection capability
+                complaints_selected_indices = st.dataframe(
+                    complaints_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    height=DATAFRAME_HEIGHT
+                )
+                
+                st.caption("💡 Select a row to edit complaint details")
+                
+                # Handle complaint selection
+                if complaints_selected_indices and len(complaints_selected_indices.selection.rows) > 0:
+                    selected_idx = complaints_selected_indices.selection.rows[0]
+                    complaint = complaints_grid_data[selected_idx]['full_complaint_data']
+                    # Only update if different complaint selected
+                    if st.session_state.get('selected_complaint_id') != complaint.get('complaint_id'):
+                        st.session_state.selected_complaint_id = complaint.get('complaint_id')
+                        st.session_state.selected_complaint_data = complaint
+                        st.rerun()
+                
+                # Show editable details for selected complaint
+                if st.session_state.get('selected_complaint_data'):
+                    complaint = st.session_state.selected_complaint_data
+                    st.markdown("---")
+                    st.markdown("### 📝 Edit Selected Complaint")
                     
-                    with st.expander(f"{status_color} Complaint #{complaint['complaint_id']} - {complaint.get('complainant_name', 'Anonymous')} {mdr_indicator}"):
-                        comp_col1, comp_col2 = st.columns(2)
-                        with comp_col1:
-                            st.write(f"**Received:** {complaint.get('received_date', 'N/A')}")
-                            st.write(f"**Product ID:** {complaint.get('product_id', 'N/A')}")
-                            st.write(f"**Lot Number:** {complaint.get('lot_number', 'N/A')}")
-                            st.write(f"**Serial Number:** {complaint.get('serial_number', 'N/A')}")
-                        with comp_col2:
-                            st.write(f"**Contact:** {complaint.get('complainant_contact', 'N/A')}")
-                            st.write(f"**Response Date:** {complaint.get('response_date', 'N/A')}")
-                            st.write(f"**Status:** {complaint.get('status', 'N/A')}")
-                            st.write(f"**MDR Reportable:** {'Yes' if complaint.get('mdr_reportable') else 'No'}")
+                    with st.form("edit_complaint_form"):
+                        col_a, col_b = st.columns(2)
                         
-                        st.write("**Description:**")
-                        st.write(complaint.get('complaint_description', 'N/A'))
+                        with col_a:
+                            edited_complainant = st.text_input("Complainant Name", value=complaint.get('complainant_name', ''))
+                            edited_contact = st.text_input("Contact Information", value=complaint.get('complainant_contact', ''))
+                            edited_product = st.text_input("Product ID", value=complaint.get('product_id', ''))
+                            edited_lot = st.text_input("Lot Number", value=complaint.get('lot_number', ''))
+                            edited_serial = st.text_input("Serial Number", value=complaint.get('serial_number', ''))
                         
-                        if complaint.get('root_cause'):
-                            st.write("**Root Cause:**")
-                            st.write(complaint.get('root_cause'))
+                        with col_b:
+                            edited_status = st.selectbox("Status", ["Open", "Under Investigation", "Closed"],
+                                                       index=["Open", "Under Investigation", "Closed"].index(complaint.get('status', 'Open')))
+                            edited_received = st.text_input("Received Date", value=complaint.get('received_date', ''))
+                            edited_response = st.text_input("Response Date", value=complaint.get('response_date', ''))
+                            edited_mdr = st.checkbox("MDR Reportable", value=complaint.get('mdr_reportable', False))
+                        
+                        edited_description = st.text_area("Complaint Description", value=complaint.get('complaint_description', ''), height=100)
+                        edited_investigation = st.text_area("Investigation Details", value=complaint.get('investigation_details', ''))
+                        edited_root_cause = st.text_area("Root Cause", value=complaint.get('root_cause', ''))
+                        edited_corrective_action = st.text_area("Corrective Action", value=complaint.get('corrective_action', ''))
+                        
+                        if st.form_submit_button("💾 Save Changes", type="primary"):
+                            updated_complaint = {
+                                "complainant_name": edited_complainant,
+                                "complainant_contact": edited_contact,
+                                "product_id": edited_product,
+                                "lot_number": edited_lot,
+                                "serial_number": edited_serial,
+                                "complaint_description": edited_description,
+                                "investigation_details": edited_investigation,
+                                "root_cause": edited_root_cause,
+                                "corrective_action": edited_corrective_action,
+                                "received_date": edited_received,
+                                "response_date": edited_response,
+                                "mdr_reportable": edited_mdr,
+                                "status": edited_status
+                            }
+                            
+                            result = make_api_call(f"records/customer-complaints/{complaint.get('complaint_id')}", "PUT", updated_complaint)
+                            
+                            if result.get("success"):
+                                st.success("✅ Complaint updated successfully!")
+                                # Clear selection to refresh data
+                                if 'selected_complaint_id' in st.session_state:
+                                    del st.session_state.selected_complaint_id
+                                if 'selected_complaint_data' in st.session_state:
+                                    del st.session_state.selected_complaint_data
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Error updating complaint: {result.get('error', 'Unknown error')}")
             else:
                 st.info("No complaints found")
         else:
@@ -567,7 +919,7 @@ with tab5:
     st.subheader("⚠️ Non-Conformances")
     st.markdown("*Manage non-conformances with root cause analysis per ISO 13485*")
     
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([2, 3])
     
     with col1:
         st.markdown("### 📋 Non-Conformances List")
@@ -600,33 +952,114 @@ with tab5:
             ncs = ncs_response.get("non_conformances", [])
             
             if ncs:
+                # Prepare data for DataFrame
+                ncs_grid_data = []
                 for nc in ncs:
-                    severity_color = {"Minor": "🟡", "Major": "🟠", "Critical": "🔴"}.get(nc.get('severity', ''), "⚪")
-                    status_color = {"Open": "🔴", "In Progress": "🟡", "Closed": "🟢"}.get(nc.get('status', ''), "⚪")
+                    ncs_row = {
+                        'NC ID': nc.get('nc_id', 'N/A'),
+                        'Severity': nc.get('severity', 'N/A'),
+                        'Status': nc.get('status', 'N/A'),
+                        'Product/Process': nc.get('product_process_involved', 'N/A'),
+                        'Risk Level': nc.get('risk_level', 'N/A'),
+                        'Responsible': nc.get('responsible_person', 'N/A'),
+                        'full_nc_data': nc
+                    }
+                    ncs_grid_data.append(ncs_row)
+                
+                ncs_df_data = []
+                for row in ncs_grid_data:
+                    ncs_df_row = {
+                        'NC ID': row['NC ID'],
+                        'Severity': row['Severity'],
+                        'Status': row['Status'],
+                        'Product/Process': row['Product/Process'],
+                        'Risk Level': row['Risk Level'],
+                        'Responsible': row['Responsible']
+                    }
+                    ncs_df_data.append(ncs_df_row)
+                
+                ncs_df = pd.DataFrame(ncs_df_data)
+                
+                # Display with selection capability
+                ncs_selected_indices = st.dataframe(
+                    ncs_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    height=DATAFRAME_HEIGHT
+                )
+                
+                st.caption("💡 Select a row to edit non-conformance details")
+                
+                # Handle non-conformance selection
+                if ncs_selected_indices and len(ncs_selected_indices.selection.rows) > 0:
+                    selected_idx = ncs_selected_indices.selection.rows[0]
+                    nc = ncs_grid_data[selected_idx]['full_nc_data']
+                    # Only update if different non-conformance selected
+                    if st.session_state.get('selected_nc_id') != nc.get('nc_id'):
+                        st.session_state.selected_nc_id = nc.get('nc_id')
+                        st.session_state.selected_nc_data = nc
+                        st.rerun()
+                
+                # Show editable details for selected non-conformance
+                if st.session_state.get('selected_nc_data'):
+                    nc = st.session_state.selected_nc_data
+                    st.markdown("---")
+                    st.markdown("### 📝 Edit Selected Non-Conformance")
                     
-                    with st.expander(f"{severity_color} NC #{nc['nc_id']} - {nc.get('severity', 'N/A')} ({status_color} {nc.get('status', 'N/A')})"):
-                        nc_col1, nc_col2 = st.columns(2)
-                        with nc_col1:
-                            st.write(f"**Detection Date:** {nc.get('detection_date', 'N/A')}")
-                            st.write(f"**Product/Process:** {nc.get('product_process_involved', 'N/A')}")
-                            st.write(f"**Risk Level:** {nc.get('risk_level', 'N/A')}")
-                            st.write(f"**Responsible Person:** {nc.get('responsible_person', 'N/A')}")
-                        with nc_col2:
-                            st.write(f"**Severity:** {nc.get('severity', 'N/A')}")
-                            st.write(f"**Disposition:** {nc.get('disposition', 'N/A')}")
-                            st.write(f"**Closure Date:** {nc.get('closure_date', 'N/A')}")
-                            st.write(f"**Status:** {nc.get('status', 'N/A')}")
+                    with st.form("edit_nc_form"):
+                        col_a, col_b = st.columns(2)
                         
-                        st.write("**Description:**")
-                        st.write(nc.get('description', 'N/A'))
+                        with col_a:
+                            edited_product_process = st.text_input("Product/Process Involved", value=nc.get('product_process_involved', ''))
+                            edited_responsible = st.text_input("Responsible Person", value=nc.get('responsible_person', ''))
+                            edited_detection_date = st.text_input("Detection Date", value=nc.get('detection_date', ''))
+                            edited_closure_date = st.text_input("Closure Date", value=nc.get('closure_date', ''))
                         
-                        if nc.get('root_cause'):
-                            st.write("**Root Cause:**")
-                            st.write(nc.get('root_cause'))
+                        with col_b:
+                            edited_severity = st.selectbox("Severity", ["Minor", "Major", "Critical"],
+                                                         index=["Minor", "Major", "Critical"].index(nc.get('severity', 'Minor')))
+                            edited_status = st.selectbox("Status", ["Open", "In Progress", "Closed"],
+                                                       index=["Open", "In Progress", "Closed"].index(nc.get('status', 'Open')))
+                            edited_risk_level = st.selectbox("Risk Level", ["Low", "Medium", "High"],
+                                                           index=["Low", "Medium", "High"].index(nc.get('risk_level', 'Low')))
+                            edited_disposition = st.selectbox("Disposition", ["Use As Is", "Rework", "Scrap", "Return"],
+                                                            index=["Use As Is", "Rework", "Scrap", "Return"].index(nc.get('disposition', 'Use As Is')))
                         
-                        if nc.get('corrective_action'):
-                            st.write("**Corrective Action:**")
-                            st.write(nc.get('corrective_action'))
+                        edited_description = st.text_area("Description", value=nc.get('description', ''), height=100)
+                        edited_root_cause = st.text_area("Root Cause", value=nc.get('root_cause', ''))
+                        edited_corrective_action = st.text_area("Corrective Action", value=nc.get('corrective_action', ''))
+                        edited_preventive_action = st.text_area("Preventive Action", value=nc.get('preventive_action', ''))
+                        
+                        if st.form_submit_button("💾 Save Changes", type="primary"):
+                            updated_nc = {
+                                "description": edited_description,
+                                "product_process_involved": edited_product_process,
+                                "severity": edited_severity,
+                                "risk_level": edited_risk_level,
+                                "root_cause": edited_root_cause,
+                                "corrective_action": edited_corrective_action,
+                                "preventive_action": edited_preventive_action,
+                                "responsible_person": edited_responsible,
+                                "disposition": edited_disposition,
+                                "status": edited_status,
+                                "detection_date": edited_detection_date,
+                                "closure_date": edited_closure_date
+                            }
+                            
+                            result = make_api_call(f"records/non-conformances/{nc.get('nc_id')}", "PUT", updated_nc)
+                            
+                            if result.get("success"):
+                                st.success("✅ Non-conformance updated successfully!")
+                                # Clear selection to refresh data
+                                if 'selected_nc_id' in st.session_state:
+                                    del st.session_state.selected_nc_id
+                                if 'selected_nc_data' in st.session_state:
+                                    del st.session_state.selected_nc_data
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Error updating non-conformance: {result.get('error', 'Unknown error')}")
             else:
                 st.info("No non-conformances found")
         else:

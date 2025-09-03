@@ -1,6 +1,7 @@
 # Simplified Document Management - V2
 import streamlit as st
 import requests
+import pandas as pd
 from streamlit_ace import st_ace
 from auth_utils import get_auth_headers, get_current_user, setup_authenticated_sidebar, BACKEND_URL
 
@@ -354,24 +355,6 @@ def create_document(project_id, document_data):
     except Exception as e:
         return {"error": str(e)}, 500
 
-def display_comment_history(comments):
-    """Display comment history in clean format"""
-    if not comments:
-        st.info("No comments yet")
-        return
-    
-    for comment in comments:
-        date_time = comment["date_time"][:16] if comment["date_time"] else "N/A"
-        comment_type = comment["type"]
-        user = comment["user"]
-        text = comment["comment"]
-        
-        st.markdown(f"""
-        <div class="comment-item">
-            <strong>{date_time}</strong> | <strong>{comment_type}</strong> | {user}<br>
-            {text}
-        </div>
-        """, unsafe_allow_html=True)
 
 # Main interface
 st.title("📄 Documents - Simplified Workflow")
@@ -449,24 +432,60 @@ with tab1:
             with my_col1:
                 st.markdown("### My Documents List")
                 
+                # Prepare data for st.dataframe
+                grid_data = []
                 for doc in documents:
-                    with st.expander(f"📄 {doc['name']}", expanded=False):
-                        st.write(f"**Type:** {doc['document_type'].replace('_', ' ').title()}")
-                        # Handle both V1 (status) and V2 (document_state, review_state) formats
-                        doc_state = doc.get('document_state', doc.get('status', 'unknown'))
-                        review_state = doc.get('review_state')
-                        st.write(f"**Status:** {format_status(doc_state, review_state)}", unsafe_allow_html=True)
-                        # Show reviewers if document is under review
-                        if doc.get('reviewers'):
-                            reviewer_names = [r['username'] for r in doc['reviewers']]
-                            st.write(f"**Reviewers:** {', '.join(reviewer_names)}")
-                        st.write(f"**Updated:** {doc['updated_at'][:10] if doc['updated_at'] else 'N/A'}")
-                        
-                        if st.button("📝 Edit", key=f"edit_{doc['id']}", help="Edit Document"):
-                            # Ensure we have the latest document data
-                            st.session_state.selected_doc = doc
-                            st.session_state.mode = "author"
-                            st.rerun()
+                    # Get reviewer names
+                    reviewers = ""
+                    if doc.get('reviewers'):
+                        reviewer_names = [r['username'] for r in doc['reviewers']]
+                        reviewers = ', '.join(reviewer_names)
+                    
+                    grid_row = {
+                        'id': doc['id'],
+                        'name': doc['name'],
+                        'document_type': doc['document_type'],
+                        'status': doc.get('document_state', doc.get('status', 'unknown')),
+                        'reviewers': reviewers,
+                        'updated_at': doc['updated_at'][:10] if doc['updated_at'] else 'N/A',
+                        'full_doc_data': doc  # Store full doc data for editing
+                    }
+                    grid_data.append(grid_row)
+                
+                # Create DataFrame for documents - show only requested columns  
+                df_data = []
+                for row in grid_data:
+                    df_row = {
+                        'Document Name': row['name'],
+                        'Status': row['status'].replace('_', ' ').title(),
+                        'Reviewers': row['reviewers']
+                    }
+                    df_data.append(df_row)
+                
+                df = pd.DataFrame(df_data)
+                
+                # Display with selection capability
+                selected_indices = st.dataframe(
+                    df,
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    height=400
+                )
+                
+                st.caption("💡 Select a row to edit the document")
+                
+                # Handle document selection for editing
+                if selected_indices and len(selected_indices.selection.rows) > 0:
+                    selected_idx = selected_indices.selection.rows[0]
+                    full_doc = grid_data[selected_idx]['full_doc_data']
+                    # Only rerun if this is a different document
+                    if (st.session_state.get('selected_doc', {}).get('id') != full_doc.get('id') or 
+                        st.session_state.get('mode') != "author"):
+                        st.session_state.selected_doc = full_doc
+                        st.session_state.mode = "author"
+                        st.rerun()
             
             with my_col2:
                 st.markdown("### Document Editor")
@@ -607,12 +626,18 @@ with tab1:
                         
                         with col_b:
                             if st.button("❌ Close"):
-                                del st.session_state.selected_doc
+                                if 'selected_doc' in st.session_state:
+                                    del st.session_state.selected_doc
+                                if 'mode' in st.session_state:
+                                    del st.session_state.mode
                                 st.rerun()
                     else:
                         st.info(f"Document is currently {doc_status.replace('_', ' ')}")
                         if st.button("❌ Close"):
-                            del st.session_state.selected_doc
+                            if 'selected_doc' in st.session_state:
+                                del st.session_state.selected_doc
+                            if 'mode' in st.session_state:
+                                del st.session_state.mode
                             st.rerun()
                 else:
                     st.info("Select a document from the left panel to edit")
@@ -630,25 +655,65 @@ with tab1:
                 st.markdown("### Review Queue")
                 st.caption(f"📄 {len(review_docs)} document(s) pending review")
                 
+                # Prepare review queue data for st.dataframe
+                review_grid_data = []
                 for doc in review_docs:
-                    with st.expander(f"📄 {doc['name']}", expanded=False):
-                        st.write(f"**Type:** {doc['document_type'].replace('_', ' ').title()}")
-                        st.write(f"**Author:** {doc['author']}")
-                        doc_state = doc.get('document_state', doc.get('status', 'unknown'))
-                        review_state = doc.get('review_state')
-                        st.write(f"**Status:** {format_status(doc_state, review_state)}", unsafe_allow_html=True)
-                        st.write(f"**Submitted:** {doc['updated_at'][:10] if doc['updated_at'] else 'N/A'}")
-                        
-                        # Show latest comment from author
-                        if doc.get('comment_history'):
-                            latest_comment = doc['comment_history'][0]
-                            if latest_comment['type'] == 'Review Request':
-                                st.write(f"**Author's Message:** _{latest_comment['comment'][:100]}{'...' if len(latest_comment['comment']) > 100 else ''}_")
-                        
-                        if st.button("👀 Review", key=f"review_{doc['id']}"):
-                            st.session_state.selected_review_doc = doc
-                            st.session_state.mode = "reviewer"
-                            st.rerun()
+                    # Get latest comment from author
+                    author_message = ""
+                    if doc.get('comment_history'):
+                        latest_comment = doc['comment_history'][0]
+                        if latest_comment['type'] == 'Review Request':
+                            author_message = latest_comment['comment'][:100] + ('...' if len(latest_comment['comment']) > 100 else '')
+                    
+                    review_row = {
+                        'id': doc['id'],
+                        'name': doc['name'],
+                        'document_type': doc['document_type'],
+                        'author': doc['author'],
+                        'status': doc.get('document_state', doc.get('status', 'unknown')),
+                        'submitted': doc['updated_at'][:10] if doc['updated_at'] else 'N/A',
+                        'author_message': author_message,
+                        'full_doc_data': doc  # Store full doc data for reviewing
+                    }
+                    review_grid_data.append(review_row)
+                
+                # Create DataFrame for review queue
+                review_df_data = []
+                for row in review_grid_data:
+                    review_df_row = {
+                        'Document Name': row['name'],
+                        'Type': row['document_type'].replace('_', ' ').title(),
+                        'Author': row['author'],
+                        'Status': row['status'].replace('_', ' ').title(),
+                        'Submitted': row['submitted'],
+                        'Message': row['author_message'][:50] + "..." if len(row['author_message']) > 50 else row['author_message']
+                    }
+                    review_df_data.append(review_df_row)
+                
+                review_df = pd.DataFrame(review_df_data)
+                
+                # Display with selection capability
+                review_selected_indices = st.dataframe(
+                    review_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun", 
+                    selection_mode="single-row",
+                    height=350
+                )
+                
+                st.caption("💡 Select a row to review the document")
+                
+                # Handle review queue selection
+                if review_selected_indices and len(review_selected_indices.selection.rows) > 0:
+                    selected_idx = review_selected_indices.selection.rows[0]
+                    full_doc = review_grid_data[selected_idx]['full_doc_data']
+                    # Only rerun if this is a different document
+                    if (st.session_state.get('selected_review_doc', {}).get('id') != full_doc.get('id') or 
+                        st.session_state.get('mode') != "reviewer"):
+                        st.session_state.selected_review_doc = full_doc
+                        st.session_state.mode = "reviewer"
+                        st.rerun()
             
             with review_col2:
                 st.markdown("### Review Editor")
@@ -718,16 +783,57 @@ with tab1:
         if not approved_docs:
             st.info("No approved documents")
         else:
+            st.markdown("### Approved Documents")
+            
+            # Prepare data for st.dataframe
+            approved_grid_data = []
             for doc in approved_docs:
-                with st.expander(f"📄 {doc['name']}", expanded=False):
-                    st.write(f"**Type:** {doc['document_type'].replace('_', ' ').title()}")
-                    st.write(f"**Author:** {doc['author']}")
-                    st.write(f"**Approved:** {doc['updated_at'][:10] if doc['updated_at'] else 'N/A'}")
-                    
-                    if st.button("📄 View Content", key=f"view_approved_{doc['id']}", help="View approved document content"):
-                        st.session_state.selected_doc = doc
-                        st.session_state.mode = "view_only"
-                        st.rerun()
+                approved_row = {
+                    'name': doc['name'],
+                    'document_type': doc['document_type'],
+                    'author': doc['author'],
+                    'status': 'approved',
+                    'approved_date': doc['updated_at'][:10] if doc['updated_at'] else 'N/A',
+                    'full_doc_data': doc
+                }
+                approved_grid_data.append(approved_row)
+            
+            # Create DataFrame for approved documents
+            approved_df_data = []
+            for row in approved_grid_data:
+                approved_df_row = {
+                    'Document Name': row['name'],
+                    'Type': row['document_type'].replace('_', ' ').title(),
+                    'Author': row['author'],
+                    'Status': row['status'].title(),
+                    'Approved Date': row['approved_date']
+                }
+                approved_df_data.append(approved_df_row)
+            
+            approved_df = pd.DataFrame(approved_df_data)
+            
+            # Display with selection capability
+            approved_selected_indices = st.dataframe(
+                approved_df,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                height=300
+            )
+            
+            st.caption("💡 Select a row to view the approved document")
+            
+            # Handle approved document selection
+            if approved_selected_indices and len(approved_selected_indices.selection.rows) > 0:
+                selected_idx = approved_selected_indices.selection.rows[0]
+                full_doc = approved_grid_data[selected_idx]['full_doc_data']
+                # Only rerun if this is a different document
+                if (st.session_state.get('selected_doc', {}).get('id') != full_doc.get('id') or 
+                    st.session_state.get('mode') != "view_only"):
+                    st.session_state.selected_doc = full_doc
+                    st.session_state.mode = "view_only"
+                    st.rerun()
 
 with tab2:
     st.subheader("➕ Create Document")
@@ -976,26 +1082,69 @@ with tab3:
         with main_col1:
             st.markdown("### Documents List")
             
+            # Prepare data for st.dataframe
+            all_docs_grid_data = []
             for doc in documents:
                 doc_status = doc.get('status', doc.get('document_state', 'unknown'))
-                with st.expander(f"📄 {doc['name']} - {doc_status.replace('_', ' ').title()}", expanded=False):
-                    st.write(f"**Document Type:** {doc['document_type'].replace('_', ' ').title()}")
-                    st.write(f"**Document Status:** {doc_status.replace('_', ' ').title()}")
-                    st.write(f"**Author:** {doc.get('created_by_username', 'Unknown')}")
-                    st.write(f"**Created:** {doc['created_at'][:10] if doc['created_at'] else 'N/A'}")
-                    st.write(f"**Updated:** {doc['updated_at'][:10] if doc['updated_at'] else 'N/A'}")
-                    
-                    # Action buttons
-                    if st.button("📝 Edit", key=f"edit_all_{doc['id']}", help="Edit Document"):
-                        # Get the full document data with comments from V2 API
-                        full_docs = get_documents_for_author(project_id)
-                        full_doc = next((d for d in full_docs if d['id'] == doc['id']), None)
-                        if full_doc:
-                            st.session_state.selected_doc = full_doc
-                        else:
-                            st.session_state.selected_doc = doc
-                        st.session_state.mode = "author"
-                        st.rerun()
+                # Try multiple possible author field names
+                author = (doc.get('created_by_username') or 
+                         doc.get('author') or 
+                         doc.get('created_by') or 
+                         'Unknown')
+                
+                all_docs_row = {
+                    'name': doc['name'],
+                    'document_type': doc['document_type'],
+                    'status': doc_status,
+                    'author': author,
+                    'created_at': doc['created_at'][:10] if doc['created_at'] else 'N/A',
+                    'updated_at': doc['updated_at'][:10] if doc['updated_at'] else 'N/A',
+                    'full_doc_data': doc
+                }
+                all_docs_grid_data.append(all_docs_row)
+            
+            # Create DataFrame for all documents
+            all_docs_df_data = []
+            for row in all_docs_grid_data:
+                all_docs_df_row = {
+                    'Document Name': row['name'],
+                    'Type': row['document_type'].replace('_', ' ').title(),
+                    'Status': row['status'].replace('_', ' ').title(),
+                    'Author': row['author'],
+                    'Updated': row['updated_at']
+                }
+                all_docs_df_data.append(all_docs_df_row)
+            
+            all_docs_df = pd.DataFrame(all_docs_df_data)
+            
+            # Display with selection capability
+            all_docs_selected_indices = st.dataframe(
+                all_docs_df,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                height=400
+            )
+            
+            st.caption("💡 Select a row to edit the document")
+            
+            # Handle all documents selection
+            if all_docs_selected_indices and len(all_docs_selected_indices.selection.rows) > 0:
+                selected_idx = all_docs_selected_indices.selection.rows[0]
+                doc = all_docs_grid_data[selected_idx]['full_doc_data']
+                # Only rerun if this is a different document
+                if (st.session_state.get('selected_doc', {}).get('id') != doc.get('id') or 
+                    st.session_state.get('mode') != "author"):
+                    # Get the full document data with comments from V2 API
+                    full_docs = get_documents_for_author(project_id)
+                    full_doc = next((d for d in full_docs if d['id'] == doc['id']), None)
+                    if full_doc:
+                        st.session_state.selected_doc = full_doc
+                    else:
+                        st.session_state.selected_doc = doc
+                    st.session_state.mode = "author"
+                    st.rerun()
         
         with main_col2:
             st.markdown("### Document Editor")
@@ -1007,28 +1156,18 @@ with tab3:
                 # Document header
                 st.markdown(f"**{doc['name']}** | {doc['document_type'].replace('_', ' ').title()}")
                 doc_status = doc.get('status', doc.get('document_state', 'unknown'))
-                st.markdown(f"**Author:** {doc.get('created_by_username', 'Unknown')} | **Status:** {doc_status.replace('_', ' ').title()}")
+                # Try multiple possible author field names
+                author = (doc.get('created_by_username') or 
+                         doc.get('author') or 
+                         doc.get('created_by') or 
+                         'Unknown')
+                st.markdown(f"**Author:** {author} | **Status:** {doc_status.replace('_', ' ').title()}")
                 
-                # Comment History
+                # Comment History - handle both V1 and V2 formats
                 st.subheader("💬 Comment History")
-                if doc.get('review_comments'):
-                    for comment in doc['review_comments']:
-                        timestamp = comment.get('timestamp', '')
-                        date_str = timestamp[:10] if timestamp and len(timestamp) >= 10 else 'N/A'
-                        time_str = timestamp[11:16] if timestamp and len(timestamp) >= 16 else ''
-                        datetime_str = f"{date_str} {time_str}".strip()
-                        
-                        person_name = comment.get('commenter', 'Unknown')
-                        comment_text = comment.get('comment', '')
-                        
-                        if comment.get('type') == 'author':
-                            st.info(f"📝 [{datetime_str}] Author Comment: {comment_text}")
-                        else:
-                            status_icon = "✅" if comment.get('approved') else "❌"
-                            if comment.get('approved'):
-                                st.success(f"{status_icon} [{datetime_str}] {person_name}: {comment_text}")
-                            else:
-                                st.error(f"{status_icon} [{datetime_str}] {person_name}: {comment_text}")
+                comments = doc.get('comment_history', doc.get('review_comments', []))
+                if comments and len(comments) > 0:
+                    display_comment_history(comments)
                 else:
                     st.info("No comments yet")
                 
@@ -1110,31 +1249,56 @@ with tab4:
                 with rev_col1:
                     st.subheader("📋 Revisions")
                     
-                    # Display revisions list
+                    # Prepare data for DataFrame
+                    revision_grid_data = []
                     for revision in revisions:
-                        revision_class = "revision-current" if revision['is_current'] else "revision-old"
-                        current_badge = " 🔴 Current" if revision['is_current'] else ""
-                        
                         created_at = revision.get('created_at', '')
                         date_str = created_at[:10] if created_at else 'N/A'
+                        current_indicator = "🔴 Current" if revision['is_current'] else ""
                         
-                        st.markdown(f"""
-                        <div class="revision-item {revision_class}">
-                            <div class="revision-header">
-                                <strong>Revision {revision['revision_number']}{current_badge}</strong>
-                            </div>
-                            <div class="revision-meta">
-                                📅 {date_str}<br>
-                                👤 {revision['created_by']}<br>
-                                📊 Status: {revision['status'].replace('_', ' ').title()}
-                            </div>
-                            {f"<div style='margin-top: 0.5rem;'><strong>Comment:</strong> {revision['comment']}</div>" if revision.get('comment') else ""}
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Button to view this revision
-                        if st.button(f"👁️ View Revision {revision['revision_number']}", 
-                                   key=f"view_rev_{revision['revision_id']}"):
+                        revision_row = {
+                            'Revision': f"Rev {revision['revision_number']}",
+                            'Date': date_str,
+                            'Author': revision['created_by'],
+                            'Status': revision['status'].replace('_', ' ').title(),
+                            'Current': current_indicator,
+                            'Comment': revision.get('comment', '')[:50] + '...' if revision.get('comment') and len(revision.get('comment', '')) > 50 else revision.get('comment', ''),
+                            'full_revision_data': revision
+                        }
+                        revision_grid_data.append(revision_row)
+                    
+                    revision_df_data = []
+                    for row in revision_grid_data:
+                        revision_df_row = {
+                            'Revision': row['Revision'],
+                            'Date': row['Date'],
+                            'Author': row['Author'],
+                            'Status': row['Status'],
+                            'Current': row['Current']
+                        }
+                        revision_df_data.append(revision_df_row)
+                    
+                    revision_df = pd.DataFrame(revision_df_data)
+                    
+                    # Display with selection capability
+                    revision_selected_indices = st.dataframe(
+                        revision_df,
+                        use_container_width=True,
+                        hide_index=True,
+                        on_select="rerun",
+                        selection_mode="single-row",
+                        height=400
+                    )
+                    
+                    st.caption("💡 Select a row to view revision details")
+                    
+                    # Handle revision selection
+                    if revision_selected_indices and len(revision_selected_indices.selection.rows) > 0:
+                        selected_idx = revision_selected_indices.selection.rows[0]
+                        revision = revision_grid_data[selected_idx]['full_revision_data']
+                        # Only update if different revision selected
+                        if st.session_state.get('selected_revision_id') != revision.get('revision_id'):
+                            st.session_state.selected_revision_id = revision.get('revision_id')
                             st.session_state.selected_revision = revision
                             st.rerun()
                 
@@ -1225,13 +1389,3 @@ with tab4:
                         📝 **Note**: Revisions are automatically created when significant changes are made to documents.
                         """)
 
-# Quick refresh button
-if st.button("🔄 Refresh All Lists"):
-    # Clear any selected documents
-    if "selected_doc" in st.session_state:
-        del st.session_state.selected_doc
-    if "selected_review_doc" in st.session_state:
-        del st.session_state.selected_review_doc
-    if "mode" in st.session_state:
-        del st.session_state.mode
-    st.rerun()
