@@ -4,6 +4,7 @@ import requests
 import pandas as pd
 from streamlit_ace import st_ace
 from auth_utils import get_auth_headers, get_current_user, setup_authenticated_sidebar, BACKEND_URL
+from config import DATAFRAME_HEIGHT
 
 st.set_page_config(page_title="📄 Documents", page_icon="📄", layout="wide")
 
@@ -1124,7 +1125,7 @@ with tab3:
                 hide_index=True,
                 on_select="rerun",
                 selection_mode="single-row",
-                height=400
+                height=DATAFRAME_HEIGHT
             )
             
             st.caption("💡 Select a row to edit the document")
@@ -1134,24 +1135,22 @@ with tab3:
                 selected_idx = all_docs_selected_indices.selection.rows[0]
                 doc = all_docs_grid_data[selected_idx]['full_doc_data']
                 # Only rerun if this is a different document
-                if (st.session_state.get('selected_doc', {}).get('id') != doc.get('id') or 
-                    st.session_state.get('mode') != "author"):
+                if st.session_state.get('selected_all_doc', {}).get('id') != doc.get('id'):
                     # Get the full document data with comments from V2 API
                     full_docs = get_documents_for_author(project_id)
                     full_doc = next((d for d in full_docs if d['id'] == doc['id']), None)
                     if full_doc:
-                        st.session_state.selected_doc = full_doc
+                        st.session_state.selected_all_doc = full_doc
                     else:
-                        st.session_state.selected_doc = doc
-                    st.session_state.mode = "author"
+                        st.session_state.selected_all_doc = doc
                     st.rerun()
         
         with main_col2:
             st.markdown("### Document Editor")
             
-            if "selected_doc" in st.session_state and "mode" in st.session_state:
-                doc = st.session_state.selected_doc
-                mode = st.session_state.mode
+            if "selected_all_doc" in st.session_state:
+                doc = st.session_state.selected_all_doc
+                mode = "author"  # Default mode for all documents tab
                 
                 # Document header
                 st.markdown(f"**{doc['name']}** | {doc['document_type'].replace('_', ' ').title()}")
@@ -1189,8 +1188,7 @@ with tab3:
                 
                 # Close button
                 if st.button("❌ Close", key="close_all_editor"):
-                    del st.session_state.selected_doc
-                    del st.session_state.mode
+                    del st.session_state.selected_all_doc
                     st.rerun()
             else:
                 st.info("Select a document from the left panel to view or edit")
