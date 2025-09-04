@@ -82,10 +82,54 @@ class DocsmaitRestore:
                 else:
                     logger.info(f"Found: {description}")
             
+            # Validate PostgreSQL backup contains expected tables
+            postgres_backup_file = self.backup_dir / "postgres_backup.sql"
+            if postgres_backup_file.exists():
+                self.validate_postgres_backup_contents(postgres_backup_file)
+            
             return True
             
         except Exception as e:
             logger.error(f"Backup validation error: {e}")
+            return False
+    
+    def validate_postgres_backup_contents(self, backup_file):
+        """Validate that backup file contains all expected tables"""
+        try:
+            logger.info("Validating PostgreSQL backup file contents...")
+            
+            expected_tables = [
+                'users', 'projects', 'project_members', 'project_resources',
+                'templates', 'template_approvals', 'documents', 'document_revisions',
+                'document_reviewers', 'document_reviews', 'document_comments',
+                'kb_collections', 'kb_documents', 'kb_queries', 'kb_config', 'kb_document_tags',
+                'audits', 'findings', 'corrective_actions', 'repositories', 'pull_requests',
+                'pull_request_files', 'code_reviews', 'code_comments', 'review_requests',
+                'training_records', 'traceability_matrix', 'compliance_standards',
+                'system_settings', 'activity_logs', 'suppliers', 'parts_inventory',
+                'lab_equipment_calibration', 'customer_complaints', 'non_conformances',
+                'system_requirements', 'system_hazards', 'fmea_analyses', 'design_artifacts',
+                'test_artifacts', 'compliance_records', 'post_market_records'
+            ]
+            
+            with open(backup_file, 'r') as f:
+                backup_content = f.read()
+            
+            missing_tables = []
+            for table in expected_tables:
+                if f"CREATE TABLE public.{table}" not in backup_content and f"CREATE TABLE {table}" not in backup_content:
+                    missing_tables.append(table)
+            
+            if missing_tables:
+                logger.warning(f"Tables not found in backup file: {missing_tables}")
+                logger.warning("Restore may be incomplete for some system features")
+            else:
+                logger.info("All expected tables found in backup file")
+            
+            return len(missing_tables) == 0
+            
+        except Exception as e:
+            logger.error(f"Backup content validation error: {e}")
             return False
     
     def restore_postgres(self):
@@ -127,11 +171,13 @@ class DocsmaitRestore:
                 logger.error(f"Failed to create database: {result.stderr}")
                 return False
             
-            # Restore from backup
+            # Restore from backup with enhanced options
             with open(postgres_backup_file, 'r') as f:
                 restore_cmd = [
                     "docker", "exec", "-i", self.postgres_container,
-                    "psql", "-U", self.db_user, "-d", self.db_name
+                    "psql", "-U", self.db_user, "-d", self.db_name,
+                    "--single-transaction",
+                    "--set", "ON_ERROR_STOP=on"
                 ]
                 
                 result = subprocess.run(restore_cmd, stdin=f, capture_output=True, text=True,
@@ -139,6 +185,8 @@ class DocsmaitRestore:
             
             if result.returncode == 0:
                 logger.info("PostgreSQL restore completed successfully")
+                # Validate restored database
+                self.validate_restored_database()
                 return True
             else:
                 logger.error(f"PostgreSQL restore failed: {result.stderr}")
@@ -146,6 +194,53 @@ class DocsmaitRestore:
                 
         except Exception as e:
             logger.error(f"PostgreSQL restore error: {e}")
+            return False
+    
+    def validate_restored_database(self):
+        """Validate that all expected tables were restored"""
+        try:
+            logger.info("Validating restored database...")
+            
+            expected_tables = [
+                'users', 'projects', 'project_members', 'project_resources',
+                'templates', 'template_approvals', 'documents', 'document_revisions',
+                'document_reviewers', 'document_reviews', 'document_comments',
+                'kb_collections', 'kb_documents', 'kb_queries', 'kb_config', 'kb_document_tags',
+                'audits', 'findings', 'corrective_actions', 'repositories', 'pull_requests',
+                'pull_request_files', 'code_reviews', 'code_comments', 'review_requests',
+                'training_records', 'traceability_matrix', 'compliance_standards',
+                'system_settings', 'activity_logs', 'suppliers', 'parts_inventory',
+                'lab_equipment_calibration', 'customer_complaints', 'non_conformances',
+                'system_requirements', 'system_hazards', 'fmea_analyses', 'design_artifacts',
+                'test_artifacts', 'compliance_records', 'post_market_records'
+            ]
+            
+            # Check tables exist in restored database
+            cmd = [
+                "docker", "exec", self.postgres_container,
+                "psql", "-U", self.db_user, "-d", self.db_name, "-t", "-c",
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public';"
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True,
+                                  env={**os.environ, "PGPASSWORD": self.db_password})
+            
+            if result.returncode == 0:
+                existing_tables = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
+                missing_tables = [table for table in expected_tables if table not in existing_tables]
+                
+                if missing_tables:
+                    logger.warning(f"Missing tables in restored database: {missing_tables}")
+                else:
+                    logger.info("✅ All expected tables found in restored database")
+                
+                return len(missing_tables) == 0
+            else:
+                logger.error(f"Failed to validate restored database: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Database validation error: {e}")
             return False
     
     def restore_qdrant(self):

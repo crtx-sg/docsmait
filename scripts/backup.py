@@ -44,17 +44,71 @@ class DocsmaitBackup:
             logger.error(f"Failed to create backup directory: {e}")
             return False
     
+    def validate_database_tables(self):
+        """Validate that all expected tables exist in the database"""
+        try:
+            logger.info("Validating database tables...")
+            
+            # Expected tables from the system
+            expected_tables = [
+                'users', 'projects', 'project_members', 'project_resources',
+                'templates', 'template_approvals', 'documents', 'document_revisions',
+                'document_reviewers', 'document_reviews', 'document_comments',
+                'kb_collections', 'kb_documents', 'kb_queries', 'kb_config', 'kb_document_tags',
+                'audits', 'findings', 'corrective_actions', 'repositories', 'pull_requests',
+                'pull_request_files', 'code_reviews', 'code_comments', 'review_requests',
+                'training_records', 'traceability_matrix', 'compliance_standards',
+                'system_settings', 'activity_logs', 'suppliers', 'parts_inventory',
+                'lab_equipment_calibration', 'customer_complaints', 'non_conformances',
+                'system_requirements', 'system_hazards', 'fmea_analyses', 'design_artifacts',
+                'test_artifacts', 'compliance_records', 'post_market_records'
+            ]
+            
+            # Check tables exist
+            cmd = [
+                "docker", "exec", self.postgres_container,
+                "psql", "-U", self.db_user, "-d", self.db_name, "-t", "-c",
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public';"
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True,
+                                  env={**os.environ, "PGPASSWORD": self.db_password})
+            
+            if result.returncode == 0:
+                existing_tables = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
+                missing_tables = [table for table in expected_tables if table not in existing_tables]
+                
+                if missing_tables:
+                    logger.warning(f"Missing tables detected: {missing_tables}")
+                else:
+                    logger.info("All expected tables found in database")
+                
+                return True
+            else:
+                logger.error(f"Failed to validate tables: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Table validation error: {e}")
+            return False
+
     def backup_postgres(self):
         """Backup PostgreSQL database"""
         try:
             logger.info("Starting PostgreSQL backup...")
             postgres_backup_file = self.backup_path / "postgres_backup.sql"
             
-            # Use docker exec to run pg_dump
+            # Use docker exec to run pg_dump with comprehensive options
             cmd = [
                 "docker", "exec", self.postgres_container,
                 "pg_dump", "-U", self.db_user, "-d", self.db_name,
-                "--no-password"
+                "--no-password",
+                "--verbose",
+                "--clean",
+                "--create",
+                "--if-exists",
+                "--disable-triggers",
+                "--single-transaction"
             ]
             
             with open(postgres_backup_file, 'w') as f:
@@ -63,6 +117,8 @@ class DocsmaitBackup:
             
             if result.returncode == 0:
                 logger.info(f"PostgreSQL backup completed: {postgres_backup_file}")
+                # Validate backup includes all tables
+                self.validate_backup_contents(postgres_backup_file)
                 return True
             else:
                 logger.error(f"PostgreSQL backup failed: {result.stderr}")
@@ -70,6 +126,44 @@ class DocsmaitBackup:
                 
         except Exception as e:
             logger.error(f"PostgreSQL backup error: {e}")
+            return False
+    
+    def validate_backup_contents(self, backup_file):
+        """Validate that backup file contains all expected tables"""
+        try:
+            logger.info("Validating backup file contents...")
+            
+            expected_tables = [
+                'users', 'projects', 'project_members', 'project_resources',
+                'templates', 'template_approvals', 'documents', 'document_revisions',
+                'document_reviewers', 'document_reviews', 'document_comments',
+                'kb_collections', 'kb_documents', 'kb_queries', 'kb_config', 'kb_document_tags',
+                'audits', 'findings', 'corrective_actions', 'repositories', 'pull_requests',
+                'pull_request_files', 'code_reviews', 'code_comments', 'review_requests',
+                'training_records', 'traceability_matrix', 'compliance_standards',
+                'system_settings', 'activity_logs', 'suppliers', 'parts_inventory',
+                'lab_equipment_calibration', 'customer_complaints', 'non_conformances',
+                'system_requirements', 'system_hazards', 'fmea_analyses', 'design_artifacts',
+                'test_artifacts', 'compliance_records', 'post_market_records'
+            ]
+            
+            with open(backup_file, 'r') as f:
+                backup_content = f.read()
+            
+            missing_tables = []
+            for table in expected_tables:
+                if f"CREATE TABLE public.{table}" not in backup_content and f"CREATE TABLE {table}" not in backup_content:
+                    missing_tables.append(table)
+            
+            if missing_tables:
+                logger.warning(f"Tables not found in backup: {missing_tables}")
+            else:
+                logger.info("All expected tables found in backup file")
+            
+            return len(missing_tables) == 0
+            
+        except Exception as e:
+            logger.error(f"Backup validation error: {e}")
             return False
     
     def backup_qdrant(self):
@@ -203,6 +297,10 @@ class DocsmaitBackup:
         
         if not self.create_backup_directory():
             return False
+        
+        # Validate database tables before backup
+        if not self.validate_database_tables():
+            logger.warning("Database validation completed with warnings")
         
         success = True
         
