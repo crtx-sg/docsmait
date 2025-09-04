@@ -492,17 +492,236 @@ def get_db():
 
 ## 3. Integration Architecture
 
-### 3.1 AI Services Integration
+### 3.1 Knowledge Base Services Integration
 
-#### 3.1.1 Ollama Integration Architecture
+#### 3.1.1 Core Knowledge Base Architecture
+
+The knowledge base system implements a comprehensive RAG (Retrieval Augmented Generation) pipeline that integrates multiple backend services to automatically build and maintain a searchable organizational knowledge repository.
+
 ```python
+# Core Knowledge Base Service (kb_service_pg.py)
+class KnowledgeBaseService:
+    def __init__(self):
+        # Hybrid database architecture
+        self.db = get_database()  # PostgreSQL for metadata
+        self.qdrant_client = qdrant_client.QdrantClient(url=config.QDRANT_URL)  # Vector DB
+        self.ollama_client = ollama.Client(host=config.OLLAMA_BASE_URL)  # LLM service
+        
+        # Configuration
+        self.embedding_model = config.DEFAULT_EMBEDDING_MODEL  # nomic-embed-text
+        self.chat_model = config.DEFAULT_CHAT_MODEL  # qwen2:1.5b
+        self.chunk_size = config.DEFAULT_CHUNK_SIZE  # 1000 chars
+        self.similarity_limit = config.RAG_SIMILARITY_SEARCH_LIMIT  # 5
+    
+    def create_collection(self, name: str, description: str = "", created_by: int = 1):
+        """Creates collection in both PostgreSQL and Qdrant"""
+        # PostgreSQL metadata
+        kb_collection = KBCollection(
+            name=name,
+            description=description,
+            created_by=created_by,
+            document_count=0,
+            total_size_bytes=0
+        )
+        session.add(kb_collection)
+        
+        # Qdrant vector collection
+        self.qdrant_client.create_collection(
+            collection_name=name,
+            vectors_config=VectorParams(
+                size=config.EMBEDDING_DIMENSIONS,  # 768
+                distance=Distance.COSINE
+            )
+        )
+        return kb_collection
+    
+    def add_document_to_collection(self, file_path: str, collection_name: str):
+        """Processes document and adds to both databases"""
+        # Extract text content
+        content = self._extract_text_from_file(file_path)
+        
+        # Chunk content for optimal embedding
+        chunks = self._chunk_text(content, self.chunk_size)
+        
+        # Generate embeddings for each chunk
+        for i, chunk in enumerate(chunks):
+            # Generate embedding
+            embedding = self._generate_embedding(chunk)
+            
+            # Store in Qdrant with metadata payload
+            self.qdrant_client.upsert(
+                collection_name=collection_name,
+                points=[PointStruct(
+                    id=f"{document_id}_{i}",
+                    vector=embedding,
+                    payload={
+                        "document_id": document_id,
+                        "filename": os.path.basename(file_path),
+                        "chunk_index": i,
+                        "text": chunk,
+                        "collection": collection_name
+                    }
+                )]
+            )
+        
+        # Update PostgreSQL metadata
+        kb_document = KBDocument(
+            filename=os.path.basename(file_path),
+            content_type=self._detect_content_type(file_path),
+            size_bytes=os.path.getsize(file_path),
+            collection_name=collection_name,
+            chunk_count=len(chunks),
+            status="processed"
+        )
+        session.add(kb_document)
+    
+    def query_knowledge_base(self, query: str, collection_name: str):
+        """RAG implementation for intelligent document querying"""
+        # Step 1: Generate query embedding
+        query_embedding = self._generate_embedding(query)
+        
+        # Step 2: Vector similarity search
+        search_results = self.qdrant_client.search(
+            collection_name=collection_name,
+            query_vector=query_embedding,
+            limit=self.similarity_limit,
+            score_threshold=0.7
+        )
+        
+        # Step 3: Assemble context from retrieved chunks
+        context_chunks = [result.payload["text"] for result in search_results]
+        context = "\n\n".join(context_chunks)
+        
+        # Step 4: Generate LLM response with context
+        prompt = self._build_rag_prompt(query, context)
+        response = self.ollama_client.chat(
+            model=self.chat_model,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        # Step 5: Log query for analytics
+        self._log_query(query, collection_name, len(search_results))
+        
+        return {
+            "response": response["message"]["content"],
+            "sources": [r.payload for r in search_results],
+            "confidence": min([r.score for r in search_results])
+        }
+```
+
+#### 3.1.2 Integrated Services Architecture
+
+**Service Integration Pattern**: Each domain service automatically integrates with the knowledge base to create a comprehensive organizational knowledge repository.
+
+```python
+# Documents Service Integration (documents_service.py)
+class DocumentsService:
+    def __init__(self):
+        self.kb_service = KnowledgeBaseService()
+        self.db = get_database()
+    
+    def _update_document_knowledge_base(self, document_id: str):
+        """Automatically adds approved documents to knowledge base"""
+        document = self.get_document_by_id(document_id)
+        if document.status == "approved":
+            # Create project-specific collection
+            collection_name = f"{document.project.name}".replace(' ', '_').lower()
+            
+            try:
+                # Ensure collection exists
+                self.kb_service.create_collection(
+                    name=collection_name,
+                    description=f"Documents for project: {document.project.name}"
+                )
+            except CollectionAlreadyExistsException:
+                pass
+            
+            # Add document content to knowledge base
+            self.kb_service.add_text_to_collection(
+                text=document.content,
+                collection_name=collection_name,
+                metadata={
+                    "document_id": document.id,
+                    "document_name": document.name,
+                    "project_id": document.project_id,
+                    "document_type": document.document_type
+                }
+            )
+
+# Templates Service Integration (templates_service_pg.py)
+class TemplatesService:
+    def __init__(self):
+        self.kb_service = KnowledgeBaseService()
+    
+    def _update_knowledge_base(self, template_id: str):
+        """Adds approved templates to document-type collections"""
+        template = self.get_template_by_id(template_id)
+        if template.status == "approved":
+            # Create document-type specific collection
+            collection_name = template.document_type.replace(' ', '_').lower()
+            
+            self.kb_service.add_text_to_collection(
+                text=template.content,
+                collection_name=collection_name,
+                metadata={
+                    "template_id": template.id,
+                    "template_name": template.name,
+                    "document_type": template.document_type,
+                    "version": template.version
+                }
+            )
+
+# Audit Service Integration (audit_service.py)
+class AuditService:
+    def __init__(self):
+        self.kb_service = KnowledgeBaseService()
+    
+    def _update_finding_knowledge_base(self, finding_id: str):
+        """Adds closed audit findings to knowledge base"""
+        finding = self.get_finding_by_id(finding_id)
+        if finding.status == "closed":
+            collection_name = "audit_findings"
+            
+            # Combine finding details for knowledge base
+            content = f"""
+            Finding: {finding.finding_description}
+            Root Cause: {finding.root_cause}
+            Corrective Action: {finding.corrective_action}
+            Resolution: {finding.resolution}
+            """
+            
+            self.kb_service.add_text_to_collection(
+                text=content,
+                collection_name=collection_name,
+                metadata={
+                    "finding_id": finding.id,
+                    "audit_id": finding.audit_id,
+                    "severity": finding.severity,
+                    "finding_type": finding.finding_type
+                }
+            )
+```
+
+#### 3.1.3 AI Service Integration
+
+```python
+# AI Service (ai_service.py)
 class AIService:
     def __init__(self):
         self.ollama_client = ollama.Client(host=config.OLLAMA_BASE_URL)
+        self.kb_service = KnowledgeBaseService()
         self.available_models = self._load_available_models()
     
     async def generate_document_assistance(self, document_type: str, content: str, user_input: str):
-        prompt = self._build_contextual_prompt(document_type, content, user_input)
+        """Provides AI assistance using knowledge base context"""
+        # Query knowledge base for relevant context
+        collection_name = document_type.replace(' ', '_').lower()
+        kb_results = self.kb_service.query_knowledge_base(user_input, collection_name)
+        
+        # Build contextual prompt with KB results
+        prompt = self._build_contextual_prompt(
+            document_type, content, user_input, kb_results["response"]
+        )
         
         try:
             response = await self.ollama_client.chat(
@@ -513,39 +732,103 @@ class AIService:
             return self._process_ai_response(response)
         except Exception as e:
             return self._handle_ai_error(e)
+    
+    def generate_learning_content_multi_topics(self, topics: List[str], collections: List[str]):
+        """Generates training content from multiple knowledge base collections"""
+        combined_content = []
+        
+        for collection in collections:
+            # Extract content from each collection
+            content = self.kb_service.search_collection(collection, limit=10)
+            combined_content.extend(content)
+        
+        # Generate structured learning material
+        prompt = self._build_learning_content_prompt(topics, combined_content)
+        return self.ollama_client.generate(model=self.chat_model, prompt=prompt)
 ```
 
-#### 3.1.2 Knowledge Base Vector Integration
+#### 3.1.4 Training System Integration
+
 ```python
-class KnowledgeBaseService:
+# Training System (integrated with knowledge base)
+class TrainingService:
     def __init__(self):
-        self.qdrant_client = qdrant_client.QdrantClient(url=config.QDRANT_URL)
-        self.ollama_client = ollama.Client(host=config.OLLAMA_BASE_URL)
+        self.kb_service = KnowledgeBaseService()
+        self.ai_service = AIService()
     
-    def add_document_to_collection(self, content: str, collection_name: str):
-        # Generate embeddings
-        embedding = self._generate_embedding(content)
+    def generate_assessment_questions_multi_topics(self, topics: List[str], collections: List[str]):
+        """Generates assessment questions from knowledge base content"""
+        # Retrieve relevant content from multiple collections
+        source_content = {}
+        for collection in collections:
+            results = self.kb_service.search_collection(
+                collection_name=collection,
+                query=" ".join(topics),
+                limit=5
+            )
+            source_content[collection] = results
         
-        # Store in vector database
-        self.qdrant_client.upsert(
-            collection_name=collection_name,
-            points=[PointStruct(
-                id=str(uuid.uuid4()),
-                vector=embedding,
-                payload={"content": content, "timestamp": datetime.now().isoformat()}
-            )]
+        # Generate True/False questions based on content
+        questions = self.ai_service.generate_questions_from_content(
+            source_content, question_type="true_false", count=10
         )
-    
-    def semantic_search(self, query: str, collection_name: str, limit: int = 5):
-        query_embedding = self._generate_embedding(query)
-        results = self.qdrant_client.search(
-            collection_name=collection_name,
-            query_vector=query_embedding,
-            limit=limit,
-            score_threshold=0.7
-        )
-        return self._process_search_results(results)
+        
+        return questions
 ```
+
+#### 3.1.5 Database Schema for Knowledge Base
+
+```sql
+-- PostgreSQL Schema for Knowledge Base Metadata
+CREATE TABLE kb_collections (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    description TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    document_count INTEGER DEFAULT 0,
+    total_size_bytes BIGINT DEFAULT 0,
+    tags TEXT[],
+    is_default BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE kb_documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    filename VARCHAR(500) NOT NULL,
+    content_type VARCHAR(100),
+    size_bytes BIGINT,
+    collection_name VARCHAR(255) REFERENCES kb_collections(name),
+    chunk_count INTEGER,
+    upload_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    status VARCHAR(50) DEFAULT 'processing',
+    metadata JSONB
+);
+
+CREATE TABLE kb_queries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    query_text TEXT NOT NULL,
+    collection_name VARCHAR(255),
+    response_time_ms INTEGER,
+    result_count INTEGER,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    user_id INTEGER REFERENCES users(id)
+);
+
+CREATE TABLE kb_config (
+    key VARCHAR(100) PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE kb_document_tags (
+    id SERIAL PRIMARY KEY,
+    document_id UUID REFERENCES kb_documents(id) ON DELETE CASCADE,
+    tag_name VARCHAR(100) NOT NULL,
+    tag_value VARCHAR(500)
+);
+```
+
+This comprehensive knowledge base architecture automatically builds organizational knowledge from approved documents, templates, and audit findings, providing intelligent search and AI-powered assistance throughout the document workflow system.
 
 ### 3.2 Email Service Integration
 

@@ -713,26 +713,167 @@ with help_tabs[11]:
     
     st.markdown("### Overview")
     st.markdown("""
-    The Knowledge Base module provides a centralized repository for organizational 
-    knowledge, best practices, and reference materials.
+    The Knowledge Base module provides an AI-powered RAG (Retrieval Augmented Generation) system 
+    that automatically builds a searchable organizational knowledge repository from approved documents, 
+    templates, and audit findings.
     """)
     
-    st.markdown("### 🎯 Key Features")
+    st.markdown("### 🎯 Backend Services Architecture")
     st.markdown("""
-    - **Knowledge Articles**: Create and manage knowledge articles
-    - **Search Capabilities**: Powerful search and filtering
-    - **Categories**: Organize knowledge by topics and domains
-    - **Version Control**: Track knowledge article versions
-    - **User Contributions**: Allow user-generated content
+    **Core Knowledge Base Service** (`backend/app/kb_service_pg.py`):
+    - **Purpose**: Central hub for all knowledge base operations using hybrid PostgreSQL + Qdrant vector database
+    - **Functions**: Document indexing, RAG-based querying, semantic search, collection management
+    - **Technology Stack**: PostgreSQL for metadata, Qdrant for vector embeddings, Ollama for LLM processing
     """)
     
-    st.markdown("### 📖 Knowledge Types")
+    kb_subtabs = st.tabs([
+        "🏗️ Architecture", 
+        "🔄 Service Integration", 
+        "🗄️ Database Design", 
+        "🤖 RAG Implementation",
+        "📊 API Endpoints"
+    ])
+    
+    with kb_subtabs[0]:
+        st.markdown("### 🏗️ Knowledge Base Architecture")
+        st.markdown("""
+        **Hybrid Database System**:
+        - **PostgreSQL**: Stores document metadata, collections, query logs, and configuration
+        - **Qdrant Vector Database**: Stores document chunks as vectors with metadata payloads
+        - **Ollama**: Generates embeddings and provides LLM responses for RAG queries
+        
+        **Key Components**:
+        - **Collections**: Organize documents by project, document type, or audit category
+        - **Document Chunks**: Intelligent text segmentation (default 1000 characters)
+        - **Vector Embeddings**: 768-dimensional vectors using nomic-embed-text model
+        - **Similarity Search**: Cosine distance-based semantic search
+        """)
+    
+    with kb_subtabs[1]:
+        st.markdown("### 🔄 Integrated Services")
+        st.markdown("""
+        **Automatic Knowledge Base Integration**:
+        
+        **1. Documents Service** (`documents_service.py`):
+        - **Purpose**: Automatically indexes approved documents into project-specific collections
+        - **Collection Naming**: `project_name.replace(' ', '_').lower()`
+        - **Trigger**: When document status changes to "approved"
+        
+        **2. Templates Service** (`templates_service_pg.py`):
+        - **Purpose**: Indexes approved templates by document type
+        - **Collection Naming**: `document_type.replace(' ', '_').lower()`
+        - **Content**: Template content, metadata, and version information
+        
+        **3. Audit Service** (`audit_service.py`):
+        - **Purpose**: Indexes closed audit findings to build organizational knowledge
+        - **Collection**: "audit_findings" with finding details, root causes, and resolutions
+        - **Trigger**: When audit findings are closed
+        
+        **4. AI Service** (`ai_service.py`):
+        - **Purpose**: Provides RAG-powered chat and content generation
+        - **Integration**: Queries knowledge base for context in AI responses
+        
+        **5. Training System**:
+        - **Purpose**: Generates learning content and assessments from knowledge base
+        - **Features**: Multi-collection content extraction for training materials
+        """)
+    
+    with kb_subtabs[2]:
+        st.markdown("### 🗄️ Database Schema")
+        st.markdown("""
+        **PostgreSQL Tables**:
+        - **KBCollection**: Collection metadata (id, name, description, created_by, document_count, total_size_bytes, tags, is_default)
+        - **KBDocument**: Document metadata only (id, filename, content_type, size_bytes, collection_name, chunk_count, upload_date, status)
+        - **KBQuery**: Query logging (id, query_text, collection_name, response_time_ms, timestamp)
+        - **KBConfig**: System configuration (key, value, updated_at)
+        - **KBDocumentTag**: Document tagging system (id, document_id, tag_name, tag_value)
+        
+        **Qdrant Vector Database**:
+        - Stores document chunks as vectors with metadata payloads
+        - Each vector point contains: document_id, filename, chunk_index, text, collection
+        - Uses cosine distance for similarity calculations
+        """)
+    
+    with kb_subtabs[3]:
+        st.markdown("### 🤖 RAG Implementation")
+        st.markdown("""
+        **RAG Query Workflow**:
+        1. **Embedding Generation**: Query text → Vector embedding (Ollama)
+        2. **Similarity Search**: Search Qdrant for relevant document chunks (5 chunks by default)
+        3. **Context Assembly**: Combine retrieved chunks into context
+        4. **LLM Response**: Generate response using context + query (Ollama qwen2:1.5b)
+        5. **Logging**: Store query metrics in PostgreSQL
+        
+        **Performance Optimization**:
+        - Configurable similarity search limits
+        - Response time tracking
+        - Chunk size optimization (1000 characters default)
+        - Connection pooling for databases
+        - Score threshold filtering (0.7 minimum)
+        
+        **Models Used**:
+        - **Embedding Model**: nomic-embed-text (768 dimensions)
+        - **Chat Model**: qwen2:1.5b (configurable)
+        - **Context Window**: 4000 tokens (configurable)
+        """)
+    
+    with kb_subtabs[4]:
+        st.markdown("### 📊 API Endpoints")
+        st.markdown("""
+        **Core Endpoints**:
+        - `POST /kb/upload` - Upload documents to collections
+        - `POST /kb/add_text` - Add text content directly
+        - `POST /kb/chat` - RAG-based chat with collections
+        - `GET /kb/stats` - Collection and usage statistics
+        - `POST /kb/reset` - Reset collections (admin only)
+        - `POST /kb/collections` - Create new collection
+        - `GET /kb/collections` - List all collections
+        - `GET /kb/collections/{name}` - Get collection details
+        - `DELETE /kb/documents/{id}` - Delete document from collection
+        - `POST /kb/collections/{name}/set-default` - Set default collection
+        
+        **Training Integration**:
+        - `POST /training/learn` - Generate learning content from KB
+        - `POST /training/assess` - Generate assessments from KB content
+        - `POST /training/submit` - Submit assessment answers
+        """)
+    
+    st.markdown("### 🚀 Key Features")
     st.markdown("""
-    - **Best Practices**: Documented procedures and guidelines
-    - **Technical Reference**: Technical specifications and standards
-    - **Troubleshooting**: Problem resolution guides
-    - **Process Documentation**: Standard operating procedures
-    - **Regulatory Guidance**: Regulatory requirements and interpretations
+    - **Automatic Indexing**: Documents, templates, and audit findings automatically added to knowledge base
+    - **Intelligent Search**: RAG-powered semantic search with source citations
+    - **Multi-Collection Support**: Organize knowledge by projects, document types, and audit categories
+    - **AI-Powered Chat**: Natural language querying with contextual responses
+    - **Training Integration**: Generate learning content and assessments from organizational knowledge
+    - **Performance Analytics**: Query logging, response time tracking, and usage statistics
+    - **Hybrid Architecture**: Combines relational and vector databases for optimal performance
+    """)
+    
+    st.markdown("### 📖 Automatic Collection Creation")
+    st.markdown("""
+    **Project Collections**: Created automatically when documents are approved in projects
+    - Collection name format: `project_name.replace(' ', '_').lower()`
+    - Contains: All approved project documents and their content
+    
+    **Template Collections**: Created by document type when templates are approved
+    - Collection name format: `document_type.replace(' ', '_').lower()`
+    - Contains: Approved templates for policies, procedures, reports, etc.
+    
+    **Audit Collections**: Created for closed audit findings
+    - Collection name: "audit_findings"
+    - Contains: Finding descriptions, root causes, corrective actions, and resolutions
+    
+    **Default Collection**: "knowledge_base" for general organizational knowledge
+    """)
+    
+    st.markdown("### 🎯 Usage Benefits")
+    st.markdown("""
+    - **Organizational Memory**: Builds searchable knowledge from all approved content
+    - **AI-Assisted Work**: Provides intelligent context for document creation and decision-making
+    - **Training Automation**: Generates learning materials and assessments from existing knowledge
+    - **Compliance Support**: Maintains searchable repository of compliance-related knowledge
+    - **Cross-Project Learning**: Enables knowledge sharing across different projects and teams
+    - **Audit Trail**: Complete logging of knowledge base queries and usage patterns
     """)
 
 # Footer

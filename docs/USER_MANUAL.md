@@ -426,6 +426,53 @@ Docsmait organizes work around **Projects**, which serve as containers for docum
 
 The Knowledge Base uses RAG (Retrieval Augmented Generation) to provide AI-powered search and question-answering across your document library.
 
+#### Backend Services Architecture
+
+The knowledge base is powered by multiple integrated backend services that automatically build and maintain a searchable knowledge repository:
+
+**Core Knowledge Base Service** (`backend/app/kb_service_pg.py`):
+- **Purpose**: Central hub for all knowledge base operations using hybrid PostgreSQL + Qdrant vector database
+- **Functions**: Document indexing, RAG-based querying, semantic search, collection management
+- **Technology Stack**: PostgreSQL for metadata, Qdrant for vector embeddings, Ollama for LLM processing
+
+**Integrated Backend Services**:
+
+1. **Documents Service** (`documents_service.py`):
+   - **Purpose**: Automatically indexes approved documents into project-specific collections
+   - **KB Communication**: Adds documents to knowledge base when status changes to "approved"
+   - **Collection Naming**: `project_name.replace(' ', '_').lower()`
+
+2. **Templates Service** (`templates_service_pg.py`): 
+   - **Purpose**: Manages document templates and indexes approved templates by document type
+   - **KB Communication**: Creates collections for different template types (policies, procedures, etc.)
+   - **Collection Naming**: `document_type.replace(' ', '_').lower()`
+
+3. **Audit Service** (`audit_service.py`):
+   - **Purpose**: Indexes closed audit findings to build organizational knowledge
+   - **KB Communication**: Adds resolved findings to audit-specific collections
+
+4. **AI Service** (`ai_service.py`):
+   - **Purpose**: Provides RAG-powered chat and content generation using Ollama LLM
+   - **KB Communication**: Queries knowledge base for context in AI responses
+
+5. **Training System**:
+   - **Purpose**: Generates learning content and assessments from knowledge base
+   - **KB Communication**: Extracts content from multiple collections to create training materials
+
+#### Database Architecture
+
+**PostgreSQL Tables**:
+- **KBCollection**: Collection metadata (id, name, description, created_by, document_count, total_size_bytes, tags, is_default)
+- **KBDocument**: Document metadata only (id, filename, content_type, size_bytes, collection_name, chunk_count, upload_date, status)
+- **KBQuery**: Query logging (id, query_text, collection_name, response_time_ms, timestamp)
+- **KBConfig**: System configuration (key, value, updated_at)
+- **KBDocumentTag**: Document tagging system (id, document_id, tag_name, tag_value)
+
+**Qdrant Vector Database**:
+- Stores document chunks as vectors with metadata payloads
+- Each vector point contains: document_id, filename, chunk_index, text, collection
+- Uses cosine distance for similarity calculations
+
 #### Collections
 Collections organize documents by topic, project, or domain:
 
@@ -438,6 +485,11 @@ Collections organize documents by topic, project, or domain:
    - View document count and status
    - Delete empty collections
    - Configure collection settings
+
+3. **Automatic Collection Creation**:
+   - **Project Collections**: Created automatically when documents are approved in projects
+   - **Template Collections**: Created by document type when templates are approved
+   - **Audit Collections**: Created for closed audit findings
 
 #### Document Upload & Processing
 
@@ -453,10 +505,18 @@ Collections organize documents by topic, project, or domain:
    - Files are automatically chunked and vectorized
    - Processing status shown in real-time
 
-3. **Bulk Upload**:
-   - Upload multiple files simultaneously
-   - Batch processing with progress indicators
-   - Error handling and retry logic
+3. **Automatic Processing**:
+   - Documents are automatically added to knowledge base when approved
+   - Templates are indexed when approved
+   - Audit findings are added when closed
+   - All processing is transparent to users
+
+4. **RAG Implementation**:
+   - **Embedding Generation**: Query text → Vector embedding (Ollama)
+   - **Similarity Search**: Search Qdrant for relevant document chunks
+   - **Context Assembly**: Combine retrieved chunks into context
+   - **LLM Response**: Generate response using context + query (Ollama)
+   - **Logging**: Store query metrics in PostgreSQL
 
 #### AI Chat Interface
 
@@ -471,11 +531,33 @@ Collections organize documents by topic, project, or domain:
    - **Context Preservation**: Maintains conversation context
    - **Multi-Document Synthesis**: Combines information from multiple sources
 
+3. **Performance Optimization**:
+   - Configurable similarity search limits
+   - Response time tracking
+   - Chunk size optimization
+   - Connection pooling for databases
+
 #### Search Optimization
-- **Embedding Models**: Optimized for technical documents
-- **Chunk Optimization**: Intelligent text segmentation
+- **Embedding Models**: Optimized for technical documents (nomic-embed-text)
+- **Chunk Optimization**: Intelligent text segmentation (default 1000 characters)
 - **Semantic Search**: Finds conceptually related content
 - **Hybrid Search**: Combines keyword and semantic matching
+- **RAG Configuration**: 5 similar chunks retrieved by default
+
+#### API Endpoints
+
+**Core Endpoints**:
+- `POST /kb/upload` - Upload documents
+- `POST /kb/add_text` - Add text content
+- `POST /kb/chat` - RAG-based chat
+- `GET /kb/stats` - Statistics
+- `POST /kb/reset` - Reset collections
+- `POST /kb/collections` - Create collection
+- `GET /kb/collections` - List collections
+- `GET /kb/collections/{name}` - Get collection details
+- `DELETE /kb/documents/{id}` - Delete document
+
+The knowledge base automatically builds from approved organizational content to support compliance, training, and AI-assisted document workflows.
 
 ### 6.4 Template Management
 
