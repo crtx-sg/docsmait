@@ -163,10 +163,13 @@ def reset_database(keep_admin: bool = False, keep_settings: bool = False):
         
         for table in tables_to_clear:
             try:
-                db.execute(text(f"DELETE FROM {table}"))
-                print(f"  ✅ Cleared table: {table}")
+                result = db.execute(text(f"DELETE FROM {table}"))
+                rows_deleted = result.rowcount
+                db.commit()  # Commit after each table deletion
+                print(f"  ✅ Cleared table: {table} ({rows_deleted} rows)")
             except Exception as e:
                 print(f"  ⚠️  Warning clearing {table}: {e}")
+                db.rollback()  # Rollback failed operation
         
         # Reset sequences - only reset sequences that actually exist
         sequences_to_reset = [
