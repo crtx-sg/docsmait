@@ -203,10 +203,12 @@ class KnowledgeBaseService:
             chunk_size = config.DEFAULT_CHUNK_SIZE
         
         try:
-            # Check if collection exists
-            collection = db.query(KBCollection).filter(KBCollection.name == collection_name).first()
+            # Check if collection exists, fallback to default if not
+            actual_collection_name = self._ensure_collection_exists_or_get_default(collection_name)
+            
+            collection = db.query(KBCollection).filter(KBCollection.name == actual_collection_name).first()
             if not collection:
-                return {"success": False, "error": f"Collection '{collection_name}' not found"}
+                return {"success": False, "error": f"Collection '{actual_collection_name}' not found and could not create default"}
             
             # Read file content
             file_content = file.file.read()
@@ -224,7 +226,7 @@ class KnowledgeBaseService:
                 filename=file.filename,
                 content_type=file.content_type,
                 size_bytes=len(file_content),
-                collection_name=collection_name,
+                collection_name=actual_collection_name,
                 status="processing"
             )
             db.add(kb_document)
@@ -246,7 +248,7 @@ class KnowledgeBaseService:
                             "filename": file.filename,
                             "chunk_index": i,
                             "text": chunk,
-                            "collection": collection_name
+                            "collection": actual_collection_name
                         }
                     )
                     vectors.append(point)
@@ -258,7 +260,7 @@ class KnowledgeBaseService:
             # Store vectors in Qdrant
             if vectors:
                 self.qdrant_client.upsert(
-                    collection_name=collection_name,
+                    collection_name=actual_collection_name,
                     points=vectors
                 )
             
@@ -301,12 +303,15 @@ class KnowledgeBaseService:
         try:
             start_time = time.time()
             
+            # Check if collection exists, fallback to default if not
+            actual_collection_name = self._ensure_collection_exists_or_get_default(collection_name)
+            
             # Generate query embedding
             query_embedding = self._generate_embedding(query)
             
             # Search in Qdrant
             search_results = self.qdrant_client.search(
-                collection_name=collection_name,
+                collection_name=actual_collection_name,
                 query_vector=query_embedding,
                 limit=limit,
                 with_payload=True
@@ -316,7 +321,7 @@ class KnowledgeBaseService:
             response_time = int((time.time() - start_time) * 1000)
             kb_query = KBQuery(
                 query_text=query,
-                collection_name=collection_name,
+                collection_name=actual_collection_name,
                 response_time_ms=response_time
             )
             db.add(kb_query)
@@ -538,6 +543,48 @@ class KnowledgeBaseService:
             return False
         finally:
             db.close()
+    
+    def _get_default_collection_name(self) -> str:
+        """Get the default collection name"""
+        return self.get_config("default_collection", config.DEFAULT_COLLECTION_NAME)
+    
+    def _ensure_collection_exists_or_get_default(self, collection_name: str) -> str:
+        """Check if collection exists, if not return default collection name"""
+        db = next(get_db())
+        try:
+            collection = db.query(KBCollection).filter(KBCollection.name == collection_name).first()
+            if collection:
+                return collection_name
+            
+            # Collection doesn't exist, check if default collection exists
+            default_name = self._get_default_collection_name()
+            default_collection = db.query(KBCollection).filter(KBCollection.name == default_name).first()
+            
+            if default_collection:
+                print(f"Collection '{collection_name}' not found, using default collection '{default_name}'")
+                return default_name
+            
+            # Create default collection if it doesn't exist
+            result = self.create_collection(
+                name=default_name,
+                description="Default knowledge base collection",
+                created_by="system",
+                tags=["default"],
+                is_default=True
+            )
+            
+            if result.get("success"):
+                print(f"Created default collection '{default_name}' as fallback for '{collection_name}'")
+                return default_name
+            else:
+                print(f"Failed to create default collection: {result.get('error')}")
+                return collection_name  # Return original name as last resort
+                
+        except Exception as e:
+            print(f"Error checking collection existence: {e}")
+            return collection_name
+        finally:
+            db.close()
 
     def query_knowledge_base(self, message: str, collection_name: str = None) -> Dict[str, Any]:
         """Query knowledge base using RAG (Retrieval Augmented Generation)"""
@@ -545,6 +592,9 @@ class KnowledgeBaseService:
         
         if collection_name is None:
             collection_name = config.DEFAULT_COLLECTION_NAME
+        
+        # Check if collection exists, fallback to default if not
+        actual_collection_name = self._ensure_collection_exists_or_get_default(collection_name)
         
         start_time = time.time()
         
@@ -558,7 +608,7 @@ class KnowledgeBaseService:
             retrieval_start = time.time()
             search_limit = min(3, config.RAG_SIMILARITY_SEARCH_LIMIT)  # Reduced limit for faster response
             search_results = self.qdrant_client.search(
-                collection_name=collection_name,
+                collection_name=actual_collection_name,
                 query_vector=query_embedding,
                 limit=search_limit,
                 with_payload=True
@@ -612,7 +662,7 @@ Answer:"""
             total_time = int((time.time() - start_time) * 1000)
             kb_query = KBQuery(
                 query_text=message,
-                collection_name=collection_name,
+                collection_name=actual_collection_name,
                 response_time_ms=total_time
             )
             db.add(kb_query)
@@ -763,20 +813,26 @@ Answer:"""
         start_time = time.time()
         
         try:
-            
-            # Check if collection exists, create if not
+            # Check if collection exists, create if not, or fallback to default
             collection = db.query(KBCollection).filter(KBCollection.name == collection_name).first()
+            actual_collection_name = collection_name
+            
             if not collection:
-                # Auto-create collection for document types
+                # Try to auto-create collection for specific types
                 create_result = self.create_collection(
                     name=collection_name,
                     description=f"Auto-created collection for {collection_name}",
                     created_by="system",
                     tags=["auto-created"]
                 )
-                if not create_result.get("success"):
-                    return create_result
-                collection = db.query(KBCollection).filter(KBCollection.name == collection_name).first()
+                if create_result.get("success"):
+                    collection = db.query(KBCollection).filter(KBCollection.name == collection_name).first()
+                else:
+                    # Creation failed, fallback to default collection
+                    actual_collection_name = self._ensure_collection_exists_or_get_default(collection_name)
+                    collection = db.query(KBCollection).filter(KBCollection.name == actual_collection_name).first()
+                    if not collection:
+                        return {"success": False, "error": f"Could not create collection '{collection_name}' or use default collection"}
             
             if not text_content.strip():
                 return {"success": False, "error": "Text content is empty"}
@@ -788,7 +844,7 @@ Answer:"""
                 filename=filename,
                 content_type="text/plain",
                 size_bytes=len(text_content.encode('utf-8')),
-                collection_name=collection_name,
+                collection_name=actual_collection_name,
                 status="processing"
             )
             db.add(kb_document)
@@ -808,7 +864,7 @@ Answer:"""
                         "filename": filename,
                         "chunk_index": i,
                         "text": chunk,
-                        "collection": collection_name
+                        "collection": actual_collection_name
                     }
                     
                     # Add custom metadata if provided
@@ -829,7 +885,7 @@ Answer:"""
             # Store vectors in Qdrant
             if vectors:
                 self.qdrant_client.upsert(
-                    collection_name=collection_name,
+                    collection_name=actual_collection_name,
                     points=vectors
                 )
             
@@ -851,7 +907,7 @@ Answer:"""
                 "document_id": document_id,
                 "chunks_created": len(vectors),
                 "processing_time": round(processing_time, 2),
-                "message": f"Text content '{filename}' added successfully to {collection_name}"
+                "message": f"Text content '{filename}' added successfully to {actual_collection_name}"
             }
             
         except Exception as e:
@@ -914,12 +970,13 @@ Answer:"""
             collections = self.get_collections()
             available_collections = [c['name'] for c in collections]
             
-            # Validate topics and convert to collection names
+            # Validate topics and convert to collection names (with fallback)
             valid_collections = []
             for topic in topics:
                 collection_name = topic.replace(' ', '_').lower()
-                if collection_name in available_collections:
-                    valid_collections.append(collection_name)
+                actual_collection_name = self._ensure_collection_exists_or_get_default(collection_name)
+                if actual_collection_name not in valid_collections:  # Avoid duplicates
+                    valid_collections.append(actual_collection_name)
             
             if not valid_collections:
                 return {
@@ -1013,19 +1070,12 @@ Take the assessment to test your knowledge of this material across all topics.
     def generate_learning_content(self, document_type: str) -> Dict[str, Any]:
         """Generate comprehensive learning content from KB collection based on document type"""
         try:
-            # Clean collection name
+            # Clean collection name and get actual collection (with fallback)
             collection_name = document_type.replace(' ', '_').lower()
-            
-            # Check if collection exists
-            collections = self.get_collections()
-            if collection_name not in [c['name'] for c in collections]:
-                return {
-                    "success": False,
-                    "error": f"No knowledge base collection found for document type '{document_type}'"
-                }
+            actual_collection_name = self._ensure_collection_exists_or_get_default(collection_name)
             
             # Query all content from the collection
-            query_result = self.query_collection(collection_name, f"overview of {document_type}", limit=50)
+            query_result = self.query_collection(actual_collection_name, f"overview of {document_type}", limit=50)
             
             if not query_result.get("success"):
                 return {
@@ -1120,12 +1170,13 @@ Take the assessment to test your knowledge of this material.
             collections = self.get_collections()
             available_collections = [c['name'] for c in collections]
             
-            # Validate topics and convert to collection names
+            # Validate topics and convert to collection names (with fallback)
             valid_collections = []
             for topic in topics:
                 collection_name = topic.replace(' ', '_').lower()
-                if collection_name in available_collections:
-                    valid_collections.append(collection_name)
+                actual_collection_name = self._ensure_collection_exists_or_get_default(collection_name)
+                if actual_collection_name not in valid_collections:  # Avoid duplicates
+                    valid_collections.append(actual_collection_name)
             
             if not valid_collections:
                 return {
@@ -1250,19 +1301,12 @@ Provide only the JSON array, no other text."""
     def generate_assessment_questions(self, document_type: str, num_questions: int = 20) -> Dict[str, Any]:
         """Generate True/False questions from KB collection"""
         try:
-            # Clean collection name
+            # Clean collection name and get actual collection (with fallback)
             collection_name = document_type.replace(' ', '_').lower()
-            
-            # Check if collection exists
-            collections = self.get_collections()
-            if collection_name not in [c['name'] for c in collections]:
-                return {
-                    "success": False,
-                    "error": f"No knowledge base collection found for document type '{document_type}'"
-                }
+            actual_collection_name = self._ensure_collection_exists_or_get_default(collection_name)
             
             # Query diverse content from the collection
-            query_result = self.query_collection(collection_name, f"information about {document_type}", limit=30)
+            query_result = self.query_collection(actual_collection_name, f"information about {document_type}", limit=30)
             
             if not query_result.get("success"):
                 return {
