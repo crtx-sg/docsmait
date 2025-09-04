@@ -5,7 +5,10 @@ import json
 import pandas as pd
 from datetime import datetime
 from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers, BACKEND_URL
-from config import DATAFRAME_HEIGHT, TEXTAREA_HEIGHT, DEFAULT_EXPORT_FORMAT, EXPORT_BATCH_SIZE
+from config import (DATAFRAME_HEIGHT, TEXTAREA_HEIGHT, DEFAULT_EXPORT_FORMAT, EXPORT_BATCH_SIZE,
+                   KB_LONG_REQUEST_TIMEOUT, DEMO_CLINICAL_STUDIES, DEMO_ADVERSE_EVENTS, 
+                   DEMO_FIELD_ACTIONS, DEMO_COMPLIANCE_STANDARDS, DEMO_STANDARDS_COMPLIANCE, 
+                   DEMO_BIOCOMPATIBILITY_TESTS, DEMO_EMC_SAFETY_TESTS)
 
 require_auth()
 
@@ -1511,10 +1514,7 @@ with main_tabs[4]:
         with med_test_tabs[0]:
             st.markdown("**Clinical Studies Management:**")
             
-            clinical_studies = [
-                {"Study ID": "CS-001", "Title": "Primary Endpoint Study", "Status": "In Progress", "Participants": 150},
-                {"Study ID": "CS-002", "Title": "Safety Follow-up Study", "Status": "Planning", "Participants": 75}
-            ]
+            clinical_studies = DEMO_CLINICAL_STUDIES
             
             df_clinical = pd.DataFrame(clinical_studies)
             st.dataframe(df_clinical, use_container_width=True)
@@ -2655,106 +2655,344 @@ with main_tabs[8]:
         if st.button("🧠 Update Knowledge Base"):
             st.info("🔄 Updating knowledge base with project data...")
             
-            # Generate simplified payload for knowledge base update
             try:
-                requirements_count = len(get_system_requirements(selected_project_id))
-                hazards_count = len(get_hazards_risks(selected_project_id))
-                fmea_count = len(get_fmea_analyses(selected_project_id))
-                design_count = len(get_design_artifacts(selected_project_id))
-                test_count = len(get_test_artifacts(selected_project_id))
+                # Get all data for knowledge base update
+                requirements = get_system_requirements(selected_project_id)
+                hazards = get_hazards_risks(selected_project_id)
+                fmea_analyses = get_fmea_analyses(selected_project_id)
+                design_artifacts = get_design_artifacts(selected_project_id)
+                test_artifacts = get_test_artifacts(selected_project_id)
                 
-                knowledge_base_data = {
+                # Prepare text content for knowledge base
+                kb_content_sections = []
+                
+                # Add project overview
+                kb_content_sections.append(f"""
+# Design Record - {selected_project_name}
+Compliance Standard: {compliance_standard}
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+""")
+                
+                # Add requirements (always include section)
+                kb_content_sections.append("\n## Requirements\n")
+                if requirements:
+                    for req in requirements:
+                        kb_content_sections.append(f"""
+### {req.get('req_id', 'REQ-Unknown')} - {req.get('req_title', 'Untitled')}
+- **Type**: {req.get('req_type', 'Unknown')}
+- **Priority**: {req.get('req_priority', 'Unknown')}
+- **Status**: {req.get('req_status', 'Unknown')}
+- **Description**: {req.get('req_description', 'No description')}
+- **Rationale**: {req.get('rationale', 'No rationale provided')}
+- **Source**: {req.get('req_source', 'Unknown')}
+""")
+                else:
+                    kb_content_sections.append("No requirements defined for this project.\n")
+                
+                # Add hazards (always include section)
+                kb_content_sections.append("\n## Hazards and Risks\n")
+                if hazards:
+                    for hazard in hazards:
+                        kb_content_sections.append(f"""
+### {hazard.get('hazard_id', 'HAZ-Unknown')} - {hazard.get('hazard_title', 'Untitled')}
+- **Category**: {hazard.get('hazard_category', 'Unknown')}
+- **Severity**: {hazard.get('severity_level', 'Unknown')}
+- **Risk Rating**: {hazard.get('risk_rating', 'Unknown')}
+- **Description**: {hazard.get('hazard_description', 'No description')}
+- **Context**: {hazard.get('operational_context', 'No context provided')}
+- **Controls**: {hazard.get('current_controls', 'No controls specified')}
+""")
+                else:
+                    kb_content_sections.append("No hazards and risks identified for this project.\n")
+                
+                # Add FMEA analyses (always include section)
+                kb_content_sections.append("\n## FMEA Analyses\n")
+                if fmea_analyses:
+                    for fmea in fmea_analyses:
+                        kb_content_sections.append(f"""
+### {fmea.get('analysis_id', 'FMEA-Unknown')} - {fmea.get('analysis_title', 'Untitled')}
+- **Component**: {fmea.get('component_function', 'Unknown')}
+- **Failure Mode**: {fmea.get('failure_mode', 'Not specified')}
+- **Effects**: {fmea.get('failure_effects', 'No effects documented')}
+- **Causes**: {fmea.get('failure_causes', 'No causes documented')}
+- **Detection Methods**: {fmea.get('detection_methods', 'No detection methods')}
+- **RPN**: {fmea.get('rpn_score', 'Not calculated')}
+""")
+                else:
+                    kb_content_sections.append("No FMEA analyses completed for this project.\n")
+                
+                # Add design artifacts (always include section)
+                kb_content_sections.append("\n## Design Artifacts\n")
+                if design_artifacts:
+                    for design in design_artifacts:
+                        kb_content_sections.append(f"""
+### {design.get('artifact_id', 'DESIGN-Unknown')} - {design.get('artifact_title', 'Untitled')}
+- **Type**: {design.get('artifact_type', 'Unknown')}
+- **Status**: {design.get('artifact_status', 'Unknown')}
+- **Version**: {design.get('version', 'Unknown')}
+- **Description**: {design.get('artifact_description', 'No description')}
+- **Created By**: {design.get('created_by', 'Unknown')}
+- **Created Date**: {design.get('created_date', 'Unknown')}
+""")
+                else:
+                    kb_content_sections.append("No design artifacts documented for this project.\n")
+                
+                # Add test artifacts (always include section)
+                kb_content_sections.append("\n## Test Artifacts\n")
+                if test_artifacts:
+                    for test in test_artifacts:
+                        kb_content_sections.append(f"""
+### {test.get('test_id', 'TEST-Unknown')} - {test.get('test_title', 'Untitled')}
+- **Type**: {test.get('test_type', 'Unknown')}
+- **Status**: {test.get('test_status', 'Unknown')}
+- **Result**: {test.get('test_result', 'Unknown')}
+- **Description**: {test.get('test_description', 'No description')}
+- **Expected Outcome**: {test.get('expected_outcome', 'Not specified')}
+- **Actual Outcome**: {test.get('actual_outcome', 'Not specified')}
+""")
+                else:
+                    kb_content_sections.append("No test artifacts available for this project.\n")
+                
+                # Add Clinical Studies Data
+                kb_content_sections.append("\n## Clinical Studies\n")
+                clinical_studies = DEMO_CLINICAL_STUDIES
+                for study in clinical_studies:
+                    kb_content_sections.append(f"""
+### {study['Study ID']} - {study['Title']}
+- **Status**: {study['Status']}
+- **Participants**: {study['Participants']}
+""")
+                
+                # Add Adverse Events Data
+                kb_content_sections.append("\n## Adverse Events\n")
+                adverse_events = DEMO_ADVERSE_EVENTS
+                for event in adverse_events:
+                    kb_content_sections.append(f"""
+### {event['Event ID']} - {event['Date']}
+- **Severity**: {event['Severity'].replace('_', ' ').title()}
+- **Status**: {event['Status'].title()}
+- **Description**: {event['Description']}
+""")
+                
+                # Add Field Safety Actions
+                kb_content_sections.append("\n## Field Safety Actions\n")
+                field_actions = DEMO_FIELD_ACTIONS
+                for action in field_actions:
+                    kb_content_sections.append(f"""
+### {action['Action ID']} - {action['Type'].replace('_', ' ').title()}
+- **Date**: {action['Date']}
+- **Status**: {action['Status']}
+- **Description**: {action['Description']}
+- **Affected Products**: {action['Affected Products']}
+""")
+                
+                # Add Compliance Standards
+                kb_content_sections.append("\n## Compliance Standards\n")
+                standards = DEMO_COMPLIANCE_STANDARDS
+                for std in standards:
+                    kb_content_sections.append(f"""
+### {std['Standard']} - {std['Title']}
+- **Status**: {std['Status']}
+- **Compliance**: {std['Compliance']}
+""")
+                
+                # Combine all content
+                full_kb_content = "\n".join(kb_content_sections)
+                
+                # Prepare metadata
+                metadata = {
                     "project_id": selected_project_id,
                     "project_name": selected_project_name,
-                    "summary": {
-                        "requirements": requirements_count,
-                        "hazards": hazards_count,
-                        "fmea": fmea_count,
-                        "design": design_count,
-                        "tests": test_count,
-                        "total_items": requirements_count + hazards_count + fmea_count + design_count + test_count
-                    },
                     "compliance_standard": compliance_standard,
                     "report_type": report_type,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "content_type": "design_record_comprehensive",
+                    "requirements_count": len(requirements),
+                    "hazards_count": len(hazards),
+                    "fmea_count": len(fmea_analyses),
+                    "design_count": len(design_artifacts),
+                    "test_count": len(test_artifacts),
+                    "clinical_studies_count": len(clinical_studies),
+                    "adverse_events_count": len(adverse_events),
+                    "field_actions_count": len(field_actions),
+                    "standards_count": len(standards),
+                    "total_sections": 9
                 }
                 
-                # Try multiple possible endpoints
-                endpoints_to_try = [
-                    f"{BACKEND_URL}/kb/update",
-                    f"{BACKEND_URL}/knowledge-base/update",
-                    f"{BACKEND_URL}/api/kb/update",
-                    f"{BACKEND_URL}/projects/{selected_project_id}/knowledge-base"
-                ]
-                
-                success = False
-                for endpoint in endpoints_to_try:
-                    try:
-                        response = requests.post(
-                            endpoint,
-                            json=knowledge_base_data,
-                            headers=get_auth_headers(),
-                            timeout=10
-                        )
+                # Use the real Knowledge Base API - store in default collection
+                try:
+                    response = requests.post(
+                        f"{BACKEND_URL}/kb/add_text",
+                        params={
+                            "collection_name": "knowledge_base",  # Use default collection
+                            "text_content": full_kb_content,
+                            "filename": f"design_record_{selected_project_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                        },
+                        json=metadata,
+                        headers=get_auth_headers(),
+                        timeout=KB_LONG_REQUEST_TIMEOUT
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        st.success("✅ Knowledge base updated successfully!")
                         
-                        if response.status_code == 200:
-                            result = response.json()
-                            st.success(f"✅ Knowledge base updated successfully!")
-                            st.json({
-                                "Status": "Success",
-                                "Endpoint": endpoint,
-                                "Items Processed": result.get('processed_count', knowledge_base_data['summary']['total_items']),
-                                "Project": selected_project_name,
-                                "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                            })
-                            success = True
-                            break
-                        elif response.status_code == 404:
-                            continue  # Try next endpoint
-                        else:
-                            st.warning(f"Endpoint {endpoint} returned {response.status_code}")
+                        # Show comprehensive result
+                        total_items = len(requirements) + len(hazards) + len(fmea_analyses) + len(design_artifacts) + len(test_artifacts)
+                        total_comprehensive = total_items + len(clinical_studies) + len(adverse_events) + len(field_actions) + len(standards)
+                        st.json({
+                            "Status": "Success",
+                            "Collection": "knowledge_base (default)",
+                            "Total Items Processed": total_comprehensive,
+                            "Project Data": {
+                                "Requirements": len(requirements),
+                                "Hazards": len(hazards), 
+                                "FMEA Analyses": len(fmea_analyses),
+                                "Design Artifacts": len(design_artifacts),
+                                "Test Artifacts": len(test_artifacts)
+                            },
+                            "Regulatory Data": {
+                                "Clinical Studies": len(clinical_studies),
+                                "Adverse Events": len(adverse_events),
+                                "Field Actions": len(field_actions),
+                                "Standards": len(standards)
+                            },
+                            "Project": selected_project_name,
+                            "Compliance Standard": compliance_standard,
+                            "Content Size": f"{len(full_kb_content):,} characters",
+                            "Sections": 9,
+                            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        })
+                    else:
+                        st.error(f"❌ Knowledge base update failed: {response.status_code}")
+                        if response.text:
+                            st.error(response.text)
                             
-                    except requests.exceptions.RequestException:
-                        continue  # Try next endpoint
-                
-                if not success:
-                    # Simulate successful update for now since backend is not implemented
-                    st.success("✅ Knowledge base updated successfully!")
-                    st.info("📋 Simulated update completed - backend implementation pending")
-                    st.json({
-                        "Status": "Simulated Success",
-                        "Items Processed": knowledge_base_data['summary']['total_items'],
-                        "Requirements": knowledge_base_data['summary']['requirements'],
-                        "Hazards": knowledge_base_data['summary']['hazards'],
-                        "FMEA": knowledge_base_data['summary']['fmea'],
-                        "Design": knowledge_base_data['summary']['design'],
-                        "Tests": knowledge_base_data['summary']['tests'],
-                        "Project": selected_project_name,
-                        "Compliance Standard": compliance_standard,
-                        "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        "Note": "Backend implementation required for actual KB update"
-                    })
+                except requests.exceptions.RequestException as e:
+                    st.error(f"❌ Connection error: {str(e)}")
+                    st.info("Please check if the Knowledge Base service is running.")
                     
             except Exception as e:
-                st.error(f"❌ Error preparing knowledge base update: {str(e)}")
-                st.info("This feature requires backend implementation.")
+                st.error(f"❌ Error updating knowledge base: {str(e)}")
                 
-            # Display the JSON payload that was sent
-            with st.expander("🔍 View Update Payload"):
-                st.json(knowledge_base_data)
+            # Show preview of content being added
+            with st.expander("🔍 Preview Knowledge Base Content"):
+                st.markdown("**Content Preview** (first 1000 characters):")
+                try:
+                    preview_content = full_kb_content[:1000] + "..." if len(full_kb_content) > 1000 else full_kb_content
+                    st.text(preview_content)
+                except:
+                    st.text("Content preview unavailable")
     
     st.markdown("---")
     st.markdown("#### 📊 Export Statistics")
     
-    stats_cols = st.columns([1, 1, 1, 1])
-    with stats_cols[0]:
-        st.metric("Reports Generated", "156", "↑ 12 this month")
-    with stats_cols[1]:
-        st.metric("Data Points Exported", "2,847", "All time")
-    with stats_cols[2]:
-        st.metric("Compliance Reports", "23", "Current period")
-    with stats_cols[3]:
-        st.metric("Audit Packages", "8", "Ready for submission")
+    # Get real statistics from the project data
+    try:
+        # Get current project data counts
+        requirements = get_system_requirements(selected_project_id)
+        hazards = get_hazards_risks(selected_project_id) 
+        fmea_analyses = get_fmea_analyses(selected_project_id)
+        design_artifacts = get_design_artifacts(selected_project_id)
+        test_artifacts = get_test_artifacts(selected_project_id)
+        
+        # Calculate real statistics
+        total_data_points = len(requirements) + len(hazards) + len(fmea_analyses) + len(design_artifacts) + len(test_artifacts)
+        
+        # Get Knowledge Base statistics if available
+        kb_stats = None
+        try:
+            kb_response = requests.get(f"{BACKEND_URL}/kb/stats", headers=get_auth_headers(), timeout=5)
+            if kb_response.status_code == 200:
+                kb_stats = kb_response.json()
+        except:
+            kb_stats = None
+        
+        # Count compliance-related items (requirements with compliance standards)
+        compliance_items = sum(1 for req in requirements if req.get('req_source') and 'ISO' in req.get('req_source', ''))
+        
+        # Count items ready for audit (approved status)
+        audit_ready_items = sum(1 for req in requirements if req.get('req_status') == 'Approved')
+        audit_ready_items += sum(1 for hazard in hazards if hazard.get('risk_rating', '').lower() in ['low', 'controlled'])
+        
+        stats_cols = st.columns([1, 1, 1, 1])
+        
+        with stats_cols[0]:
+            kb_documents = kb_stats.get('total_documents', 0) if kb_stats else 0
+            st.metric(
+                "KB Documents", 
+                str(kb_documents),
+                f"Design records in KB"
+            )
+            
+        with stats_cols[1]:
+            st.metric(
+                "Data Points Available", 
+                f"{total_data_points:,}",
+                f"Current project: {selected_project_name}"
+            )
+            
+        with stats_cols[2]:
+            st.metric(
+                "Compliance Items", 
+                str(compliance_items),
+                f"Standards-linked requirements"
+            )
+            
+        with stats_cols[3]:
+            st.metric(
+                "Audit Ready Items", 
+                str(audit_ready_items),
+                "Approved/Controlled status"
+            )
+        
+        # Additional statistics row
+        st.markdown("---")
+        detail_stats_cols = st.columns([1, 1, 1, 1, 1])
+        
+        with detail_stats_cols[0]:
+            st.metric("Requirements", len(requirements), "System requirements")
+        with detail_stats_cols[1]: 
+            st.metric("Hazards", len(hazards), "Risk assessments")
+        with detail_stats_cols[2]:
+            st.metric("FMEA", len(fmea_analyses), "Failure analyses")
+        with detail_stats_cols[3]:
+            st.metric("Design", len(design_artifacts), "Design artifacts")
+        with detail_stats_cols[4]:
+            st.metric("Tests", len(test_artifacts), "Test artifacts")
+            
+        # Show Knowledge Base details if available
+        if kb_stats:
+            with st.expander("🧠 Knowledge Base Statistics"):
+                kb_detail_cols = st.columns([1, 1, 1])
+                with kb_detail_cols[0]:
+                    st.metric("Total Documents", kb_stats.get('total_documents', 0))
+                with kb_detail_cols[1]:
+                    st.metric("Collections", kb_stats.get('total_collections', 0))
+                with kb_detail_cols[2]:
+                    kb_size = kb_stats.get('total_size_mb', 0)
+                    st.metric("Size (MB)", f"{kb_size:.1f}" if kb_size else "0.0")
+                    
+    except Exception as e:
+        # Fallback to basic statistics if API calls fail
+        st.warning("⚠️ Could not fetch live statistics. Showing basic project data.")
+        
+        try:
+            requirements = get_system_requirements(selected_project_id)
+            hazards = get_hazards_risks(selected_project_id)
+            total_items = len(requirements) + len(hazards)
+            
+            stats_cols = st.columns([1, 1, 1, 1])
+            with stats_cols[0]:
+                st.metric("Requirements", len(requirements), "Current project")
+            with stats_cols[1]:
+                st.metric("Hazards", len(hazards), "Risk items") 
+            with stats_cols[2]:
+                st.metric("Total Items", total_items, "Available for export")
+            with stats_cols[3]:
+                st.metric("Project", "1", f"{selected_project_name}")
+        except:
+            st.error("Unable to load project statistics")
 
 # Footer
 st.markdown("---")

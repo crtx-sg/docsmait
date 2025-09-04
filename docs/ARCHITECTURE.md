@@ -586,6 +586,69 @@ class KnowledgeBaseService:
         """Processes document and adds to both databases"""
         # Extract text content
         content = self._extract_text_from_file(file_path)
+
+#### 3.1.2 Automatic Integration Points
+
+The system includes automatic knowledge base integration at key workflow completion points to build comprehensive organizational knowledge:
+
+**Document Approval Integration (Documents.py:~412)**
+```python
+# Triggered when document status changes to "approved"
+if edit_status == "approved":
+    kb_content = f"# Document: {doc['name']}\n\n{doc['content']}"
+    metadata = {
+        "document_id": doc_id,
+        "document_name": doc['name'],
+        "approval_date": datetime.now().isoformat(),
+        "approved_by": st.session_state.user_id,
+        "document_type": doc.get('type', 'general'),
+        "version": doc.get('version', '1.0')
+    }
+    # Automatically adds to default "knowledge_base" collection
+    requests.post(f"{BACKEND_URL}/kb/add_text", 
+                  params={"collection_name": "knowledge_base", ...})
+```
+
+**Template Approval Integration (Templates.py:~389)**
+```python
+# Triggered when template status changes to "approved"
+if edit_status == "approved":
+    kb_content = f"# Template: {edit_name}\n\n{edit_content}"
+    metadata = {
+        "template_id": template_id,
+        "template_name": edit_name,
+        "template_type": edit_type,
+        "approval_date": datetime.now().isoformat(),
+        "approved_by": st.session_state.user_id
+    }
+    # Silent integration with error handling
+```
+
+**Audit Completion Integration (Audit.py:~254)**
+```python
+# Triggered when audit status changes to "completed"
+if edited_status == "completed":
+    kb_content = f"""# Audit Report: {edited_title}
+    **Audit Number**: {audit.get('audit_number', 'N/A')}
+    **Type**: {edited_type.replace('_', ' ').title()}
+    **Findings**: {edited_findings}
+    **Recommendations**: {edited_recommendations}"""
+    # Comprehensive audit metadata for searchability
+```
+
+**Design Record Export Integration (DesignRecord.py:~523)**
+```python
+# Triggered on Design Record PDF export
+kb_content = f"# Design Record: {device_name}"
+# Includes full design history, clinical data, and compliance information
+```
+
+**Integration Characteristics:**
+- **Silent Operation**: All integrations use try/except blocks to prevent workflow disruption
+- **Default Collection**: All content goes to configurable "knowledge_base" collection
+- **Rich Metadata**: Each integration includes comprehensive contextual information
+- **Configurable Timeouts**: Uses `KB_REQUEST_TIMEOUT` from config for network resilience
+- **Authentication**: All requests include proper user authentication headers
         
         # Chunk content for optimal embedding
         chunks = self._chunk_text(content, self.chunk_size)

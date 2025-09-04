@@ -13,6 +13,8 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
 
 # Knowledge Base Configuration
 DEFAULT_COLLECTION_NAME = os.getenv("DEFAULT_COLLECTION_NAME", "knowledge_base")
+KB_REQUEST_TIMEOUT = int(os.getenv("KB_REQUEST_TIMEOUT", "10"))  # KB API timeout in seconds
+KB_LONG_REQUEST_TIMEOUT = int(os.getenv("KB_LONG_REQUEST_TIMEOUT", "30"))  # Long operations timeout
 
 # UI Configuration
 DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "120"))
@@ -109,3 +111,50 @@ COMPACT_FONT_SIZE = int(os.getenv("COMPACT_FONT_SIZE", "14"))
 COMPACT_PADDING = os.getenv("COMPACT_PADDING", "0.25rem 0.5rem")
 COMPACT_MARGIN = os.getenv("COMPACT_MARGIN", "0.5rem")
 TAB_GAP = os.getenv("TAB_GAP", "8px")
+
+# Success Message Display Configuration
+SUCCESS_MESSAGE_DISPLAY_DURATION = int(os.getenv("SUCCESS_MESSAGE_DISPLAY_DURATION", "5"))  # seconds
+
+# Design Record Demo Data Configuration
+DEMO_CLINICAL_STUDIES = [
+    {"Study ID": "CS-001", "Title": "Primary Endpoint Study", "Status": "In Progress", "Participants": 150},
+    {"Study ID": "CS-002", "Title": "Safety Follow-up Study", "Status": "Planning", "Participants": 75}
+]
+
+DEMO_ADVERSE_EVENTS = [
+    {"Event ID": "AE-001", "Date": "2024-01-15", "Severity": "malfunction", "Description": "Device calibration error", "Status": "closed"},
+    {"Event ID": "AE-002", "Date": "2024-02-03", "Severity": "near_miss", "Description": "Alarm delay noticed", "Status": "investigating"},
+    {"Event ID": "AE-003", "Date": "2024-02-20", "Severity": "malfunction", "Description": "Software freeze during operation", "Status": "analyzed"}
+]
+
+DEMO_FIELD_ACTIONS = [
+    {"Action ID": "FSA-001", "Type": "software_update", "Date": "2024-01-20", "Description": "Critical security patch", "Affected Products": "Model A v1.0-1.2", "Status": "Completed"},
+    {"Action ID": "FSA-002", "Type": "field_safety_notice", "Date": "2024-02-10", "Description": "Updated user manual", "Affected Products": "All Models", "Status": "In Progress"}
+]
+
+DEMO_COMPLIANCE_STANDARDS = [
+    {"Standard": "ISO 14971:2019", "Title": "Medical devices - Application of risk management to medical devices", "Status": "Applicable", "Compliance": "Compliant"},
+    {"Standard": "IEC 62304:2006", "Title": "Medical device software - Software life cycle processes", "Status": "Applicable", "Compliance": "In Progress"},
+    {"Standard": "ISO 13485:2016", "Title": "Medical devices - Quality management systems", "Status": "Applicable", "Compliance": "Compliant"}
+]
+
+# Demo Data for Standards Compliance
+DEMO_STANDARDS_COMPLIANCE = [
+    {"id": 1, "standard_id": "ISO 13485:2016", "version": "2016", "applicable_clauses": "4.2, 7.3, 8.5", "status": "compliant", "last_review": "2024-01-15", "standard_name": "Medical Devices QMS"},
+    {"id": 2, "standard_id": "ISO 14971:2019", "version": "2019", "applicable_clauses": "4.3, 5.2, 7.1", "status": "partially_compliant", "last_review": "2024-02-01", "standard_name": "Medical Device Risk Management"},
+    {"id": 3, "standard_id": "IEC 60812:2018", "version": "2018", "applicable_clauses": "All", "status": "compliant", "last_review": "2024-01-30", "standard_name": "FMEA Analysis"}
+]
+
+# Demo Data for Biocompatibility Testing
+DEMO_BIOCOMPATIBILITY_TESTS = [
+    {"Test": "Cytotoxicity", "Standard": "ISO 10993-5", "Status": "Pass", "Date": "2024-01-15"},
+    {"Test": "Sensitization", "Standard": "ISO 10993-10", "Status": "Pass", "Date": "2024-01-20"},
+    {"Test": "Irritation", "Standard": "ISO 10993-10", "Status": "In Progress", "Date": "TBD"}
+]
+
+# Demo Data for EMC/Safety Testing
+DEMO_EMC_SAFETY_TESTS = [
+    {"Test": "EMC Emissions", "Standard": "IEC 60601-1-2", "Status": "Pass", "Report": "EMC_001.pdf"},
+    {"Test": "EMC Immunity", "Standard": "IEC 60601-1-2", "Status": "Pass", "Report": "EMC_002.pdf"},
+    {"Test": "Electrical Safety", "Standard": "IEC 60601-1", "Status": "Pass", "Report": "ES_001.pdf"}
+]

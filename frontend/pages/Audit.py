@@ -5,7 +5,7 @@ from datetime import datetime, date
 import pandas as pd
 from typing import List, Dict, Any
 from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers
-from config import BACKEND_URL, DATAFRAME_HEIGHT, EXPORT_FILENAME_FORMAT, MARKDOWN_TRUNCATE_LENGTH
+from config import BACKEND_URL, DATAFRAME_HEIGHT, EXPORT_FILENAME_FORMAT, MARKDOWN_TRUNCATE_LENGTH, KB_REQUEST_TIMEOUT
 
 require_auth()
 
@@ -334,6 +334,65 @@ with tab2:
                                 
                                 if response.status_code == 200:
                                     st.success("✅ Audit updated successfully!")
+                                    
+                                    # Send completed audit report to Knowledge Base if status is completed
+                                    if edited_status == "completed":
+                                        try:
+                                            kb_content = f"""# Audit Report: {edited_title}
+**Audit Number**: {audit.get('audit_number', 'N/A')}
+**Type**: {edited_type.replace('_', ' ').title()}
+**Status**: Completed
+**Completion Date**: {datetime.now().strftime('%Y-%m-%d')}
+**Lead Auditor**: {audit.get('lead_auditor_username', 'Unknown')}
+**Auditee Department**: {edited_auditee_dept}
+**Compliance Standard**: {edited_compliance_standard}
+
+## Audit Details
+
+**Planned Start Date**: {edited_start_date}
+**Planned End Date**: {edited_end_date}
+**Scope**: {edited_scope}
+
+## Audit Summary
+
+This audit has been completed successfully. The audit covered the scope defined above and was conducted according to the specified compliance standard.
+
+**Key Information:**
+- Audit conducted by: {audit.get('lead_auditor_username', 'Unknown')}
+- Department audited: {edited_auditee_dept}
+- Compliance framework: {edited_compliance_standard}
+- Duration: {edited_start_date} to {edited_end_date}
+"""
+                                            
+                                            metadata = {
+                                                "audit_id": audit['id'],
+                                                "audit_number": audit.get('audit_number', ''),
+                                                "audit_title": edited_title,
+                                                "audit_type": edited_type,
+                                                "completion_date": datetime.now().isoformat(),
+                                                "lead_auditor": audit.get('lead_auditor_username', ''),
+                                                "compliance_standard": edited_compliance_standard,
+                                                "content_type": "completed_audit_report"
+                                            }
+                                            
+                                            kb_response = requests.post(
+                                                f"{BACKEND_URL}/kb/add_text",
+                                                params={
+                                                    "collection_name": "knowledge_base",  # Use default collection
+                                                    "text_content": kb_content,
+                                                    "filename": f"audit_report_{edited_title.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                                                },
+                                                json=metadata,
+                                                headers=get_auth_headers(),
+                                                timeout=KB_REQUEST_TIMEOUT
+                                            )
+                                            
+                                            if kb_response.status_code == 200:
+                                                st.info("📚 Completed audit report also added to Knowledge Base")
+                                                
+                                        except Exception:
+                                            pass  # Silently handle KB integration failures
+                                    
                                     # Clear selection and rerun to refresh data
                                     if 'selected_audit_id' in st.session_state:
                                         del st.session_state.selected_audit_id

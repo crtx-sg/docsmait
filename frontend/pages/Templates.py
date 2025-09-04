@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import datetime
 from streamlit_ace import st_ace
 from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers, BACKEND_URL
+from config import KB_REQUEST_TIMEOUT, SUCCESS_MESSAGE_DISPLAY_DURATION
 
 require_auth()
 
@@ -347,7 +348,49 @@ if templates:
                                 
                                 if status_code == 200:
                                     st.session_state.template_success_message = f"Template '{edit_name}' updated successfully!"
-                                    st.session_state.show_success_until = time.time() + 5
+                                    st.session_state.show_success_until = time.time() + SUCCESS_MESSAGE_DISPLAY_DURATION
+                                    
+                                    # Send approved template to Knowledge Base if status is approved
+                                    if edit_status == "approved":
+                                        try:
+                                            kb_content = f"""# Template: {edit_name}
+**Type**: {edit_document_type.replace('_', ' ').title()}
+**Status**: Approved
+**Approval Date**: {datetime.now().strftime('%Y-%m-%d')}
+**Tags**: {', '.join(template_data['tags']) if template_data['tags'] else 'None'}
+
+## Template Content
+
+{edit_content}
+"""
+                                            
+                                            metadata = {
+                                                "template_id": st.session_state.edit_template_id,
+                                                "template_name": edit_name,
+                                                "document_type": edit_document_type,
+                                                "approval_date": datetime.now().isoformat(),
+                                                "tags": template_data['tags'],
+                                                "content_type": "approved_template"
+                                            }
+                                            
+                                            kb_response = requests.post(
+                                                f"{BACKEND_URL}/kb/add_text",
+                                                params={
+                                                    "collection_name": "knowledge_base",  # Use default collection
+                                                    "text_content": kb_content,
+                                                    "filename": f"approved_template_{edit_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                                                },
+                                                json=metadata,
+                                                headers=get_auth_headers(),
+                                                timeout=KB_REQUEST_TIMEOUT
+                                            )
+                                            
+                                            if kb_response.status_code == 200:
+                                                st.info("📚 Approved template also added to Knowledge Base")
+                                                
+                                        except Exception:
+                                            pass  # Silently handle KB integration failures
+                                    
                                     st.session_state.show_edit_in_editor = False
                                     st.rerun()
                                 else:
@@ -414,7 +457,7 @@ if st.session_state.get("show_create_template", False):
                     
                     if status_code == 200:
                         st.session_state.template_success_message = f"Template '{create_name}' created successfully!"
-                        st.session_state.show_success_until = time.time() + 5
+                        st.session_state.show_success_until = time.time() + SUCCESS_MESSAGE_DISPLAY_DURATION
                         st.session_state.show_create_template = False
                         st.rerun()
                     else:
@@ -498,7 +541,49 @@ if st.session_state.get("show_edit_template", False):
                     
                     if status_code == 200:
                         st.session_state.template_success_message = f"Template '{edit_name}' updated successfully!"
-                        st.session_state.show_success_until = time.time() + 5
+                        st.session_state.show_success_until = time.time() + SUCCESS_MESSAGE_DISPLAY_DURATION
+                        
+                        # Send approved template to Knowledge Base if status is approved
+                        if edit_status == "approved":
+                            try:
+                                kb_content = f"""# Template: {edit_name}
+**Type**: {edit_document_type.replace('_', ' ').title()}
+**Status**: Approved
+**Approval Date**: {datetime.now().strftime('%Y-%m-%d')}
+**Tags**: {', '.join(template_data['tags']) if template_data['tags'] else 'None'}
+
+## Template Content
+
+{edit_content}
+"""
+                                
+                                metadata = {
+                                    "template_id": st.session_state.edit_template_id,
+                                    "template_name": edit_name,
+                                    "document_type": edit_document_type,
+                                    "approval_date": datetime.now().isoformat(),
+                                    "tags": template_data['tags'],
+                                    "content_type": "approved_template"
+                                }
+                                
+                                kb_response = requests.post(
+                                    f"{BACKEND_URL}/kb/add_text",
+                                    params={
+                                        "collection_name": "knowledge_base",  # Use default collection
+                                        "text_content": kb_content,
+                                        "filename": f"approved_template_{edit_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                                    },
+                                    json=metadata,
+                                    headers=get_auth_headers(),
+                                    timeout=KB_REQUEST_TIMEOUT
+                                )
+                                
+                                if kb_response.status_code == 200:
+                                    st.info("📚 Approved template also added to Knowledge Base")
+                                    
+                            except Exception:
+                                pass  # Silently handle KB integration failures
+                        
                         st.session_state.show_edit_template = False
                         st.rerun()
                     else:

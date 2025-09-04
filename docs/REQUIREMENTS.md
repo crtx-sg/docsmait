@@ -186,6 +186,16 @@ Docsmait is an AI-powered document and compliance management system designed for
 - **REQ-KB-018**: System must provide insights on knowledge gaps and content effectiveness
 - **REQ-KB-019**: Usage statistics must be available to administrators for optimization
 
+#### 3.5.5 Automatic Content Integration
+- **REQ-KB-020**: System must automatically add approved documents to knowledge base
+- **REQ-KB-021**: Document approval workflow must trigger KB integration with full content and metadata
+- **REQ-KB-022**: Template approval must automatically add template content to knowledge base
+- **REQ-KB-023**: Audit completion must trigger automatic audit report addition to knowledge base
+- **REQ-KB-024**: Design Record exports must include comprehensive project data in knowledge base
+- **REQ-KB-025**: All KB integrations must use configurable default collection
+- **REQ-KB-026**: KB integration must not disrupt main workflow if KB service is unavailable
+- **REQ-KB-027**: System must provide user feedback on successful KB content additions
+
 ### 3.6 AI-Powered Document Assistance
 
 #### 3.6.1 Document Generation Support
@@ -468,6 +478,10 @@ Docsmait is an AI-powered document and compliance management system designed for
 - **REQ-SM-013**: Environment-specific settings must be properly isolated
 - **REQ-SM-014**: Hardcoded values must be eliminated and moved to configuration files
 - **REQ-SM-015**: Configuration validation must prevent invalid settings
+- **REQ-SM-016**: Knowledge Base timeout values must be configurable via environment variables
+- **REQ-SM-017**: Demo data for regulatory systems must be externalized to configuration
+- **REQ-SM-018**: UI element timeouts and display durations must be configurable
+- **REQ-SM-019**: All KB integration parameters must be environment-configurable
 
 ## 4. Non-Functional Requirements
 

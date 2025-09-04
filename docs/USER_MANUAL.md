@@ -587,6 +587,45 @@ Collections organize documents by topic, project, or domain:
 
 The knowledge base automatically builds from approved organizational content to support compliance, training, and AI-assisted document workflows.
 
+#### Automatic Knowledge Base Integration
+
+The system now includes automatic integration points that seamlessly populate the knowledge base as users complete their regular workflows:
+
+##### Document Approval Integration
+- **Trigger**: When a document is approved by a reviewer
+- **Action**: Complete document content and metadata are automatically added to the knowledge base
+- **Collection**: Default "knowledge_base" collection  
+- **Content**: Full document text with approval details, reviewer comments, and metadata
+- **User Feedback**: "📚 Document also added to Knowledge Base" notification
+
+##### Template Approval Integration  
+- **Trigger**: When a template status is changed to "approved"
+- **Action**: Template content and metadata are automatically indexed
+- **Collection**: Default "knowledge_base" collection
+- **Content**: Complete template with type, tags, and approval metadata
+- **User Feedback**: "📚 Approved template also added to Knowledge Base" notification
+
+##### Audit Completion Integration
+- **Trigger**: When an audit status is changed to "completed"  
+- **Action**: Comprehensive audit report is generated and added to knowledge base
+- **Collection**: Default "knowledge_base" collection
+- **Content**: Complete audit report with findings, metadata, and compliance details
+- **User Feedback**: "📚 Completed audit report also added to Knowledge Base" notification
+
+##### Design Record Export Integration
+- **Trigger**: Manual "Update Knowledge Base" action in Design Record exports
+- **Action**: Comprehensive design record data exported to knowledge base
+- **Collection**: Default "knowledge_base" collection  
+- **Content**: All 9 design record sections including requirements, hazards, FMEA, compliance data
+- **Sections**: Requirements, Hazards & Risks, FMEA Analyses, Design Artifacts, Test Artifacts, Clinical Studies, Adverse Events, Field Safety Actions, Compliance Standards
+
+##### Integration Features
+- **Silent Error Handling**: KB integration failures don't disrupt main workflows
+- **Configurable Timeouts**: Timeout values configured via environment variables
+- **Rich Metadata**: Each integration includes comprehensive metadata for enhanced searchability
+- **Default Collection**: All integrations use the configurable default collection ("knowledge_base")
+- **User Feedback**: Success notifications inform users when content is successfully indexed
+
 ### 6.4 Template Management
 
 Templates provide standardized document structures with rich markdown editing capabilities and approval workflows.

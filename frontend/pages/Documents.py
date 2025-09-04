@@ -2,9 +2,10 @@
 import streamlit as st
 import requests
 import pandas as pd
+from datetime import datetime
 from streamlit_ace import st_ace
 from auth_utils import get_auth_headers, get_current_user, setup_authenticated_sidebar, BACKEND_URL
-from config import DATAFRAME_HEIGHT
+from config import DATAFRAME_HEIGHT, KB_REQUEST_TIMEOUT
 
 st.set_page_config(page_title="📄 Documents", page_icon="📄", layout="wide")
 
@@ -273,15 +274,33 @@ def format_status(document_state, review_state=None):
     return document_state.replace('_', ' ').title() if document_state else "Unknown"
 
 def display_comment_history(comments):
-    """Display comment history in clean format - handles both V1 and V2 formats"""
+    """Display comment history as a dataframe - handles both V1 and V2 formats"""
     if not comments:
         st.info("No comments yet")
         return
     
+    # Prepare data for dataframe
+    comment_data = []
     for comment in comments:
         # Handle both V1 API format (timestamp, commenter) and V2 API format (date_time, user)
         timestamp = comment.get("timestamp") or comment.get("date_time", "")
-        date_time = timestamp[:16] if timestamp else "N/A"
+        
+        # Extract date and time separately
+        if timestamp:
+            try:
+                # Handle both full timestamp and date-only formats
+                if 'T' in timestamp:
+                    date_part = timestamp.split('T')[0]
+                    time_part = timestamp.split('T')[1][:8] if len(timestamp.split('T')) > 1 else "00:00:00"
+                else:
+                    date_part = timestamp[:10] if len(timestamp) >= 10 else timestamp
+                    time_part = timestamp[11:19] if len(timestamp) > 11 else "00:00:00"
+            except:
+                date_part = timestamp[:10] if timestamp else "N/A"
+                time_part = timestamp[11:19] if len(timestamp) > 11 else "00:00:00"
+        else:
+            date_part = "N/A"
+            time_part = "00:00:00"
         
         # Handle different type formats between V1 and V2
         comment_type = comment.get("type", "Comment")
@@ -291,10 +310,25 @@ def display_comment_history(comments):
         user = comment.get("commenter") or comment.get("user", "Unknown")
         text = comment.get("comment", "")
         
-        with st.container():
-            st.markdown(f"**{date_time}** | **{comment_type}** | {user}")
-            st.write(text)
-            st.divider()
+        comment_data.append({
+            "Date": date_part,
+            "Time": time_part,
+            "Status": comment_type,
+            "User": user,
+            "Comment": text
+        })
+    
+    # Create and display dataframe
+    if comment_data:
+        comment_df = pd.DataFrame(comment_data)
+        st.dataframe(
+            comment_df,
+            use_container_width=True,
+            hide_index=True,
+            height=min(300, len(comment_data) * 35 + 50)  # Dynamic height based on number of comments
+        )
+    else:
+        st.info("No comments yet")
 
 def get_document_types():
     """Get available document types"""
@@ -348,7 +382,7 @@ def get_project_documents(project_id, status=None, document_type=None, created_b
             params["created_by"] = created_by
         
         response = requests.get(
-            f"{BACKEND_URL}/projects/{project_id}/documents",
+            f"{BACKEND_URL}/api/v2/projects/{project_id}/documents/all",
             params=params,
             headers=get_auth_headers()
         )
@@ -443,10 +477,172 @@ if show_reviews_notice:
     st.info("📋 **Looking for Reviews?** You can find document reviews in the **'My Documents' → 'Reviews'** tab below, or use the **'All Documents'** tab to review any project document.")
 
 # Tabs for different operations
-tab1, tab2, tab3 = st.tabs(["📋 My Documents", "➕ Create Document", "📄 All Documents"])
+tab1, tab2, tab3 = st.tabs(["➕ Create Document", "📋 My Documents", "📄 All Documents"])
 
 with tab1:
-    st.subheader("📝 My Documents")
+    st.subheader("➕ Create New Document")
+    st.caption("Create a new document in the project")
+    
+    # Document type and creation method selection
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        document_types = get_document_types()
+        document_type = st.selectbox(
+            "Document Type",
+            options=[dt['value'] for dt in document_types],
+            format_func=lambda x: next(dt['label'] for dt in document_types if dt['value'] == x),
+            key="create_document_type"
+        )
+    
+    with col2:
+        creation_method = st.radio(
+            "Creation Method",
+            ["📝 Create from Scratch", "📄 Create from Template"],
+            key="creation_method"
+        )
+    
+    # Show document type description
+    selected_doc_type = next((dt for dt in document_types if dt['value'] == document_type), None)
+    if selected_doc_type:
+        st.caption(f"📋 {selected_doc_type['label']}: {selected_doc_type['description']}")
+    
+    # Template/Document selection
+    template_content = ""
+    template_id = None
+    
+    if creation_method == "📝 Create from Scratch":
+        if "template_content_create" in st.session_state:
+            del st.session_state.template_content_create
+    
+    elif creation_method == "📄 Create from Template":
+        templates = get_templates(document_type)
+        if templates:
+            template_options = {t["name"]: t["id"] for t in templates}
+            selected_template_name = st.selectbox(
+                "Select Template",
+                options=list(template_options.keys()),
+                key="selected_template"
+            )
+            if selected_template_name:
+                template_id = template_options[selected_template_name]
+                selected_template = next(t for t in templates if t["id"] == template_id)
+                template_content = selected_template["content"]
+                st.session_state.template_content_create = template_content
+                st.session_state.selected_template_id = template_id
+                st.info(f"Template: {selected_template['name']} - {selected_template['description']}")
+        else:
+            st.warning("No templates available for this document type.")
+    
+    with st.form("create_document_form"):
+        name = st.text_input("Document Name", placeholder="Enter document name")
+        
+        st.subheader("📝 Document Content")
+        
+        initial_content = ""
+        editor_key = "create_document_content"
+        
+        if st.session_state.get("template_content_create"):
+            initial_content = st.session_state.template_content_create
+            if st.session_state.get("selected_template_id"):
+                editor_key = f"create_document_content_{st.session_state.selected_template_id}"
+        
+        content = st_ace(
+            value=initial_content,
+            language='markdown',
+            theme='github',
+            key=editor_key,
+            height=300,
+            auto_update=False,
+            wrap=True
+        )
+        
+        # Document status and workflow
+        col_status, col_comment = st.columns([1, 2])
+        with col_status:
+            status = st.selectbox(
+                "Document Status",
+                ["draft", "request_review"],
+                format_func=lambda x: x.replace('_', ' ').title(),
+                key="document_status"
+            )
+        
+        with col_comment:
+            comment = ""
+            if status != "draft":
+                comment = st.text_input(
+                    "Comment (required for non-draft)",
+                    placeholder="Brief description...",
+                    key="document_comment"
+                )
+        
+        # Reviewer selection for request_review status
+        reviewers = []
+        if status == "request_review":
+            project_members = get_project_members(project_id)
+            
+            # Filter out current user
+            available_reviewers = [member for member in project_members if member["user_id"] != user_info["id"]]
+            
+            if available_reviewers:
+                reviewer_options = st.multiselect(
+                    "👥 Select Reviewers",
+                    options=[member["user_id"] for member in available_reviewers],
+                    format_func=lambda x: next((member["username"] for member in available_reviewers if member["user_id"] == x), "Unknown"),
+                    key="document_reviewers",
+                    help="Choose team members to review this document"
+                )
+                reviewers = reviewer_options
+            else:
+                st.error("⚠️ No project members available for review (excluding yourself).")
+        
+        submitted = st.form_submit_button("🚀 Create Document", type="primary")
+        
+        if submitted:
+            # Validation
+            errors = []
+            
+            if not name or not name.strip():
+                errors.append("Document name is required")
+            
+            if not content or not content.strip():
+                errors.append("Document content is required")
+            
+            if status == "request_review" and not reviewers:
+                errors.append("Please select at least one reviewer for review request")
+            
+            if status != "draft" and not comment.strip():
+                errors.append("Comment is required for non-draft documents")
+            
+            if errors:
+                for error in errors:
+                    st.error(error)
+            else:
+                document_data = {
+                    "name": name,
+                    "document_type": document_type,
+                    "content": content,
+                    "status": status,
+                    "comment": comment if comment else None,
+                    "reviewers": reviewers if reviewers else None,
+                    "template_id": template_id if creation_method == "📄 Create from Template" else None
+                }
+                
+                result, status_code = create_document(project_id, document_data)
+                
+                if status_code == 200:
+                    st.success(f"Document '{name}' created successfully!")
+                    # Clear form data
+                    if "template_content_create" in st.session_state:
+                        del st.session_state.template_content_create
+                    if "selected_template_id" in st.session_state:
+                        del st.session_state.selected_template_id
+                    st.rerun()
+                else:
+                    st.error(f"Failed to create document: {result.get('error', 'Unknown error')}")
+
+with tab2:
+    st.subheader("📝 My Documents") 
     st.caption("Documents you created")
     
     # Create sub-tabs for better organization
@@ -508,7 +704,8 @@ with tab1:
                     hide_index=True,
                     on_select="rerun",
                     selection_mode="single-row",
-                    height=400
+                    height=400,
+                    key="my_docs_dataframe"
                 )
                 
                 st.caption("💡 Select a row to edit the document")
@@ -663,18 +860,56 @@ with tab1:
                         
                         with col_b:
                             if st.button("❌ Close", key="close_editable_doc"):
+                                # Clear all related session state including dataframe selection
+                                keys_to_remove = []
+                                for key in st.session_state.keys():
+                                    if (key.startswith('selected_doc') or 
+                                        key.startswith('editor_my_') or 
+                                        key.startswith('revision_comment_') or 
+                                        key.startswith('create_revision_') or 
+                                        key == 'my_docs_dataframe'):
+                                        keys_to_remove.append(key)
+                                
+                                for key in keys_to_remove:
+                                    del st.session_state[key]
+                                
+                                # Clear main document session state
                                 if 'selected_doc' in st.session_state:
                                     del st.session_state.selected_doc
                                 if 'mode' in st.session_state:
                                     del st.session_state.mode
+                                
+                                # Clear dataframe selection explicitly
+                                if 'my_docs_dataframe' in st.session_state:
+                                    del st.session_state.my_docs_dataframe
+                                
                                 st.rerun()
                     else:
                         st.info(f"Document is currently {doc_status.replace('_', ' ')}")
                         if st.button("❌ Close", key="close_readonly_doc"):
+                            # Clear all related session state including dataframe selection
+                            keys_to_remove = []
+                            for key in st.session_state.keys():
+                                if (key.startswith('selected_doc') or 
+                                    key.startswith('editor_my_') or 
+                                    key.startswith('revision_comment_') or 
+                                    key.startswith('create_revision_') or 
+                                    key == 'my_docs_dataframe'):
+                                    keys_to_remove.append(key)
+                            
+                            for key in keys_to_remove:
+                                del st.session_state[key]
+                            
+                            # Clear main document session state
                             if 'selected_doc' in st.session_state:
                                 del st.session_state.selected_doc
                             if 'mode' in st.session_state:
                                 del st.session_state.mode
+                            
+                            # Clear dataframe selection explicitly
+                            if 'my_docs_dataframe' in st.session_state:
+                                del st.session_state.my_docs_dataframe
+                            
                             st.rerun()
                 else:
                     st.info("Select a document from the left panel to edit")
@@ -736,7 +971,8 @@ with tab1:
                     hide_index=True,
                     on_select="rerun", 
                     selection_mode="single-row",
-                    height=350
+                    height=350,
+                    key="review_docs_dataframe"
                 )
                 
                 st.caption("💡 Select a row to review the document")
@@ -800,6 +1036,50 @@ with tab1:
                                 result = submit_review(doc['id'], reviewer_comment, "approved")
                                 if result.get("success"):
                                     st.success(result["message"])
+                                    
+                                    # Send approved document content to Knowledge Base
+                                    try:
+                                        kb_content = f"""# Document: {doc['name']}
+**Type**: {doc['document_type'].replace('_', ' ').title()}
+**Author**: {doc['author']}
+**Approval Date**: {datetime.now().strftime('%Y-%m-%d')}
+**Reviewer**: {get_current_user()['username'] if get_current_user() else 'Unknown'}
+**Review Comment**: {reviewer_comment}
+
+## Document Content
+
+{doc.get('content', 'No content available')}
+"""
+                                        
+                                        metadata = {
+                                            "document_id": doc['id'],
+                                            "document_name": doc['name'],
+                                            "document_type": doc['document_type'],
+                                            "author": doc['author'],
+                                            "approved_by": get_current_user()['username'] if get_current_user() else 'Unknown',
+                                            "approval_date": datetime.now().isoformat(),
+                                            "content_type": "approved_document"
+                                        }
+                                        
+                                        kb_response = requests.post(
+                                            f"{BACKEND_URL}/kb/add_text",
+                                            params={
+                                                "collection_name": "knowledge_base",  # Use default collection
+                                                "text_content": kb_content,
+                                                "filename": f"approved_document_{doc['name'].replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                                            },
+                                            json=metadata,
+                                            headers=get_auth_headers(),
+                                            timeout=KB_REQUEST_TIMEOUT
+                                        )
+                                        
+                                        if kb_response.status_code == 200:
+                                            st.info("📚 Document also added to Knowledge Base")
+                                        # Don't show error for KB failure to avoid disrupting the main approval flow
+                                        
+                                    except Exception:
+                                        pass  # Silently handle KB integration failures
+                                    
                                     del st.session_state.selected_review_doc
                                     st.rerun()
                                 else:
@@ -809,7 +1089,27 @@ with tab1:
                     
                     with col_r3:
                         if st.button("❌ Close", key="close_review_doc"):
-                            del st.session_state.selected_review_doc
+                            # Clear all related session state including dataframe selection
+                            keys_to_remove = []
+                            for key in st.session_state.keys():
+                                if (key.startswith('selected_review_doc') or 
+                                    key.startswith('editor_review_') or 
+                                    key == 'review_docs_dataframe'):
+                                    keys_to_remove.append(key)
+                            
+                            for key in keys_to_remove:
+                                del st.session_state[key]
+                            
+                            # Clear main review session state
+                            if 'selected_review_doc' in st.session_state:
+                                del st.session_state.selected_review_doc
+                            if 'mode' in st.session_state:
+                                del st.session_state.mode
+                            
+                            # Clear dataframe selection explicitly
+                            if 'review_docs_dataframe' in st.session_state:
+                                del st.session_state.review_docs_dataframe
+                            
                             st.rerun()
                 else:
                     st.info("Select a document from the review queue to start reviewing")
@@ -820,238 +1120,142 @@ with tab1:
         if not approved_docs:
             st.info("No approved documents")
         else:
-            st.markdown("### Approved Documents")
+            # Left-right panel layout similar to My Documents
+            approved_col1, approved_col2 = st.columns([2, 3])
             
-            # Prepare data for st.dataframe
-            approved_grid_data = []
-            for doc in approved_docs:
-                approved_row = {
-                    'name': doc['name'],
-                    'document_type': doc['document_type'],
-                    'author': doc['author'],
-                    'status': 'approved',
-                    'approved_date': doc['updated_at'][:10] if doc['updated_at'] else 'N/A',
-                    'full_doc_data': doc
-                }
-                approved_grid_data.append(approved_row)
-            
-            # Create DataFrame for approved documents
-            approved_df_data = []
-            for row in approved_grid_data:
-                approved_df_row = {
-                    'Document Name': row['name'],
-                    'Type': row['document_type'].replace('_', ' ').title(),
-                    'Author': row['author'],
-                    'Status': row['status'].title(),
-                    'Approved Date': row['approved_date']
-                }
-                approved_df_data.append(approved_df_row)
-            
-            approved_df = pd.DataFrame(approved_df_data)
-            
-            # Display with selection capability
-            approved_selected_indices = st.dataframe(
-                approved_df,
-                use_container_width=True,
-                hide_index=True,
-                on_select="rerun",
-                selection_mode="single-row",
-                height=300
-            )
-            
-            st.caption("💡 Select a row to view the approved document")
-            
-            # Handle approved document selection
-            if approved_selected_indices and len(approved_selected_indices.selection.rows) > 0:
-                selected_idx = approved_selected_indices.selection.rows[0]
-                full_doc = approved_grid_data[selected_idx]['full_doc_data']
-                # Only rerun if this is a different document
-                if (st.session_state.get('selected_doc', {}).get('id') != full_doc.get('id') or 
-                    st.session_state.get('mode') != "view_only"):
-                    st.session_state.selected_doc = full_doc
-                    st.session_state.mode = "view_only"
-                    st.rerun()
-
-with tab2:
-    st.subheader("➕ Create Document")
-    
-    # Document type and creation method selection
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        document_types = get_document_types()
-        document_type = st.selectbox(
-            "Document Type",
-            options=[dt['value'] for dt in document_types],
-            format_func=lambda x: next((dt['label'] for dt in document_types if dt['value'] == x), x),
-            key="create_document_type"
-        )
-    
-    with col2:
-        creation_method = st.radio(
-            "Creation Method",
-            ["Blank Document", "Using Template", "From Previous Version"],
-            horizontal=True,
-            key="creation_method"
-        )
-    
-    # Show document type description
-    selected_doc_type = next((dt for dt in document_types if dt['value'] == document_type), None)
-    if selected_doc_type:
-        st.caption(f"📋 {selected_doc_type['label']}: {selected_doc_type['description']}")
-    
-    # Template/Document selection
-    template_content = ""
-    template_id = None
-    
-    if creation_method == "Blank Document":
-        if "template_content_create" in st.session_state:
-            del st.session_state.template_content_create
-    
-    elif creation_method == "Using Template":
-        templates = get_templates(document_type)
-        if templates:
-            template_options = {t["name"]: t["id"] for t in templates}
-            selected_template_name = st.selectbox(
-                "Select Template",
-                options=list(template_options.keys()),
-                key="selected_template"
-            )
-            if selected_template_name:
-                template_id = template_options[selected_template_name]
-                selected_template = next(t for t in templates if t["id"] == template_id)
-                template_content = selected_template["content"]
-                st.session_state.template_content_create = template_content
-                st.session_state.selected_template_id = template_id
-                st.info(f"Template: {selected_template['name']} - {selected_template['description']}")
-        else:
-            st.warning("No templates available for this document type.")
-    
-    elif creation_method == "From Previous Version":
-        all_docs = get_project_documents(project_id)
-        if all_docs:
-            doc_options = {f"{d['name']}": d["id"] for d in all_docs}
-            selected_doc_name = st.selectbox(
-                "Select Document to Copy",
-                options=list(doc_options.keys()),
-                key="selected_copy_doc"
-            )
-            if selected_doc_name:
-                copy_doc_id = doc_options[selected_doc_name]
-                copy_doc = get_document_by_id(copy_doc_id)
-                if copy_doc:
-                    template_content = copy_doc["content"]
-                    st.session_state.template_content_create = template_content
-                    st.info(f"Copying content from: {copy_doc['name']}")
-        else:
-            st.warning("No documents available to copy from.")
-    
-    with st.form("create_document_form"):
-        name = st.text_input("Document Name", placeholder="Enter document name")
-        
-        st.subheader("📝 Document Content")
-        
-        initial_content = ""
-        editor_key = "create_document_content"
-        
-        if st.session_state.get("template_content_create"):
-            initial_content = st.session_state.template_content_create
-            if st.session_state.get("selected_template_id"):
-                editor_key = f"create_document_content_{st.session_state.selected_template_id}"
-        
-        content = st_ace(
-            value=initial_content,
-            language='markdown',
-            theme='github',
-            key=editor_key,
-            height=300,
-            auto_update=False,
-            wrap=True
-        )
-        
-        # Document status and workflow
-        col_status, col_comment = st.columns([1, 2])
-        with col_status:
-            status = st.selectbox(
-                "Document Status",
-                ["draft", "request_review"],
-                format_func=lambda x: x.replace('_', ' ').title(),
-                key="document_status"
-            )
-        
-        with col_comment:
-            comment = ""
-            if status != "draft":
-                comment = st.text_input(
-                    "Comment (required for non-draft)",
-                    placeholder="Brief description...",
-                    key="document_comment"
-                )
-        
-        # Reviewer selection for request_review status
-        reviewers = []
-        if status == "request_review":
-            project_members = get_project_members(project_id)
-            
-            # Filter out current user
-            available_reviewers = [member for member in project_members if member["user_id"] != user_info["id"]]
-            
-            if available_reviewers:
-                reviewer_options = st.multiselect(
-                    "👥 Select Reviewers",
-                    options=[member["user_id"] for member in available_reviewers],
-                    format_func=lambda x: next((member["username"] for member in available_reviewers if member["user_id"] == x), "Unknown"),
-                    key="document_reviewers",
-                    help="Choose team members to review this document"
-                )
-                reviewers = reviewer_options
-            else:
-                st.error("⚠️ No project members available for review (excluding yourself).")
-        
-        submitted = st.form_submit_button("🚀 Create Document", type="primary")
-        
-        if submitted:
-            # Validation
-            errors = []
-            
-            if not name or not name.strip():
-                errors.append("Document name is required")
-            
-            if not content or not content.strip():
-                errors.append("Document content is required")
-            
-            if status == "request_review" and not reviewers:
-                errors.append("Please select at least one reviewer for review request")
-            
-            if status != "draft" and not comment.strip():
-                errors.append("Comment is required for non-draft documents")
-            
-            if errors:
-                for error in errors:
-                    st.error(error)
-            else:
-                document_data = {
-                    "name": name,
-                    "document_type": document_type,
-                    "content": content,
-                    "status": status,
-                    "comment": comment if comment else None,
-                    "reviewers": reviewers if reviewers else None,
-                    "template_id": template_id if creation_method == "Using Template" else None
-                }
+            with approved_col1:
+                st.markdown("### Approved Documents")
                 
-                result, status_code = create_document(project_id, document_data)
+                # Prepare data for st.dataframe
+                approved_grid_data = []
+                for doc in approved_docs:
+                    approved_row = {
+                        'name': doc['name'],
+                        'document_type': doc['document_type'],
+                        'author': doc['author'],
+                        'status': 'approved',
+                        'approved_date': doc['updated_at'][:10] if doc['updated_at'] else 'N/A',
+                        'full_doc_data': doc
+                    }
+                    approved_grid_data.append(approved_row)
                 
-                if status_code == 200:
-                    st.success(f"Document '{name}' created successfully!")
-                    # Clear form data
-                    if "template_content_create" in st.session_state:
-                        del st.session_state.template_content_create
-                    if "selected_template_id" in st.session_state:
-                        del st.session_state.selected_template_id
-                    st.rerun()
+                # Create DataFrame for approved documents
+                approved_df_data = []
+                for row in approved_grid_data:
+                    # Get reviewers for this document
+                    reviewers = get_document_reviewers_from_data(row['full_doc_data'])
+                    
+                    approved_df_row = {
+                        'Document Name': row['name'],
+                        'Type': row['document_type'].replace('_', ' ').title(),
+                        'Author': row['author'],
+                        'Reviewers': reviewers,
+                        'Created Date': row['full_doc_data'].get('created_at', '')[:10] if row['full_doc_data'].get('created_at') else 'N/A',
+                        'Approved Date': row['approved_date']
+                    }
+                    approved_df_data.append(approved_df_row)
+                
+                approved_df = pd.DataFrame(approved_df_data)
+                
+                # Display with selection capability
+                approved_selected_indices = st.dataframe(
+                    approved_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    height=300,
+                    key="approved_docs_dataframe"
+                )
+                
+                st.caption("💡 Select a row to view the approved document")
+                
+                # Handle approved document selection
+                if approved_selected_indices and len(approved_selected_indices.selection.rows) > 0:
+                    selected_idx = approved_selected_indices.selection.rows[0]
+                    full_doc = approved_grid_data[selected_idx]['full_doc_data']
+                    # Only rerun if this is a different document
+                    if (st.session_state.get('selected_approved_doc', {}).get('id') != full_doc.get('id') or 
+                        st.session_state.get('approved_mode') != "view_only"):
+                        st.session_state.selected_approved_doc = full_doc
+                        st.session_state.approved_mode = "view_only"
+                        st.rerun()
+            
+            with approved_col2:
+                st.markdown("### Document Editor")
+                
+                if "selected_approved_doc" in st.session_state and st.session_state.approved_mode == "view_only":
+                    doc = st.session_state.selected_approved_doc
+                    
+                    # Add refresh button to get latest document data
+                    col_refresh1, col_refresh2 = st.columns([4, 1])
+                    with col_refresh2:
+                        if st.button("🔄 Refresh", key="refresh_approved_doc", help="Refresh document data"):
+                            # Force refresh by getting latest document data
+                            fresh_docs = get_approved_documents(project_id)
+                            fresh_doc = next((d for d in fresh_docs if d['id'] == doc['id']), None)
+                            if fresh_doc:
+                                st.session_state.selected_approved_doc = fresh_doc
+                                doc = fresh_doc
+                            st.rerun()
+                    
+                    with col_refresh1:
+                        # Document header
+                        st.markdown(f"**{doc['name']}** | {doc['document_type'].replace('_', ' ').title()}")
+                        # Handle both V1 (status) and V2 (document_state, review_state) formats
+                        doc_state = doc.get('document_state', doc.get('status', 'approved'))
+                        review_state = doc.get('review_state')
+                        st.markdown(f"**Status:** {format_status(doc_state, review_state)}", unsafe_allow_html=True)
+                    
+                    # Comment History - handle both V1 and V2 formats
+                    st.subheader("💬 Comment History")
+                    comments = doc.get('comment_history', doc.get('review_comments', []))
+                    display_comment_history(comments)
+                    
+                    st.divider()
+                    
+                    # Document Content (readonly for approved documents)
+                    st.subheader("📄 Document Content")
+                    st_ace(
+                        value=doc['content'],
+                        language='markdown',
+                        theme='github',
+                        height=300,
+                        key=f"editor_approved_{doc['id']}",
+                        readonly=True
+                    )
+                    
+                    # For approved documents, show readonly note
+                    st.info("📋 **Note:** Approved documents are displayed in read-only mode to maintain document integrity.")
+                    
+                    # Close button
+                    if st.button("❌ Close", key="close_approved_editor"):
+                        # Clear all related session state including dataframe selection
+                        keys_to_remove = []
+                        for key in st.session_state.keys():
+                            if (key.startswith('selected_approved_doc') or 
+                                key.startswith('editor_approved_') or 
+                                key.startswith('approved_') or 
+                                key == 'approved_docs_dataframe'):
+                                keys_to_remove.append(key)
+                        
+                        for key in keys_to_remove:
+                            del st.session_state[key]
+                        
+                        # Clear main approved session state
+                        if 'selected_approved_doc' in st.session_state:
+                            del st.session_state.selected_approved_doc
+                        if 'approved_mode' in st.session_state:
+                            del st.session_state.approved_mode
+                        
+                        # Clear dataframe selection explicitly
+                        if 'approved_docs_dataframe' in st.session_state:
+                            del st.session_state.approved_docs_dataframe
+                        
+                        st.rerun()
                 else:
-                    st.error(f"Failed to create document: {result.get('error', 'Unknown error')}")
+                    st.info("Select an approved document from the left panel to edit")
+
 
 with tab3:
     st.subheader("📄 All Documents")
@@ -1143,8 +1347,7 @@ with tab3:
                     'Type': row['document_type'].replace('_', ' ').title(),
                     'Status': row['status'].replace('_', ' ').title(),
                     'Author': row['author'],
-                    'Reviewers': row['reviewers'],
-                    'Updated': row['updated_at']
+                    'Reviewers': row['reviewers']
                 }
                 all_docs_df_data.append(all_docs_df_row)
             
@@ -1157,7 +1360,8 @@ with tab3:
                 hide_index=True,
                 on_select="rerun",
                 selection_mode="single-row",
-                height=DATAFRAME_HEIGHT
+                height=DATAFRAME_HEIGHT,
+                key="all_docs_dataframe"
             )
             
             st.caption("💡 Select a row to edit the document")
@@ -1182,7 +1386,6 @@ with tab3:
             
             if "selected_all_doc" in st.session_state:
                 doc = st.session_state.selected_all_doc
-                mode = "author"  # Default mode for all documents tab
                 
                 # Document header
                 st.markdown(f"**{doc['name']}** | {doc['document_type'].replace('_', ' ').title()}")
@@ -1204,23 +1407,41 @@ with tab3:
                 
                 st.divider()
                 
-                # Document Content
+                # Document Content (readonly in All Documents view)
                 st.subheader("📄 Document Content")
-                if mode == "view_only":
-                    st.markdown(doc['content'])
-                else:
-                    # Show editor for edit mode
-                    content = st_ace(
-                        value=doc['content'],
-                        language='markdown',
-                        theme='github',
-                        height=300,
-                        key=f"editor_all_{doc['id']}"
-                    )
+                st_ace(
+                    value=doc['content'],
+                    language='markdown',
+                    theme='github',
+                    height=300,
+                    key=f"editor_all_{doc['id']}",
+                    readonly=True
+                )
+                
+                # Info message about readonly mode
+                st.info("📋 **Note:** Documents in All Documents view are displayed in read-only mode. To edit, use the My Documents tab.")
                 
                 # Close button
                 if st.button("❌ Close", key="close_all_editor"):
-                    del st.session_state.selected_all_doc
+                    # Clear all related session state including dataframe selection
+                    keys_to_remove = []
+                    for key in st.session_state.keys():
+                        if (key.startswith('selected_all_doc') or 
+                            key.startswith('editor_all_') or 
+                            key == 'all_docs_dataframe'):
+                            keys_to_remove.append(key)
+                    
+                    for key in keys_to_remove:
+                        del st.session_state[key]
+                    
+                    # Also clear the main selection
+                    if 'selected_all_doc' in st.session_state:
+                        del st.session_state.selected_all_doc
+                    
+                    # Clear dataframe selection explicitly
+                    if 'all_docs_dataframe' in st.session_state:
+                        del st.session_state.all_docs_dataframe
+                    
                     st.rerun()
             else:
                 st.info("Select a document from the left panel to view or edit")

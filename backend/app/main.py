@@ -797,43 +797,21 @@ def export_template(
 
 # ========== Document Management Endpoints ==========
 
-@app.post("/projects/{project_id}/documents", response_model=dict)
-def create_document(
-    project_id: str,
-    document: models.DocumentCreate,
-    user_id: int = Depends(auth.verify_token)
-):
-    """Create a new document in a project"""
-    result = documents_service.create_document(
-        name=document.name,
-        document_type=document.document_type,
-        content=document.content,
-        project_id=project_id,
-        user_id=user_id,
-        status=document.status,
-        template_id=document.template_id,
-        comment=document.comment,
-        reviewers=document.reviewers or []
-    )
-    
-    if not result.get("success", True):
-        if "not a member" in result.get("error", ""):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=result["error"])
-        if "already exists" in result.get("error", ""):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result["error"])
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result["error"])
-    
-    return result
+# V1 create document endpoint removed - unused by frontend
+# Use V2 endpoint: POST /api/v2/documents
 
-@app.get("/projects/{project_id}/documents")
-def list_project_documents(
+@app.get("/projects/{project_id}/documents", deprecated=True)
+def list_project_documents_v1_deprecated(
     project_id: str,
     status: Optional[str] = None,
     document_type: Optional[str] = None,
     created_by: Optional[int] = None,
     user_id: int = Depends(auth.verify_token)
 ):
-    """List all documents in a project with optional filtering"""
+    """DEPRECATED: Use /api/v2/projects/{project_id}/documents/all - This endpoint redirects to V2 service"""
+    import warnings
+    warnings.warn("V1 document endpoint is deprecated. Use /api/v2/projects/{project_id}/documents/all", DeprecationWarning)
+    
     documents = documents_service_v2.get_project_documents(
         project_id=project_id,
         user_id=user_id,
@@ -842,7 +820,6 @@ def list_project_documents(
         created_by=created_by
     )
     
-    # Return documents directly from V2 service (no Pydantic model conversion)
     return documents
 
 @app.get("/documents/{document_id}", response_model=models.DocumentResponse)
@@ -1946,6 +1923,24 @@ def get_approved_documents_v2(
     documents = documents_service_v2.get_approved_documents(project_id, user_id)
     return {"documents": documents}
 
+@app.get("/api/v2/projects/{project_id}/documents/all")
+def list_all_project_documents_v2(
+    project_id: str,
+    status: Optional[str] = None,
+    document_type: Optional[str] = None,
+    created_by: Optional[int] = None,
+    user_id: int = Depends(auth.verify_token)
+):
+    """List all documents in a project with optional filtering (V2 API)"""
+    documents = documents_service_v2.get_project_documents(
+        project_id=project_id,
+        user_id=user_id,
+        status=status,
+        document_type=document_type,
+        created_by=created_by
+    )
+    return documents
+
 @app.get("/api/v2/documents/{document_id}/revisions")
 def get_document_revisions_v2(
     document_id: str,
@@ -2217,6 +2212,78 @@ def create_system_requirement(
             detail=f"Failed to create requirement: {str(e)}"
         )
 
+@app.put("/design-record/requirements/{requirement_id}")
+def update_system_requirement(
+    requirement_id: str,
+    requirement_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Update an existing system requirement"""
+    from .db_models import SystemRequirement, ProjectMember, User
+    
+    try:
+        # Find the existing requirement
+        requirement = db.query(SystemRequirement).filter(
+            SystemRequirement.id == requirement_id
+        ).first()
+        
+        if not requirement:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Requirement with ID {requirement_id} not found"
+            )
+        
+        # Check if user has access to this project
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == requirement.project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to update requirements in this project"
+            )
+        
+        # Check if new req_id conflicts with existing requirements (excluding current)
+        if requirement_data.get("req_id") and requirement_data.get("req_id") != requirement.req_id:
+            existing_req = db.query(SystemRequirement).filter(
+                SystemRequirement.project_id == requirement.project_id,
+                SystemRequirement.req_id == requirement_data.get("req_id"),
+                SystemRequirement.id != requirement_id
+            ).first()
+            
+            if existing_req:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Requirement ID '{requirement_data.get('req_id')}' already exists in this project"
+                )
+        
+        # Update requirement fields
+        for field, value in requirement_data.items():
+            if hasattr(requirement, field) and field != "id":
+                setattr(requirement, field, value)
+        
+        db.commit()
+        db.refresh(requirement)
+        
+        return {
+            "success": True,
+            "requirement_id": requirement_id,
+            "message": f"Requirement {requirement.req_id} updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update requirement: {str(e)}"
+        )
+
 # ================================
 # DESIGN RECORD - HAZARDS & RISKS
 # ================================
@@ -2369,7 +2436,77 @@ def create_system_hazard(
             detail=f"Failed to create hazard: {str(e)}"
         )
 
-
+@app.put("/design-record/hazards/{hazard_id}")
+def update_system_hazard(
+    hazard_id: str,
+    hazard_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Update an existing system hazard"""
+    from .db_models import SystemHazard, ProjectMember, User
+    
+    try:
+        # Find the existing hazard
+        hazard = db.query(SystemHazard).filter(
+            SystemHazard.id == hazard_id
+        ).first()
+        
+        if not hazard:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Hazard with ID {hazard_id} not found"
+            )
+        
+        # Check if user has access to this project
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == hazard.project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to update hazards in this project"
+            )
+        
+        # Check if new hazard_id conflicts with existing hazards (excluding current)
+        if hazard_data.get("hazard_id") and hazard_data.get("hazard_id") != hazard.hazard_id:
+            existing_hazard = db.query(SystemHazard).filter(
+                SystemHazard.project_id == hazard.project_id,
+                SystemHazard.hazard_id == hazard_data.get("hazard_id"),
+                SystemHazard.id != hazard_id
+            ).first()
+            
+            if existing_hazard:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Hazard ID '{hazard_data.get('hazard_id')}' already exists in this project"
+                )
+        
+        # Update hazard fields
+        for field, value in hazard_data.items():
+            if hasattr(hazard, field) and field != "id":
+                setattr(hazard, field, value)
+        
+        db.commit()
+        db.refresh(hazard)
+        
+        return {
+            "success": True,
+            "hazard_id": hazard_id,
+            "message": f"Hazard {hazard.hazard_id} updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update hazard: {str(e)}"
+        )
 
 # ================================
 # DESIGN RECORD - FMEA ANALYSIS
@@ -2518,6 +2655,87 @@ def create_fmea_analysis(
             detail=f"Failed to create FMEA analysis: {str(e)}"
         )
 
+@app.put("/design-record/fmea/{fmea_id}")
+def update_fmea_analysis(
+    fmea_id: str,
+    fmea_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Update an existing FMEA analysis"""
+    from .db_models import FMEAAnalysis, ProjectMember, User
+    from datetime import datetime
+    
+    try:
+        # Find the existing FMEA
+        fmea = db.query(FMEAAnalysis).filter(
+            FMEAAnalysis.id == fmea_id
+        ).first()
+        
+        if not fmea:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"FMEA with ID {fmea_id} not found"
+            )
+        
+        # Check if user has access to this project
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == fmea.project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to update FMEA analyses in this project"
+            )
+        
+        # Check if new fmea_id conflicts with existing FMEAs (excluding current)
+        if fmea_data.get("fmea_id") and fmea_data.get("fmea_id") != fmea.fmea_id:
+            existing_fmea = db.query(FMEAAnalysis).filter(
+                FMEAAnalysis.project_id == fmea.project_id,
+                FMEAAnalysis.fmea_id == fmea_data.get("fmea_id"),
+                FMEAAnalysis.id != fmea_id
+            ).first()
+            
+            if existing_fmea:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"FMEA ID '{fmea_data.get('fmea_id')}' already exists in this project"
+                )
+        
+        # Handle analysis_date conversion
+        if fmea_data.get("analysis_date"):
+            try:
+                analysis_date = datetime.strptime(fmea_data.get("analysis_date"), "%Y-%m-%d").date()
+                fmea_data["analysis_date"] = analysis_date
+            except ValueError:
+                pass  # Keep original value if parsing fails
+        
+        # Update FMEA fields
+        for field, value in fmea_data.items():
+            if hasattr(fmea, field) and field != "id":
+                setattr(fmea, field, value)
+        
+        db.commit()
+        db.refresh(fmea)
+        
+        return {
+            "success": True,
+            "fmea_id": fmea_id,
+            "message": f"FMEA {fmea.fmea_id} updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update FMEA analysis: {str(e)}"
+        )
+
 # ================================
 # DESIGN RECORD - DESIGN ARTIFACTS
 # ================================
@@ -2656,6 +2874,78 @@ def create_design_artifact(
             detail=f"Failed to create design artifact: {str(e)}"
         )
 
+@app.put("/design-record/design/{design_id}")
+def update_design_artifact(
+    design_id: str,
+    design_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Update an existing design artifact"""
+    from .db_models import DesignArtifact, ProjectMember, User
+    
+    try:
+        # Find the existing design artifact
+        design = db.query(DesignArtifact).filter(
+            DesignArtifact.id == design_id
+        ).first()
+        
+        if not design:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Design artifact with ID {design_id} not found"
+            )
+        
+        # Check if user has access to this project
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == design.project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to update design artifacts in this project"
+            )
+        
+        # Check if new design_id conflicts with existing designs (excluding current)
+        if design_data.get("design_id") and design_data.get("design_id") != design.design_id:
+            existing_design = db.query(DesignArtifact).filter(
+                DesignArtifact.project_id == design.project_id,
+                DesignArtifact.design_id == design_data.get("design_id"),
+                DesignArtifact.id != design_id
+            ).first()
+            
+            if existing_design:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Design ID '{design_data.get('design_id')}' already exists in this project"
+                )
+        
+        # Update design artifact fields
+        for field, value in design_data.items():
+            if hasattr(design, field) and field != "id":
+                setattr(design, field, value)
+        
+        db.commit()
+        db.refresh(design)
+        
+        return {
+            "success": True,
+            "design_id": design_id,
+            "message": f"Design {design.design_id} updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update design artifact: {str(e)}"
+        )
+
 # ================================
 # DESIGN RECORD - TEST ARTIFACTS
 # ================================
@@ -2790,4 +3080,427 @@ def create_test_artifact(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create test artifact: {str(e)}"
+        )
+
+@app.put("/design-record/tests/{test_id}")
+def update_test_artifact(
+    test_id: str,
+    test_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Update an existing test artifact"""
+    from .db_models import TestArtifact, ProjectMember, User
+    
+    try:
+        # Find the existing test artifact
+        test = db.query(TestArtifact).filter(
+            TestArtifact.id == test_id
+        ).first()
+        
+        if not test:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Test artifact with ID {test_id} not found"
+            )
+        
+        # Check if user has access to this project
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == test.project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to update test artifacts in this project"
+            )
+        
+        # Check if new test_id conflicts with existing tests (excluding current)
+        if test_data.get("test_id") and test_data.get("test_id") != test.test_id:
+            existing_test = db.query(TestArtifact).filter(
+                TestArtifact.project_id == test.project_id,
+                TestArtifact.test_id == test_data.get("test_id"),
+                TestArtifact.id != test_id
+            ).first()
+            
+            if existing_test:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Test ID '{test_data.get('test_id')}' already exists in this project"
+                )
+        
+        # Update test artifact fields
+        for field, value in test_data.items():
+            if hasattr(test, field) and field != "id":
+                setattr(test, field, value)
+        
+        db.commit()
+        db.refresh(test)
+        
+        return {
+            "success": True,
+            "test_id": test_id,
+            "message": f"Test {test.test_id} updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update test artifact: {str(e)}"
+        )
+
+# ================================
+# DESIGN RECORD - COMPLIANCE STANDARDS
+# ================================
+
+@app.get("/design-record/standards/{project_id}")
+def get_compliance_standards(
+    project_id: str,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Get compliance standards for a project"""
+    from .db_models import ComplianceStandard, ProjectMember, User
+    
+    try:
+        # Check if user has access to this project
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to view compliance standards in this project"
+            )
+        
+        # Get compliance standards
+        standards = db.query(ComplianceStandard).filter(
+            ComplianceStandard.project_id == project_id
+        ).order_by(ComplianceStandard.standard_name).all()
+        
+        standards_list = []
+        for standard in standards:
+            standards_list.append({
+                "id": standard.id,
+                "project_id": standard.project_id,
+                "standard_name": standard.standard_name,
+                "standard_version": standard.standard_version,
+                "domain": standard.domain,
+                "compliance_status": standard.compliance_status,
+                "applicable_clauses": standard.applicable_clauses,
+                "assessment_date": standard.assessment_date.isoformat() if standard.assessment_date else None,
+                "next_review_date": standard.next_review_date.isoformat() if standard.next_review_date else None,
+                "responsible_person": standard.responsible_person,
+                "evidence_references": standard.evidence_references,
+                "compliance_notes": standard.compliance_notes,
+                "created_at": standard.created_at.isoformat() if standard.created_at else None,
+                "updated_at": standard.updated_at.isoformat() if standard.updated_at else None
+            })
+        
+        return {"standards": standards_list}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve compliance standards: {str(e)}"
+        )
+
+@app.put("/design-record/standards/{standard_id}")
+def update_compliance_standard(
+    standard_id: str,
+    standard_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Update an existing compliance standard"""
+    from .db_models import ComplianceStandard, ProjectMember, User
+    from datetime import datetime
+    
+    try:
+        # Find the existing standard
+        standard = db.query(ComplianceStandard).filter(
+            ComplianceStandard.id == standard_id
+        ).first()
+        
+        if not standard:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Compliance standard with ID {standard_id} not found"
+            )
+        
+        # Check if user has access to this project
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == standard.project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to update compliance standards in this project"
+            )
+        
+        # Handle date conversions
+        if standard_data.get("assessment_date"):
+            try:
+                assessment_date = datetime.strptime(standard_data.get("assessment_date"), "%Y-%m-%d").date()
+                standard_data["assessment_date"] = assessment_date
+            except ValueError:
+                pass  # Keep original value if parsing fails
+                
+        if standard_data.get("next_review_date"):
+            try:
+                next_review_date = datetime.strptime(standard_data.get("next_review_date"), "%Y-%m-%d").date()
+                standard_data["next_review_date"] = next_review_date
+            except ValueError:
+                pass  # Keep original value if parsing fails
+        
+        # Update standard fields
+        for field, value in standard_data.items():
+            if hasattr(standard, field) and field != "id":
+                setattr(standard, field, value)
+        
+        db.commit()
+        db.refresh(standard)
+        
+        return {
+            "success": True,
+            "standard_id": standard_id,
+            "message": f"Compliance standard {standard.standard_name} updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update compliance standard: {str(e)}"
+        )
+
+# ================================
+# DESIGN RECORD - TRACEABILITY
+# ================================
+
+@app.put("/design-record/traceability/{trace_id}")
+def update_traceability(
+    trace_id: str,
+    trace_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Update an existing traceability link"""
+    from .db_models import TraceabilityMatrix, ProjectMember, User
+    
+    try:
+        # Find the existing traceability link
+        trace = db.query(TraceabilityMatrix).filter(
+            TraceabilityMatrix.id == trace_id
+        ).first()
+        
+        if not trace:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Traceability link with ID {trace_id} not found"
+            )
+        
+        # Check if user has access to this project
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == trace.project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to update traceability in this project"
+            )
+        
+        # Update traceability fields
+        for field, value in trace_data.items():
+            if hasattr(trace, field) and field != "id":
+                setattr(trace, field, value)
+        
+        db.commit()
+        db.refresh(trace)
+        
+        return {
+            "success": True,
+            "trace_id": trace_id,
+            "message": "Traceability link updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update traceability link: {str(e)}"
+        )
+
+# ================================
+# DESIGN RECORD - POST-MARKET SURVEILLANCE
+# ================================
+
+@app.put("/design-record/adverse-events/{event_id}")
+def update_adverse_event(
+    event_id: str,
+    event_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Update an existing adverse event"""
+    from .db_models import PostMarketRecord, ProjectMember, User
+    from datetime import datetime
+    
+    try:
+        # Find the existing adverse event (by record_id, not database id)
+        adverse_event = db.query(PostMarketRecord).filter(
+            PostMarketRecord.record_id == event_id,
+            PostMarketRecord.record_type == "adverse_event"
+        ).first()
+        
+        if not adverse_event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Adverse event with ID {event_id} not found"
+            )
+        
+        # Check if user has access to this project
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == adverse_event.project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to update adverse events in this project"
+            )
+        
+        # Handle date conversions
+        if event_data.get("incident_date"):
+            try:
+                incident_date = datetime.strptime(event_data.get("incident_date"), "%Y-%m-%d").date()
+                event_data["incident_date"] = incident_date
+            except ValueError:
+                pass  # Keep original value if parsing fails
+                
+        if event_data.get("reported_date"):
+            try:
+                reported_date = datetime.strptime(event_data.get("reported_date"), "%Y-%m-%d").date()
+                event_data["reported_date"] = reported_date
+            except ValueError:
+                pass  # Keep original value if parsing fails
+        
+        # Update adverse event fields
+        for field, value in event_data.items():
+            if hasattr(adverse_event, field) and field not in ["id", "record_id", "record_type"]:
+                setattr(adverse_event, field, value)
+        
+        db.commit()
+        db.refresh(adverse_event)
+        
+        return {
+            "success": True,
+            "event_id": event_id,
+            "message": f"Adverse event {event_id} updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update adverse event: {str(e)}"
+        )
+
+@app.put("/design-record/field-actions/{action_id}")
+def update_field_action(
+    action_id: str,
+    action_data: dict,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Update an existing field safety action"""
+    from .db_models import PostMarketRecord, ProjectMember, User
+    from datetime import datetime
+    
+    try:
+        # Find the existing field action (by record_id, not database id)
+        field_action = db.query(PostMarketRecord).filter(
+            PostMarketRecord.record_id == action_id,
+            PostMarketRecord.record_type.in_(["field_safety_action", "recall", "corrective_action"])
+        ).first()
+        
+        if not field_action:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Field action with ID {action_id} not found"
+            )
+        
+        # Check if user has access to this project
+        is_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == field_action.project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to update field actions in this project"
+            )
+        
+        # Handle date conversions
+        if action_data.get("incident_date"):
+            try:
+                incident_date = datetime.strptime(action_data.get("incident_date"), "%Y-%m-%d").date()
+                action_data["incident_date"] = incident_date
+            except ValueError:
+                pass  # Keep original value if parsing fails
+                
+        if action_data.get("reported_date"):
+            try:
+                reported_date = datetime.strptime(action_data.get("reported_date"), "%Y-%m-%d").date()
+                action_data["reported_date"] = reported_date
+            except ValueError:
+                pass  # Keep original value if parsing fails
+        
+        # Update field action fields
+        for field, value in action_data.items():
+            if hasattr(field_action, field) and field not in ["id", "record_id", "record_type"]:
+                setattr(field_action, field, value)
+        
+        db.commit()
+        db.refresh(field_action)
+        
+        return {
+            "success": True,
+            "action_id": action_id,
+            "message": f"Field action {action_id} updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update field action: {str(e)}"
         )
