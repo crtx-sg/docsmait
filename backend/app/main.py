@@ -825,7 +825,7 @@ def create_document(
     
     return result
 
-@app.get("/projects/{project_id}/documents", response_model=List[models.DocumentResponse])
+@app.get("/projects/{project_id}/documents")
 def list_project_documents(
     project_id: str,
     status: Optional[str] = None,
@@ -834,7 +834,7 @@ def list_project_documents(
     user_id: int = Depends(auth.verify_token)
 ):
     """List all documents in a project with optional filtering"""
-    documents = documents_service.get_project_documents(
+    documents = documents_service_v2.get_project_documents(
         project_id=project_id,
         user_id=user_id,
         status=status,
@@ -842,29 +842,8 @@ def list_project_documents(
         created_by=created_by
     )
     
-    # Convert to response model format
-    response_documents = []
-    for doc in documents:
-        response_documents.append(models.DocumentResponse(
-            id=doc["id"],
-            name=doc["name"],
-            document_type=doc["document_type"],
-            content=doc.get("content", ""),  # Dont include full content in list
-            project_id=doc["project_id"],
-            status=doc["status"],
-            template_id=doc["template_id"],
-            created_by=doc["created_by"],
-            created_by_username=doc["created_by_username"],
-            created_at=doc["created_at"],
-            updated_at=doc["updated_at"],
-            current_revision=doc["current_revision"],
-            reviewers=doc["reviewers"],
-            reviewed_at=doc["reviewed_at"],
-            reviewed_by=doc["reviewed_by"],
-            reviewed_by_username=doc.get("reviewed_by_username")
-        ))
-    
-    return response_documents
+    # Return documents directly from V2 service (no Pydantic model conversion)
+    return documents
 
 @app.get("/documents/{document_id}", response_model=models.DocumentResponse)
 def get_document(document_id: str, user_id: int = Depends(auth.verify_token)):
@@ -2013,6 +1992,79 @@ def update_document_content_v2(
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
+
+@app.get("/api/v2/documents/{document_id}")
+def get_document_v2(
+    document_id: str,
+    user_id: int = Depends(auth.verify_token)
+):
+    """Get document details using V2 service"""
+    db = next(get_db())
+    try:
+        # Get document using the same logic as V2 service
+        document = db.query(Document).options(
+            joinedload(Document.creator),
+            joinedload(Document.current_reviewer),
+            joinedload(Document.reviewers),
+            joinedload(Document.comments).joinedload(DocumentComment.user)
+        ).filter(Document.id == document_id).first()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Check if user has access (project member)
+        membership = db.query(ProjectMember).filter(
+            and_(ProjectMember.project_id == document.project_id, ProjectMember.user_id == user_id)
+        ).first()
+        
+        if not membership:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get comment history
+        comments = []
+        for comment in document.comments:
+            comments.append({
+                "date_time": comment.created_at.isoformat() if comment.created_at else None,
+                "type": comment.comment_type.replace('_', ' ').title(),
+                "user": comment.user.username if comment.user else "Unknown",
+                "comment": comment.comment_text
+            })
+        
+        # Sort comments by date (most recent first)
+        comments.sort(key=lambda x: x['date_time'] if x['date_time'] else '', reverse=True)
+        
+        # Get creator username
+        creator_username = document.creator.username if document.creator else "Unknown"
+        
+        # Get all reviewers for this document using V2 service helper
+        reviewers = documents_service_v2._get_document_reviewers(document, db)
+        
+        return {
+            "id": document.id,
+            "name": document.name,
+            "document_type": document.document_type,
+            "content": document.content,
+            "project_id": document.project_id,
+            "document_state": document.document_state,
+            "review_state": document.review_state,
+            "status": document.document_state,  # For backward compatibility
+            "author": creator_username,
+            "created_by_username": creator_username,
+            "current_reviewer": document.current_reviewer.username if document.current_reviewer else None,
+            "reviewers": reviewers,
+            "created_by": document.created_by,
+            "created_at": document.created_at.isoformat() if document.created_at else None,
+            "updated_at": document.updated_at.isoformat() if document.updated_at else None,
+            "comment_history": comments
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting document: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        db.close()
 
 # ================================
 # DESIGN RECORD - SYSTEM REQUIREMENTS

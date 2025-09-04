@@ -206,6 +206,7 @@ class DocumentsService:
                     "content": doc.content,
                     "project_id": doc.project_id,
                     "status": doc.status,
+                    "document_state": getattr(doc, 'document_state', doc.status),
                     "template_id": doc.template_id,
                     "created_by": doc.created_by,
                     "created_at": doc.created_at.isoformat() if doc.created_at else None,
@@ -215,7 +216,7 @@ class DocumentsService:
                     "reviewed_by": doc.reviewed_by,
                     "created_by_username": doc.creator.username if doc.creator else None,
                     "reviewed_by_username": doc.reviewer_user.username if doc.reviewer_user else None,
-                    "reviewers": reviewers,
+                    "reviewers": [r["username"] for r in reviewers],
                     "review_comments": all_comments
                 }
                 documents.append(doc_dict)

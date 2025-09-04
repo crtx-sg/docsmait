@@ -147,6 +147,7 @@ class DocumentsServiceV2:
             documents = db.query(Document).options(
                 joinedload(Document.creator),
                 joinedload(Document.current_reviewer),
+                joinedload(Document.reviewers),
                 joinedload(Document.comments).joinedload(DocumentComment.user)
             ).filter(
                 and_(
@@ -178,10 +179,20 @@ class DocumentsServiceV2:
                     "name": doc.name,
                     "document_type": doc.document_type,
                     "content": doc.content,
+                    "project_id": doc.project_id,
                     "document_state": doc.document_state,
                     "review_state": doc.review_state,
+                    "status": doc.document_state,  # For backward compatibility
+                    "template_id": getattr(doc, 'template_id', None),
+                    "current_revision": getattr(doc, 'current_revision', 1),
+                    "reviewed_at": doc.reviewed_at.isoformat() if getattr(doc, 'reviewed_at', None) else None,
+                    "reviewed_by": getattr(doc, 'reviewed_by', None),
+                    "reviewed_by_username": None,  # TODO: Get this if needed
                     "author": creator_username,
+                    "created_by_username": creator_username,
                     "current_reviewer": doc.current_reviewer.username if doc.current_reviewer else None,
+                    "reviewers": self._get_document_reviewers(doc, db),
+                    "created_by": doc.created_by,
                     "created_at": doc.created_at.isoformat() if doc.created_at else None,
                     "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
                     "comment_history": comments
@@ -202,6 +213,7 @@ class DocumentsServiceV2:
             documents = db.query(Document).options(
                 joinedload(Document.creator),
                 joinedload(Document.current_reviewer),
+                joinedload(Document.reviewers),
                 joinedload(Document.comments).joinedload(DocumentComment.user)
             ).filter(
                 and_(
@@ -234,10 +246,20 @@ class DocumentsServiceV2:
                     "name": doc.name,
                     "document_type": doc.document_type,
                     "content": doc.content,
+                    "project_id": doc.project_id,
                     "document_state": doc.document_state,
                     "review_state": doc.review_state,
+                    "status": doc.document_state,  # For backward compatibility
+                    "template_id": getattr(doc, 'template_id', None),
+                    "current_revision": getattr(doc, 'current_revision', 1),
+                    "reviewed_at": doc.reviewed_at.isoformat() if getattr(doc, 'reviewed_at', None) else None,
+                    "reviewed_by": getattr(doc, 'reviewed_by', None),
+                    "reviewed_by_username": None,  # TODO: Get this if needed
                     "author": creator_username,
+                    "created_by_username": creator_username,
                     "current_reviewer": doc.current_reviewer.username if doc.current_reviewer else None,
+                    "reviewers": self._get_document_reviewers(doc, db),
+                    "created_by": doc.created_by,
                     "created_at": doc.created_at.isoformat() if doc.created_at else None,
                     "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
                     "comment_history": comments
@@ -265,6 +287,7 @@ class DocumentsServiceV2:
             
             documents = db.query(Document).options(
                 joinedload(Document.creator),
+                joinedload(Document.reviewers),
                 joinedload(Document.comments).joinedload(DocumentComment.user)
             ).filter(
                 and_(
@@ -293,9 +316,20 @@ class DocumentsServiceV2:
                     "name": doc.name,
                     "document_type": doc.document_type,
                     "content": doc.content,
+                    "project_id": doc.project_id,
                     "document_state": doc.document_state,
                     "review_state": doc.review_state,
+                    "status": doc.document_state,  # For backward compatibility
+                    "template_id": getattr(doc, 'template_id', None),
+                    "current_revision": getattr(doc, 'current_revision', 1),
+                    "reviewed_at": doc.reviewed_at.isoformat() if getattr(doc, 'reviewed_at', None) else None,
+                    "reviewed_by": getattr(doc, 'reviewed_by', None),
+                    "reviewed_by_username": None,  # TODO: Get this if needed
                     "author": doc.creator.username if doc.creator else "Unknown",
+                    "created_by_username": doc.creator.username if doc.creator else "Unknown",
+                    "created_by": doc.created_by,
+                    "current_reviewer": None,  # Approved docs don't have current reviewer
+                    "reviewers": self._get_document_reviewers(doc, db),
                     "created_at": doc.created_at.isoformat() if doc.created_at else None,
                     "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
                     "comment_history": comments
@@ -455,6 +489,114 @@ class DocumentsServiceV2:
         except Exception as e:
             db.rollback()
             return {"success": False, "error": f"Failed to update document: {str(e)}"}
+        finally:
+            db.close()
+    
+    def _get_document_reviewers(self, doc, db) -> List[str]:
+        """Get all reviewers (current and historical) for a document"""
+        reviewers = []
+        
+        # Add current reviewer if exists
+        if doc.current_reviewer:
+            reviewers.append(doc.current_reviewer.username)
+        
+        # Add historical reviewers from document_reviewers table
+        for reviewer_assignment in doc.reviewers:
+            reviewer_user = db.query(User).filter(User.id == reviewer_assignment.reviewer_id).first()
+            if reviewer_user and reviewer_user.username not in reviewers:
+                reviewers.append(reviewer_user.username)
+        
+        return reviewers
+    
+    def get_project_documents(self, project_id: str, user_id: int, 
+                             status: str = None, document_type: str = None, 
+                             created_by: int = None) -> List[Dict[str, Any]]:
+        """Get all documents in a project with optional filtering (v2)"""
+        db = next(get_db())
+        try:
+            # Check if user has access to project
+            membership = db.query(ProjectMember).filter(
+                and_(ProjectMember.project_id == project_id, ProjectMember.user_id == user_id)
+            ).first()
+            
+            if not membership:
+                return []
+            
+            # Build query
+            query = db.query(Document).options(
+                joinedload(Document.creator),
+                joinedload(Document.current_reviewer),
+                joinedload(Document.reviewers),
+                joinedload(Document.comments).joinedload(DocumentComment.user)
+            ).filter(Document.project_id == project_id)
+            
+            # Apply filters
+            if status:
+                # Map old status values to document_state
+                if status == "approved":
+                    query = query.filter(Document.document_state == "approved")
+                elif status == "draft":
+                    query = query.filter(Document.document_state == "draft")
+                elif status == "request_review":
+                    query = query.filter(Document.document_state == "request_review")
+                else:
+                    query = query.filter(Document.document_state == status)
+            
+            if document_type:
+                query = query.filter(Document.document_type == document_type)
+            
+            if created_by:
+                query = query.filter(Document.created_by == created_by)
+            
+            documents = query.order_by(Document.updated_at.desc()).all()
+            
+            result = []
+            for doc in documents:
+                # Get comment history
+                comments = []
+                for comment in doc.comments:
+                    comments.append({
+                        "date_time": comment.created_at.isoformat() if comment.created_at else None,
+                        "type": comment.comment_type.replace('_', ' ').title(),
+                        "user": comment.user.username if comment.user else "Unknown",
+                        "comment": comment.comment_text
+                    })
+                
+                # Sort comments by date (most recent first)
+                comments.sort(key=lambda x: x['date_time'] if x['date_time'] else '', reverse=True)
+                
+                # Get creator username
+                creator_username = doc.creator.username if doc.creator else "Unknown"
+                
+                result.append({
+                    "id": doc.id,
+                    "name": doc.name,
+                    "document_type": doc.document_type,
+                    "content": doc.content,
+                    "project_id": doc.project_id,
+                    "document_state": doc.document_state,
+                    "review_state": doc.review_state,
+                    "status": doc.document_state,  # For backward compatibility
+                    "template_id": getattr(doc, 'template_id', None),
+                    "current_revision": getattr(doc, 'current_revision', 1),
+                    "reviewed_at": doc.reviewed_at.isoformat() if getattr(doc, 'reviewed_at', None) else None,
+                    "reviewed_by": getattr(doc, 'reviewed_by', None),
+                    "reviewed_by_username": None,  # TODO: Get this if needed
+                    "author": creator_username,
+                    "created_by_username": creator_username,
+                    "current_reviewer": doc.current_reviewer.username if doc.current_reviewer else None,
+                    "reviewers": self._get_document_reviewers(doc, db),
+                    "created_by": doc.created_by,
+                    "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                    "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
+                    "comment_history": comments
+                })
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error getting project documents: {e}")
+            return []
         finally:
             db.close()
 

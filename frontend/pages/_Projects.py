@@ -44,6 +44,40 @@ st.title("📋 Projects Management")
 
 setup_authenticated_sidebar()
 
+# Show success message if project was just created
+if hasattr(st.session_state, 'project_created_message'):
+    st.success(st.session_state.project_created_message)
+    # Clear the message after showing it
+    del st.session_state.project_created_message
+
+# Show success message if resource was just added
+if hasattr(st.session_state, 'resource_added_message'):
+    st.success(st.session_state.resource_added_message)
+    # Clear the message after showing it
+    del st.session_state.resource_added_message
+
+# Show success message if resource was just updated
+if hasattr(st.session_state, 'resource_updated_message'):
+    st.success(st.session_state.resource_updated_message)
+    # Clear the message after showing it
+    del st.session_state.resource_updated_message
+
+# Show success message if resource was just deleted
+if hasattr(st.session_state, 'resource_deleted_message'):
+    st.success(st.session_state.resource_deleted_message)
+    # Clear the message after showing it
+    del st.session_state.resource_deleted_message
+
+# Show notification to stay on Project Details tab after resource operations
+if hasattr(st.session_state, 'stay_on_project_details'):
+    st.info("💡 Resource updated successfully! Go to the **Project Details** tab to continue managing resources.")
+    del st.session_state.stay_on_project_details
+
+# Show edit cancelled message
+if hasattr(st.session_state, 'edit_cancelled_message'):
+    st.success(st.session_state.edit_cancelled_message)
+    del st.session_state.edit_cancelled_message
+
 # Helper functions
 def fetch_projects():
     """Fetch user's projects from backend"""
@@ -87,6 +121,8 @@ def get_project_details(project_id):
         response = requests.get(f"{BACKEND_URL}/projects/{project_id}", headers=get_auth_headers())
         if response.status_code == 200:
             return response.json()
+        else:
+            st.error(f"Failed to load project details: {response.status_code} - {response.text}")
         return None
     except Exception as e:
         st.error(f"Error fetching project details: {str(e)}")
@@ -173,10 +209,9 @@ def add_project_resource(project_id, name, resource_type, content=None):
     try:
         payload = {
             "name": name,
-            "resource_type": resource_type
+            "resource_type": resource_type,
+            "content": content or ""
         }
-        if content:
-            payload["content"] = content
             
         response = requests.post(
             f"{BACKEND_URL}/projects/{project_id}/resources",
@@ -217,6 +252,13 @@ def delete_project_resource(project_id, resource_id):
         return False, str(e)
 
 # Main interface
+# Initialize default tab selection if not set
+if 'active_tab' not in st.session_state:
+    st.session_state.active_tab = 0  # Default to "My Projects" tab
+
+# Determine selected tab index
+selected_tab = st.session_state.get('active_tab', 0)
+
 tab1, tab2, tab3 = st.tabs(["📊 My Projects", "➕ Create Project", "📁 Project Details"])
 
 with tab1:
@@ -639,8 +681,15 @@ with tab2:
             else:
                 success, result = create_project(project_name, project_description)
                 if success:
-                    st.success(f"✅ Project '{project_name}' created successfully!")
-                    st.json(result)
+                    # Store success message for next page load
+                    st.session_state.project_created_message = f"✅ Project '{project_name}' created successfully! Go to the **Project Details** tab to manage it."
+                    
+                    # Store the new project ID in session state for navigation
+                    if isinstance(result, dict) and 'id' in result:
+                        st.session_state.new_project_id = result['id']
+                    
+                    # Rerun to clear form and refresh projects list
+                    st.rerun()
                 else:
                     st.error(f"❌ Failed to create project: {result}")
 
@@ -651,9 +700,19 @@ with tab3:
     if projects:
         project_names = [(p["name"], p["id"]) for p in projects]
         
-        # Use session state if coming from project overview
+        # Use session state if coming from project overview or newly created project
         default_idx = 0
-        if hasattr(st.session_state, 'selected_project_id'):
+        if hasattr(st.session_state, 'new_project_id'):
+            # Prioritize newly created project
+            try:
+                project_ids = [p[1] for p in project_names]
+                default_idx = project_ids.index(st.session_state.new_project_id)
+                # Clear the new project flag after using it
+                del st.session_state.new_project_id
+            except ValueError:
+                # Project ID not in list, will use default selection
+                default_idx = 0
+        elif hasattr(st.session_state, 'selected_project_id'):
             try:
                 project_ids = [p[1] for p in project_names]
                 default_idx = project_ids.index(st.session_state.selected_project_id)
@@ -738,13 +797,17 @@ with tab3:
                                                                 placeholder="Description or notes about this resource...",
                                                                 height=120)
                             
-                            if st.form_submit_button("Add Resource"):
+                            submitted = st.form_submit_button("Add Resource")
+                            
+                            if submitted:
                                 if not resource_name:
                                     st.error("Resource name is required!")
                                 else:
                                     success, result = add_project_resource(project_id, resource_name, resource_type, resource_content)
                                     if success:
-                                        st.success("Resource added successfully!")
+                                        # Store success message to show after rerun
+                                        st.session_state.resource_added_message = f"✅ {resource_type.title()} resource '{resource_name}' added successfully!"
+                                        # Rerun to clear form and refresh data
                                         st.rerun()
                                     else:
                                         st.error(f"Failed to add resource: {result}")
@@ -838,7 +901,7 @@ with tab3:
                                 'Name': resource['name'],
                                 'Added By': resource.get('uploaded_by_username', resource.get('uploaded_by', 'Unknown')),
                                 'Date': uploaded_date,
-                                'Content Preview': (resource["content"][:50] + "..." if resource["content"] and len(resource["content"]) > 50 else resource["content"] or "No content"),
+                                'Content Preview': (str(resource.get("content", ""))[:50] + "..." if resource.get("content") and len(str(resource.get("content", ""))) > 50 else str(resource.get("content", "") or "No content")),
                                 'full_resource_data': resource
                             }
                             glos_grid_data.append(glos_grid_row)
@@ -887,7 +950,7 @@ with tab3:
                             
                             # Check permissions once
                             can_edit = (project_details.get("is_creator", False) or 
-                                      resource["uploaded_by"] == project_details.get("current_user_id"))
+                                      int(resource.get("uploaded_by", 0)) == int(project_details.get("current_user_id", 0)))
                             
                             if not can_edit:
                                 st.warning("⚠️ You can only edit resources you created or if you're the project creator")
@@ -906,7 +969,7 @@ with tab3:
                                         st.write(f"Date: {resource.get('uploaded_at', resource.get('created_at', 'Unknown'))[:10] if resource.get('uploaded_at', resource.get('created_at', 'Unknown')) != 'Unknown' else 'Unknown'}")
                                     
                                     edited_content = st.text_area("Glossary Content", 
-                                                                value=resource.get('content', ''),
+                                                                value=str(resource.get('content', '') or ''),
                                                                 height=200,
                                                                 placeholder="Term 1: Definition 1\nTerm 2: Definition 2\n...")
                                     
@@ -925,12 +988,15 @@ with tab3:
                                                 )
                                             
                                             if success:
+                                                # Show immediate success message
                                                 st.success("✅ Glossary resource updated successfully!")
-                                                # Clear selection to refresh data
+                                                # Clear selection to close edit form
                                                 if 'selected_glossary_id' in st.session_state:
                                                     del st.session_state.selected_glossary_id
                                                 if 'selected_glossary_data' in st.session_state:
                                                     del st.session_state.selected_glossary_data
+                                                # Set flag to stay on Project Details tab after rerun
+                                                st.session_state.stay_on_project_details = True
                                                 st.rerun()
                                             else:
                                                 st.error(f"❌ Failed to update: {result}")
@@ -943,14 +1009,15 @@ with tab3:
                                     if st.button("🗑️ Delete Resource", type="secondary", key="delete_glossary_btn"):
                                         # Check delete permission again  
                                         can_delete = (project_details.get("is_creator", False) or 
-                                                    resource["uploaded_by"] == project_details.get("current_user_id"))
+                                                    int(resource.get("uploaded_by", 0)) == int(project_details.get("current_user_id", 0)))
                                         
                                         if can_delete:
                                             with st.spinner("Deleting resource..."):
                                                 success, result = delete_project_resource(project_id, resource["id"])
                                             
                                             if success:
-                                                st.success("✅ Resource deleted!")
+                                                # Store success message for next page load
+                                                st.session_state.resource_deleted_message = "✅ Glossary resource deleted successfully!"
                                                 # Clear selection
                                                 if 'selected_glossary_id' in st.session_state:
                                                     del st.session_state.selected_glossary_id
@@ -964,11 +1031,14 @@ with tab3:
                                 
                                 with col_actions[1]:
                                     if st.button("❌ Cancel Edit", key="cancel_glossary_btn"):
-                                        # Clear selection
-                                        if 'selected_glossary_id' in st.session_state:
-                                            del st.session_state.selected_glossary_id
-                                        if 'selected_glossary_data' in st.session_state:
-                                            del st.session_state.selected_glossary_data
+                                        # Force clear all related session state
+                                        keys_to_clear = ['selected_glossary_id', 'selected_glossary_data']
+                                        for key in keys_to_clear:
+                                            if key in st.session_state:
+                                                del st.session_state[key]
+                                        
+                                        # Store cancel message for after rerun
+                                        st.session_state.edit_cancelled_message = "✅ Edit cancelled"
                                         st.rerun()
                             else:
                                 # Show cancel button for read-only users
@@ -995,7 +1065,7 @@ with tab3:
                                 'Name': resource['name'],
                                 'Added By': resource.get('uploaded_by_username', resource.get('uploaded_by', 'Unknown')),
                                 'Date': uploaded_date,
-                                'Content Preview': (resource["content"][:50] + "..." if resource["content"] and len(resource["content"]) > 50 else resource["content"] or "No content"),
+                                'Content Preview': (str(resource.get("content", ""))[:50] + "..." if resource.get("content") and len(str(resource.get("content", ""))) > 50 else str(resource.get("content", "") or "No content")),
                                 'full_resource_data': resource
                             }
                             ref_grid_data.append(ref_grid_row)
@@ -1044,7 +1114,7 @@ with tab3:
                             
                             # Check permissions once
                             can_edit = (project_details.get("is_creator", False) or 
-                                      resource["uploaded_by"] == project_details.get("current_user_id"))
+                                      int(resource.get("uploaded_by", 0)) == int(project_details.get("current_user_id", 0)))
                             
                             if not can_edit:
                                 st.warning("⚠️ You can only edit resources you created or if you're the project creator")
@@ -1063,7 +1133,7 @@ with tab3:
                                         st.write(f"Date: {resource.get('uploaded_at', resource.get('created_at', 'Unknown'))[:10] if resource.get('uploaded_at', resource.get('created_at', 'Unknown')) != 'Unknown' else 'Unknown'}")
                                     
                                     edited_content = st.text_area("Reference Description", 
-                                                                value=resource.get('content', ''),
+                                                                value=str(resource.get('content', '') or ''),
                                                                 height=200,
                                                                 placeholder="Description or notes about this reference resource...")
                                     
@@ -1082,7 +1152,10 @@ with tab3:
                                                 )
                                             
                                             if success:
+                                                # Show immediate success message
                                                 st.success("✅ Reference resource updated successfully!")
+                                                # Set flag to stay on Project Details tab after rerun
+                                                st.session_state.stay_on_project_details = True
                                                 # Clear selection to refresh data
                                                 if 'selected_reference_id' in st.session_state:
                                                     del st.session_state.selected_reference_id
@@ -1100,14 +1173,17 @@ with tab3:
                                     if st.button("🗑️ Delete Resource", type="secondary", key="delete_reference_btn"):
                                         # Check delete permission again  
                                         can_delete = (project_details.get("is_creator", False) or 
-                                                    resource["uploaded_by"] == project_details.get("current_user_id"))
+                                                    int(resource.get("uploaded_by", 0)) == int(project_details.get("current_user_id", 0)))
                                         
                                         if can_delete:
                                             with st.spinner("Deleting resource..."):
                                                 success, result = delete_project_resource(project_id, resource["id"])
                                             
                                             if success:
-                                                st.success("✅ Resource deleted!")
+                                                # Show immediate success message
+                                                st.success("✅ Resource deleted successfully!")
+                                                # Set flag to stay on Project Details tab after rerun
+                                                st.session_state.stay_on_project_details = True
                                                 # Clear selection
                                                 if 'selected_reference_id' in st.session_state:
                                                     del st.session_state.selected_reference_id
@@ -1121,11 +1197,14 @@ with tab3:
                                 
                                 with col_actions[1]:
                                     if st.button("❌ Cancel Edit", key="cancel_reference_btn"):
-                                        # Clear selection
-                                        if 'selected_reference_id' in st.session_state:
-                                            del st.session_state.selected_reference_id
-                                        if 'selected_reference_data' in st.session_state:
-                                            del st.session_state.selected_reference_data
+                                        # Force clear all related session state
+                                        keys_to_clear = ['selected_reference_id', 'selected_reference_data']
+                                        for key in keys_to_clear:
+                                            if key in st.session_state:
+                                                del st.session_state[key]
+                                        
+                                        # Store cancel message for after rerun
+                                        st.session_state.edit_cancelled_message = "✅ Edit cancelled"
                                         st.rerun()
                             else:
                                 # Show cancel button for read-only users
@@ -1152,7 +1231,7 @@ with tab3:
                                 'Name': resource['name'],
                                 'Added By': resource.get('uploaded_by_username', resource.get('uploaded_by', 'Unknown')),
                                 'Date': uploaded_date,
-                                'Content Preview': (resource["content"][:50] + "..." if resource["content"] and len(resource["content"]) > 50 else resource["content"] or "No content"),
+                                'Content Preview': (str(resource.get("content", ""))[:50] + "..." if resource.get("content") and len(str(resource.get("content", ""))) > 50 else str(resource.get("content", "") or "No content")),
                                 'full_resource_data': resource
                             }
                             book_grid_data.append(book_grid_row)
@@ -1201,7 +1280,7 @@ with tab3:
                             
                             # Check permissions once
                             can_edit = (project_details.get("is_creator", False) or 
-                                      resource["uploaded_by"] == project_details.get("current_user_id"))
+                                      int(resource.get("uploaded_by", 0)) == int(project_details.get("current_user_id", 0)))
                             
                             if not can_edit:
                                 st.warning("⚠️ You can only edit resources you created or if you're the project creator")
@@ -1220,7 +1299,7 @@ with tab3:
                                         st.write(f"Date: {resource.get('uploaded_at', resource.get('created_at', 'Unknown'))[:10] if resource.get('uploaded_at', resource.get('created_at', 'Unknown')) != 'Unknown' else 'Unknown'}")
                                     
                                     edited_content = st.text_area("Book Description", 
-                                                                value=resource.get('content', ''),
+                                                                value=str(resource.get('content', '') or ''),
                                                                 height=200,
                                                                 placeholder="Description, notes, or summary about this book resource...")
                                     
@@ -1239,7 +1318,10 @@ with tab3:
                                                 )
                                             
                                             if success:
+                                                # Show immediate success message
                                                 st.success("✅ Book resource updated successfully!")
+                                                # Set flag to stay on Project Details tab after rerun
+                                                st.session_state.stay_on_project_details = True
                                                 # Clear selection to refresh data
                                                 if 'selected_book_id' in st.session_state:
                                                     del st.session_state.selected_book_id
@@ -1257,14 +1339,17 @@ with tab3:
                                     if st.button("🗑️ Delete Resource", type="secondary", key="delete_book_btn"):
                                         # Check delete permission again  
                                         can_delete = (project_details.get("is_creator", False) or 
-                                                    resource["uploaded_by"] == project_details.get("current_user_id"))
+                                                    int(resource.get("uploaded_by", 0)) == int(project_details.get("current_user_id", 0)))
                                         
                                         if can_delete:
                                             with st.spinner("Deleting resource..."):
                                                 success, result = delete_project_resource(project_id, resource["id"])
                                             
                                             if success:
-                                                st.success("✅ Resource deleted!")
+                                                # Show immediate success message
+                                                st.success("✅ Resource deleted successfully!")
+                                                # Set flag to stay on Project Details tab after rerun
+                                                st.session_state.stay_on_project_details = True
                                                 # Clear selection
                                                 if 'selected_book_id' in st.session_state:
                                                     del st.session_state.selected_book_id
@@ -1278,11 +1363,14 @@ with tab3:
                                 
                                 with col_actions[1]:
                                     if st.button("❌ Cancel Edit", key="cancel_book_btn"):
-                                        # Clear selection
-                                        if 'selected_book_id' in st.session_state:
-                                            del st.session_state.selected_book_id
-                                        if 'selected_book_data' in st.session_state:
-                                            del st.session_state.selected_book_data
+                                        # Force clear all related session state
+                                        keys_to_clear = ['selected_book_id', 'selected_book_data']
+                                        for key in keys_to_clear:
+                                            if key in st.session_state:
+                                                del st.session_state[key]
+                                        
+                                        # Store cancel message for after rerun
+                                        st.session_state.edit_cancelled_message = "✅ Edit cancelled"
                                         st.rerun()
                             else:
                                 # Show cancel button for read-only users
@@ -1299,16 +1387,10 @@ with tab3:
         st.info("No projects available. Create a project first.")
 
 
-# Clean up session state
-if hasattr(st.session_state, 'selected_project_id'):
-    del st.session_state.selected_project_id
+# Note: Resource selection states are managed within each tab and cleared when operations complete
+# No automatic cleanup needed here as it interferes with edit functionality
 
-# Clean up resource selection states when leaving the page
-cleanup_states = [
-    'selected_glossary_id', 'selected_glossary_data',
-    'selected_reference_id', 'selected_reference_data', 
-    'selected_book_id', 'selected_book_data'
-]
-for state in cleanup_states:
-    if hasattr(st.session_state, state):
-        del st.session_state[state]
+# Only clean up project selection if not navigating to project details
+if not hasattr(st.session_state, 'new_project_id'):
+    if hasattr(st.session_state, 'selected_project_id'):
+        del st.session_state.selected_project_id

@@ -280,12 +280,24 @@ if templates:
                     
                     # Document type selection - full width for visibility
                     document_types = get_document_types()
-                    current_doc_type = template['document_type']
+                    current_doc_type_label = template['document_type']  # This is the label from DB
+                    
+                    # Find the value that corresponds to the label stored in DB
+                    current_doc_type_value = None
+                    for dt in document_types:
+                        if dt["label"] == current_doc_type_label:
+                            current_doc_type_value = dt["value"]
+                            break
+                    
+                    # If not found, default to first option
+                    if current_doc_type_value is None:
+                        current_doc_type_value = document_types[0]["value"]
+                    
                     doc_type_values = [dt["value"] for dt in document_types]
                     doc_type_labels = [dt["label"] for dt in document_types]
                     
                     try:
-                        current_index = doc_type_values.index(current_doc_type)
+                        current_index = doc_type_values.index(current_doc_type_value)
                     except ValueError:
                         # If not found, default to first option
                         current_index = 0
@@ -432,20 +444,23 @@ if st.session_state.get("show_edit_template", False):
                 edit_status = st.selectbox("Status", status_options, index=current_status_index)
             
             with edit_col2:
-                # Map database document type to frontend format
-                doc_type_mapping = {
-                    "Planning Documents": "planning_documents",
-                    "Process Documents": "process_documents",
-                    "Specifications": "specifications",
-                    "Records": "records",
-                    "Templates": "templates",
-                    "Policies": "policies",
-                    "Manuals": "manuals"
-                }
+                # Database stores document types as labels, so find the corresponding value
+                document_types = get_document_types()
+                current_doc_type_label = template['document_type']  # This is the label from DB
                 
-                current_doc_type = doc_type_mapping.get(template['document_type'], "process_documents")
+                # Find the value that corresponds to the label stored in DB
+                current_doc_type_value = None
+                for dt in document_types:
+                    if dt["label"] == current_doc_type_label:
+                        current_doc_type_value = dt["value"]
+                        break
+                
+                # If not found, default to first option
+                if current_doc_type_value is None:
+                    current_doc_type_value = document_types[0]["value"]
+                
                 doc_type_values = [dt["value"] for dt in document_types]
-                current_doc_type_index = doc_type_values.index(current_doc_type) if current_doc_type in doc_type_values else 0
+                current_doc_type_index = doc_type_values.index(current_doc_type_value) if current_doc_type_value in doc_type_values else 0
                 
                 edit_document_type = st.selectbox(
                     "Document Type",

@@ -115,6 +115,34 @@ def get_approved_documents(project_id):
         st.error(f"Error fetching approved documents: {e}")
         return []
 
+def get_document_reviewers_from_data(doc_data):
+    """Get reviewers for a document from the document data itself"""
+    try:
+        # Check if reviewers are included in the document data
+        if 'reviewers' in doc_data:
+            reviewers = doc_data['reviewers']
+            if isinstance(reviewers, list) and reviewers:
+                # If reviewers is a list of user objects or names
+                reviewer_names = []
+                for reviewer in reviewers:
+                    if isinstance(reviewer, dict):
+                        reviewer_names.append(reviewer.get('username', reviewer.get('name', 'Unknown')))
+                    else:
+                        reviewer_names.append(str(reviewer))
+                return ", ".join(reviewer_names)
+            elif isinstance(reviewers, str) and reviewers.strip():
+                return reviewers
+        
+        # Check if there are any reviewer-related fields
+        reviewer_fields = ['current_reviewer', 'assigned_reviewers', 'current_reviewers', 'reviewer_usernames']
+        for field in reviewer_fields:
+            if field in doc_data and doc_data[field]:
+                return str(doc_data[field])
+        
+        return "None"
+    except Exception as e:
+        return "None"
+
 def submit_for_review(document_id, reviewer_id, comment):
     """Submit document for review using V2 API"""
     try:
@@ -263,12 +291,10 @@ def display_comment_history(comments):
         user = comment.get("commenter") or comment.get("user", "Unknown")
         text = comment.get("comment", "")
         
-        st.markdown(f"""
-        <div class="comment-item">
-            <strong>{date_time}</strong> | <strong>{comment_type}</strong> | {user}<br>
-            {text}
-        </div>
-        """, unsafe_allow_html=True)
+        with st.container():
+            st.markdown(f"**{date_time}** | **{comment_type}** | {user}")
+            st.write(text)
+            st.divider()
 
 def get_document_types():
     """Get available document types"""
@@ -334,9 +360,9 @@ def get_project_documents(project_id, status=None, document_type=None, created_b
         return []
 
 def get_document_by_id(document_id):
-    """Get document details"""
+    """Get document details using V2 API"""
     try:
-        response = requests.get(f"{BACKEND_URL}/documents/{document_id}", headers=get_auth_headers())
+        response = requests.get(f"{BACKEND_URL}/api/v2/documents/{document_id}", headers=get_auth_headers())
         if response.status_code == 200:
             return response.json()
         return None
@@ -345,11 +371,16 @@ def get_document_by_id(document_id):
         return None
 
 def create_document(project_id, document_data):
-    """Create a new document"""
+    """Create a new document using V2 API"""
     try:
         response = requests.post(
-            f"{BACKEND_URL}/projects/{project_id}/documents",
-            json=document_data,
+            f"{BACKEND_URL}/api/v2/documents",
+            params={
+                "name": document_data["name"],
+                "document_type": document_data["document_type"],
+                "content": document_data["content"],
+                "project_id": project_id
+            },
             headers=get_auth_headers()
         )
         return response.json(), response.status_code
@@ -412,14 +443,14 @@ if show_reviews_notice:
     st.info("📋 **Looking for Reviews?** You can find document reviews in the **'My Documents' → 'Reviews'** tab below, or use the **'All Documents'** tab to review any project document.")
 
 # Tabs for different operations
-tab1, tab2, tab3, tab4 = st.tabs(["📋 My Documents", "➕ Create Document", "📄 All Documents", "📚 Revision History"])
+tab1, tab2, tab3 = st.tabs(["📋 My Documents", "➕ Create Document", "📄 All Documents"])
 
 with tab1:
     st.subheader("📝 My Documents")
     st.caption("Documents you created")
     
     # Create sub-tabs for better organization
-    author_tab1, author_tab2, author_tab3 = st.tabs(["📝 My Documents", "📋 Reviews", "✅ Approved"])
+    author_tab1, author_tab2, author_tab3 = st.tabs(["📝 My Documents", "📋 My Reviews", "✅ Approved"])
     
     with author_tab1:
         documents = get_documents_for_author(project_id)
@@ -439,8 +470,13 @@ with tab1:
                     # Get reviewer names
                     reviewers = ""
                     if doc.get('reviewers'):
-                        reviewer_names = [r['username'] for r in doc['reviewers']]
-                        reviewers = ', '.join(reviewer_names)
+                        if isinstance(doc['reviewers'], list) and doc['reviewers']:
+                            # Handle both formats: list of strings or list of dicts
+                            if isinstance(doc['reviewers'][0], dict):
+                                reviewer_names = [r['username'] for r in doc['reviewers']]
+                            else:
+                                reviewer_names = doc['reviewers']
+                            reviewers = ', '.join(reviewer_names)
                     
                     grid_row = {
                         'id': doc['id'],
@@ -956,14 +992,9 @@ with tab2:
         reviewers = []
         if status == "request_review":
             project_members = get_project_members(project_id)
-            st.write(f"🔍 DEBUG: Found {len(project_members)} project members")
-            st.write(f"🔍 DEBUG: Current user ID: {user_info['id']}")
-            for member in project_members:
-                st.write(f"🔍 DEBUG: Member: {member}")
             
             # Filter out current user
             available_reviewers = [member for member in project_members if member["user_id"] != user_info["id"]]
-            st.write(f"🔍 DEBUG: Available reviewers after filtering: {len(available_reviewers)}")
             
             if available_reviewers:
                 reviewer_options = st.multiselect(
@@ -976,7 +1007,6 @@ with tab2:
                 reviewers = reviewer_options
             else:
                 st.error("⚠️ No project members available for review (excluding yourself).")
-                st.write(f"🔍 DEBUG: Total project members: {len(project_members)}, Current user filtered out: {user_info.get('username', 'Unknown')}")
         
         submitted = st.form_submit_button("🚀 Create Document", type="primary")
         
@@ -1086,7 +1116,7 @@ with tab3:
             # Prepare data for st.dataframe
             all_docs_grid_data = []
             for doc in documents:
-                doc_status = doc.get('status', doc.get('document_state', 'unknown'))
+                doc_status = doc.get('document_state', doc.get('status', 'unknown'))
                 # Try multiple possible author field names
                 author = (doc.get('created_by_username') or 
                          doc.get('author') or 
@@ -1098,6 +1128,7 @@ with tab3:
                     'document_type': doc['document_type'],
                     'status': doc_status,
                     'author': author,
+                    'reviewers': get_document_reviewers_from_data(doc),
                     'created_at': doc['created_at'][:10] if doc['created_at'] else 'N/A',
                     'updated_at': doc['updated_at'][:10] if doc['updated_at'] else 'N/A',
                     'full_doc_data': doc
@@ -1112,6 +1143,7 @@ with tab3:
                     'Type': row['document_type'].replace('_', ' ').title(),
                     'Status': row['status'].replace('_', ' ').title(),
                     'Author': row['author'],
+                    'Reviewers': row['reviewers'],
                     'Updated': row['updated_at']
                 }
                 all_docs_df_data.append(all_docs_df_row)
@@ -1154,7 +1186,7 @@ with tab3:
                 
                 # Document header
                 st.markdown(f"**{doc['name']}** | {doc['document_type'].replace('_', ' ').title()}")
-                doc_status = doc.get('status', doc.get('document_state', 'unknown'))
+                doc_status = doc.get('document_state', doc.get('status', 'unknown'))
                 # Try multiple possible author field names
                 author = (doc.get('created_by_username') or 
                          doc.get('author') or 
@@ -1192,198 +1224,4 @@ with tab3:
                     st.rerun()
             else:
                 st.info("Select a document from the left panel to view or edit")
-
-with tab4:
-    st.subheader("📚 Revision History")
-    st.caption("View and compare document revisions")
-    
-    # Document selection for revision history
-    all_docs = get_documents_for_author(project_id)
-    approved_docs = get_approved_documents(project_id)
-    
-    # Combine and deduplicate documents
-    combined_docs = {}
-    for doc in all_docs + approved_docs:
-        combined_docs[doc['id']] = doc
-    
-    available_docs = list(combined_docs.values())
-    
-    if not available_docs:
-        st.info("No documents available for revision history")
-    else:
-        # Document selector
-        col_doc, col_refresh = st.columns([4, 1])
-        
-        with col_doc:
-            doc_options = {f"{doc['name']} ({doc.get('document_state', doc.get('status', 'unknown')).replace('_', ' ').title()})": doc['id'] 
-                          for doc in available_docs}
-            
-            selected_doc_display = st.selectbox(
-                "Select Document:",
-                options=list(doc_options.keys()),
-                key="revision_history_doc_selector"
-            )
-        
-        with col_refresh:
-            if st.button("🔄 Refresh", key="refresh_revisions"):
-                st.rerun()
-        
-        if selected_doc_display:
-            selected_doc_id = doc_options[selected_doc_display]
-            selected_doc = combined_docs[selected_doc_id]
-            
-            # Get revision history
-            revisions = get_document_revisions(selected_doc_id)
-            
-            if not revisions:
-                st.info("No revision history available for this document")
-            else:
-                st.markdown(f"**Document:** {selected_doc['name']}")
-                st.markdown(f"**Total Revisions:** {len(revisions)}")
-                
-                # Create columns for revision list and content viewer
-                rev_col1, rev_col2 = st.columns([1, 2])
-                
-                with rev_col1:
-                    st.subheader("📋 Revisions")
-                    
-                    # Prepare data for DataFrame
-                    revision_grid_data = []
-                    for revision in revisions:
-                        created_at = revision.get('created_at', '')
-                        date_str = created_at[:10] if created_at else 'N/A'
-                        current_indicator = "🔴 Current" if revision['is_current'] else ""
-                        
-                        revision_row = {
-                            'Revision': f"Rev {revision['revision_number']}",
-                            'Date': date_str,
-                            'Author': revision['created_by'],
-                            'Status': revision['status'].replace('_', ' ').title(),
-                            'Current': current_indicator,
-                            'Comment': revision.get('comment', '')[:50] + '...' if revision.get('comment') and len(revision.get('comment', '')) > 50 else revision.get('comment', ''),
-                            'full_revision_data': revision
-                        }
-                        revision_grid_data.append(revision_row)
-                    
-                    revision_df_data = []
-                    for row in revision_grid_data:
-                        revision_df_row = {
-                            'Revision': row['Revision'],
-                            'Date': row['Date'],
-                            'Author': row['Author'],
-                            'Status': row['Status'],
-                            'Current': row['Current']
-                        }
-                        revision_df_data.append(revision_df_row)
-                    
-                    revision_df = pd.DataFrame(revision_df_data)
-                    
-                    # Display with selection capability
-                    revision_selected_indices = st.dataframe(
-                        revision_df,
-                        use_container_width=True,
-                        hide_index=True,
-                        on_select="rerun",
-                        selection_mode="single-row",
-                        height=400
-                    )
-                    
-                    st.caption("💡 Select a row to view revision details")
-                    
-                    # Handle revision selection
-                    if revision_selected_indices and len(revision_selected_indices.selection.rows) > 0:
-                        selected_idx = revision_selected_indices.selection.rows[0]
-                        revision = revision_grid_data[selected_idx]['full_revision_data']
-                        # Only update if different revision selected
-                        if st.session_state.get('selected_revision_id') != revision.get('revision_id'):
-                            st.session_state.selected_revision_id = revision.get('revision_id')
-                            st.session_state.selected_revision = revision
-                            st.rerun()
-                
-                with rev_col2:
-                    st.subheader("📄 Revision Content")
-                    
-                    if "selected_revision" in st.session_state:
-                        revision = st.session_state.selected_revision
-                        
-                        # Revision header
-                        current_text = " (Current Version)" if revision['is_current'] else ""
-                        st.markdown(f"**Revision {revision['revision_number']}{current_text}**")
-                        
-                        revision_info_col1, revision_info_col2 = st.columns(2)
-                        with revision_info_col1:
-                            created_at = revision.get('created_at', '')
-                            date_str = created_at[:10] if created_at else 'N/A'
-                            st.markdown(f"**Date:** {date_str}")
-                            st.markdown(f"**Author:** {revision['created_by']}")
-                        
-                        with revision_info_col2:
-                            st.markdown(f"**Status:** {revision['status'].replace('_', ' ').title()}")
-                            if revision.get('comment'):
-                                st.markdown(f"**Comment:** {revision['comment']}")
-                        
-                        st.divider()
-                        
-                        # Content display
-                        if revision['content']:
-                            # Show content in markdown format
-                            st.markdown("**Content:**")
-                            with st.container():
-                                st.markdown(revision['content'])
-                        else:
-                            st.info("No content available for this revision")
-                        
-                        # Action buttons for current user if they own the document
-                        if selected_doc.get('author') == user_info.get('username') or selected_doc.get('created_by') == user_info.get('id'):
-                            st.divider()
-                            st.subheader("🔧 Revision Actions")
-                            
-                            if not revision['is_current']:
-                                # Option to restore this revision
-                                if st.button("🔄 Restore This Revision", 
-                                           key=f"restore_rev_{revision['revision_id']}", 
-                                           help="Create a new revision with this content"):
-                                    restore_comment = st.text_input(
-                                        "Restoration Comment:",
-                                        value=f"Restored from revision {revision['revision_number']}",
-                                        key=f"restore_comment_{revision['revision_id']}"
-                                    )
-                                    
-                                    if st.button("✅ Confirm Restore", key=f"confirm_restore_{revision['revision_id']}"):
-                                        result = create_document_revision(
-                                            selected_doc_id, 
-                                            revision['content'], 
-                                            restore_comment
-                                        )
-                                        
-                                        if result.get("success"):
-                                            st.success(f"Revision restored successfully as revision {result.get('revision_number')}")
-                                            # Clear the selected revision and refresh
-                                            if "selected_revision" in st.session_state:
-                                                del st.session_state.selected_revision
-                                            st.rerun()
-                                        else:
-                                            st.error(f"Failed to restore revision: {result.get('error', 'Unknown error')}")
-                            else:
-                                st.info("This is the current revision")
-                        
-                        # Close button
-                        if st.button("❌ Close Revision View", key="close_revision_view"):
-                            if "selected_revision" in st.session_state:
-                                del st.session_state.selected_revision
-                            st.rerun()
-                    else:
-                        st.info("Select a revision from the left panel to view its content")
-                        
-                        # Show instructions
-                        st.markdown("""
-                        ### 📚 How to Use Revision History
-                        
-                        1. **View Revisions**: Click on any revision in the left panel to see its content
-                        2. **Current Revision**: The current revision is highlighted in green
-                        3. **Compare Changes**: View different revisions to see how the document evolved
-                        4. **Restore Revision**: Document authors can restore any previous revision
-                        
-                        📝 **Note**: Revisions are automatically created when significant changes are made to documents.
-                        """)
 
