@@ -5,7 +5,7 @@ from datetime import datetime, date
 import pandas as pd
 from typing import List, Dict, Any
 from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers
-from config import BACKEND_URL, DATAFRAME_HEIGHT
+from config import BACKEND_URL, DATAFRAME_HEIGHT, EXPORT_FILENAME_FORMAT, MARKDOWN_TRUNCATE_LENGTH
 
 require_auth()
 
@@ -113,7 +113,7 @@ def get_corrective_actions(finding_id=None):
         return []
 
 # Main tab navigation
-tab1, tab2, tab3, tab4 = st.tabs(["Audit Dashboard", "Manage Audits", "Findings & Actions", "Reports"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Audit Dashboard", "📋 Manage Audits", "🔍 Findings & Actions", "📄 Reports"])
 
 with tab1:
     
@@ -171,7 +171,7 @@ with tab1:
 
 with tab2:
     
-    audit_subtabs = st.tabs(["View/Edit Existing", "Create New Audit"])
+    audit_subtabs = st.tabs(["👀 View/Edit Existing", "➕ Create New Audit"])
     
     with audit_subtabs[0]:
         st.markdown("**View and Edit Audits**")
@@ -459,7 +459,7 @@ with tab3:
         selected_audit_str = st.selectbox("Select Audit for Findings", audit_options, key="findings_audit")
         selected_audit = audits[audit_options.index(selected_audit_str)]
         
-        findings_tab1, findings_tab2 = st.tabs(["View Findings", "Add Finding"])
+        findings_tab1, findings_tab2 = st.tabs(["👀 View Findings", "➕ Add Finding"])
         
         with findings_tab1:
             findings = get_findings(selected_audit["id"])
@@ -723,7 +723,19 @@ with tab4:
         selected_audit_str = st.selectbox("Select Audit for Report", audit_options, key="report_audit")
         selected_audit = audits[audit_options.index(selected_audit_str)]
         
-        if st.button("📥 Download Audit Report (csv)", type="primary", help="Download comprehensive audit report as CSV"):
+        # Format selection
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            report_format = st.selectbox(
+                "Report Format",
+                options=["CSV", "Markdown"],
+                help="Choose the format for your audit report download"
+            )
+        
+        with col2:
+            st.write("")  # Add spacing
+        
+        if st.button(f"📥 Download Audit Report ({report_format})", type="primary", help=f"Download comprehensive audit report as {report_format}"):
             # Get findings and corrective actions for the selected audit
             findings = get_findings(selected_audit["id"])
             
@@ -820,25 +832,124 @@ with tab4:
                 import pandas as pd
                 from datetime import datetime
                 
-                df = pd.DataFrame(csv_data)
-                csv_string = df.to_csv(index=False)
-                
                 # Generate filename with audit number and timestamp
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"audit_report_{selected_audit['audit_number']}_{timestamp}.csv"
+                timestamp = datetime.now().strftime(EXPORT_FILENAME_FORMAT)
+                
+                if report_format == "CSV":
+                    df = pd.DataFrame(csv_data)
+                    report_data = df.to_csv(index=False)
+                    filename = f"audit_report_{selected_audit['audit_number']}_{timestamp}.csv"
+                    mime_type = "text/csv"
+                    
+                else:  # Markdown format
+                    # Create Markdown report
+                    markdown_lines = []
+                    
+                    # Header
+                    markdown_lines.append(f"# Audit Report: {selected_audit['audit_number']}")
+                    markdown_lines.append(f"## {selected_audit['title']}")
+                    markdown_lines.append("")
+                    
+                    # Audit Details Section
+                    markdown_lines.append("## 📋 Audit Details")
+                    markdown_lines.append("")
+                    markdown_lines.append(f"- **Audit Number**: {selected_audit['audit_number']}")
+                    markdown_lines.append(f"- **Title**: {selected_audit['title']}")
+                    markdown_lines.append(f"- **Type**: {selected_audit['audit_type'].title()}")
+                    markdown_lines.append(f"- **Standard**: {selected_audit['compliance_standard']}")
+                    markdown_lines.append(f"- **Status**: {selected_audit.get('status', '').title()}")
+                    markdown_lines.append(f"- **Department**: {selected_audit['auditee_department']}")
+                    markdown_lines.append(f"- **Lead Auditor**: {selected_audit['lead_auditor_username']}")
+                    markdown_lines.append(f"- **Date Range**: {selected_audit['planned_start_date']} to {selected_audit['planned_end_date']}")
+                    markdown_lines.append("")
+                    markdown_lines.append(f"**Scope**: {selected_audit['scope']}")
+                    markdown_lines.append("")
+                    
+                    # Findings Section
+                    if findings:
+                        markdown_lines.append("## 🔍 Findings")
+                        markdown_lines.append("")
+                        
+                        for i, finding in enumerate(findings, 1):
+                            markdown_lines.append(f"### {i}. Finding {finding['finding_number']}")
+                            markdown_lines.append("")
+                            markdown_lines.append(f"**Title**: {finding['title']}")
+                            markdown_lines.append(f"**Severity**: {finding['severity']}")
+                            markdown_lines.append(f"**Category**: {finding['category']}")
+                            if finding.get('clause_reference'):
+                                markdown_lines.append(f"**Clause Reference**: {finding['clause_reference']}")
+                            markdown_lines.append(f"**Status**: {finding.get('status', '')}")
+                            if finding.get('identified_date'):
+                                markdown_lines.append(f"**Identified Date**: {finding['identified_date']}")
+                            if finding.get('identified_by_username'):
+                                markdown_lines.append(f"**Identified By**: {finding['identified_by_username']}")
+                            markdown_lines.append("")
+                            markdown_lines.append(f"**Description**:")
+                            markdown_lines.append(f"{finding['description']}")
+                            markdown_lines.append("")
+                            
+                            if finding.get('evidence'):
+                                markdown_lines.append(f"**Evidence**:")
+                                markdown_lines.append(f"{finding['evidence']}")
+                                markdown_lines.append("")
+                            
+                            if finding.get('root_cause'):
+                                markdown_lines.append(f"**Root Cause**:")
+                                markdown_lines.append(f"{finding['root_cause']}")
+                                markdown_lines.append("")
+                            
+                            # Add corrective actions for this finding
+                            actions = get_corrective_actions(finding['id'])
+                            if actions:
+                                markdown_lines.append(f"#### Corrective Actions for Finding {finding['finding_number']}")
+                                markdown_lines.append("")
+                                
+                                for j, action in enumerate(actions, 1):
+                                    markdown_lines.append(f"**Action {action['action_number']}**:")
+                                    markdown_lines.append(f"- **Description**: {action['description']}")
+                                    markdown_lines.append(f"- **Responsible Person**: {action['responsible_person_username']}")
+                                    markdown_lines.append(f"- **Target Date**: {action['target_date']}")
+                                    markdown_lines.append(f"- **Status**: {action.get('status', '')}")
+                                    if action.get('verification_notes'):
+                                        markdown_lines.append(f"- **Verification Notes**: {action['verification_notes']}")
+                                    markdown_lines.append("")
+                            
+                            markdown_lines.append("---")
+                            markdown_lines.append("")
+                    
+                    else:
+                        markdown_lines.append("## 🔍 Findings")
+                        markdown_lines.append("")
+                        markdown_lines.append("No findings were recorded for this audit.")
+                        markdown_lines.append("")
+                    
+                    # Summary Section
+                    findings_count = len([item for item in csv_data if item['Item Type'] == 'Finding' and item['ID'] != 'N/A'])
+                    actions_count = len([item for item in csv_data if item['Item Type'] == 'Corrective Action'])
+                    
+                    markdown_lines.append("## 📊 Summary")
+                    markdown_lines.append("")
+                    markdown_lines.append(f"- **Total Findings**: {findings_count}")
+                    markdown_lines.append(f"- **Total Corrective Actions**: {actions_count}")
+                    markdown_lines.append("")
+                    markdown_lines.append(f"*Report generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
+                    
+                    report_data = "\n".join(markdown_lines)
+                    filename = f"audit_report_{selected_audit['audit_number']}_{timestamp}.md"
+                    mime_type = "text/markdown"
                 
                 st.download_button(
-                    label="📁 Download CSV Report",
-                    data=csv_string,
+                    label=f"📁 Download {report_format} Report",
+                    data=report_data,
                     file_name=filename,
-                    mime="text/csv",
+                    mime=mime_type,
                     type="primary"
                 )
                 
                 findings_count = len([item for item in csv_data if item['Item Type'] == 'Finding' and item['ID'] != 'N/A'])
                 actions_count = len([item for item in csv_data if item['Item Type'] == 'Corrective Action'])
                 
-                st.success(f"✅ Audit report ready! Contains {findings_count} findings and {actions_count} corrective actions.")
+                st.success(f"✅ {report_format} audit report ready! Contains {findings_count} findings and {actions_count} corrective actions.")
             else:
                 st.error("❌ No audit data available for download.")
     else:

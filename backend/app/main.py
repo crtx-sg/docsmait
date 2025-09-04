@@ -500,6 +500,25 @@ def add_project_resource(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result["error"])
     return result
 
+@app.put("/projects/{project_id}/resources/{resource_id}")
+def update_project_resource(
+    project_id: str,
+    resource_id: str,
+    resource: models.ProjectResourceCreate,
+    user_id: int = Depends(auth.verify_token)
+):
+    """Update project resource"""
+    result = projects_service.update_project_resource(
+        resource_id, user_id, resource.name, resource.content, resource.resource_type
+    )
+    if not result["success"]:
+        if "uploader" in result["error"] or "creator" in result["error"]:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=result["error"])
+        if "not found" in result["error"]:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=result["error"])
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result["error"])
+    return result
+
 @app.delete("/projects/{project_id}/resources/{resource_id}")
 def delete_project_resource(
     project_id: str,

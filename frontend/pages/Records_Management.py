@@ -37,12 +37,13 @@ def make_api_call(endpoint: str, method: str = "GET", data: dict = None):
         return {"success": False, "error": str(e)}
 
 # Main interface with tabs for different record types
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏢 Suppliers", 
     "📦 Inventory", 
     "🔬 Equipment", 
     "😟 Complaints", 
-    "⚠️ Non-Conformances"
+    "⚠️ Non-Conformances",
+    "📥 Export"
 ])
 
 # Tab 1: Supplier Management
@@ -198,6 +199,145 @@ with tab5:
             st.info("No non-conformances found")
     else:
         st.error(f"Failed to load non-conformances: {ncs_response.get('error', 'Unknown error')}")
+
+# Tab 6: Export
+with tab6:
+    st.subheader("📥 Export Records")
+    st.markdown("Export records from various categories for reporting and compliance purposes.")
+    
+    # Record selection
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        export_category = st.selectbox(
+            "Select Record Category",
+            options=[
+                ("suppliers", "🏢 Supplier Management"),
+                ("parts-inventory", "📦 Parts & Inventory"),
+                ("lab-equipment", "🔬 Lab Equipment"),
+                ("customer-complaints", "😟 Customer Complaints"),
+                ("non-conformances", "⚠️ Non-Conformances")
+            ],
+            format_func=lambda x: x[1],
+            help="Choose which type of records to export"
+        )
+    
+    with col2:
+        export_format = st.selectbox(
+            "Export Format",
+            options=["CSV", "Markdown"],
+            help="Choose the format for your export"
+        )
+    
+    if st.button(f"📥 Export {export_category[1]} ({export_format})", type="primary"):
+        # Get data based on selected category
+        category_key = export_category[0]
+        category_name = export_category[1]
+        
+        # Fetch data from API
+        response = make_api_call(f"records/{category_key}")
+        
+        if response.get("success"):
+            # Get the appropriate data key based on category
+            data_keys = {
+                "suppliers": "suppliers",
+                "parts-inventory": "parts",
+                "lab-equipment": "equipment", 
+                "customer-complaints": "complaints",
+                "non-conformances": "non_conformances"
+            }
+            
+            data_key = data_keys.get(category_key, "data")
+            records = response.get(data_key, [])
+            
+            if records:
+                from datetime import datetime
+                import pandas as pd
+                
+                # Generate timestamp for filename
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                
+                if export_format == "CSV":
+                    # Convert to DataFrame and CSV
+                    df = pd.DataFrame(records)
+                    csv_data = df.to_csv(index=False)
+                    filename = f"{category_key}_export_{timestamp}.csv"
+                    mime_type = "text/csv"
+                    
+                    st.download_button(
+                        label=f"📁 Download {category_name} CSV",
+                        data=csv_data,
+                        file_name=filename,
+                        mime=mime_type,
+                        type="primary"
+                    )
+                    
+                else:  # Markdown format
+                    # Create Markdown report
+                    markdown_lines = []
+                    
+                    # Header
+                    markdown_lines.append(f"# {category_name} Export Report")
+                    markdown_lines.append("")
+                    markdown_lines.append(f"**Export Date**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                    markdown_lines.append(f"**Total Records**: {len(records)}")
+                    markdown_lines.append("")
+                    
+                    # Records section
+                    markdown_lines.append("## Records")
+                    markdown_lines.append("")
+                    
+                    for i, record in enumerate(records, 1):
+                        markdown_lines.append(f"### {i}. Record #{record.get('id', i)}")
+                        markdown_lines.append("")
+                        
+                        # Add key fields based on record type
+                        for key, value in record.items():
+                            if key != 'id' and value:  # Skip empty values and id
+                                formatted_key = key.replace('_', ' ').title()
+                                # Limit long text values
+                                if isinstance(value, str) and len(value) > 200:
+                                    value = value[:200] + "..."
+                                markdown_lines.append(f"- **{formatted_key}**: {value}")
+                        
+                        markdown_lines.append("")
+                        markdown_lines.append("---")
+                        markdown_lines.append("")
+                    
+                    # Summary
+                    markdown_lines.append("## Summary")
+                    markdown_lines.append("")
+                    markdown_lines.append(f"This report contains {len(records)} records from {category_name}.")
+                    markdown_lines.append("")
+                    markdown_lines.append(f"*Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
+                    
+                    markdown_data = "\n".join(markdown_lines)
+                    filename = f"{category_key}_export_{timestamp}.md"
+                    mime_type = "text/markdown"
+                    
+                    st.download_button(
+                        label=f"📁 Download {category_name} Markdown",
+                        data=markdown_data,
+                        file_name=filename,
+                        mime=mime_type,
+                        type="primary"
+                    )
+                
+                st.success(f"✅ {export_format} export ready! Contains {len(records)} records from {category_name}.")
+                
+            else:
+                st.info(f"No records found for {category_name}")
+        else:
+            st.error(f"Failed to fetch {category_name} data: {response.get('error', 'Unknown error')}")
+    
+    st.markdown("---")
+    st.markdown("### 💡 Export Information")
+    st.markdown("""
+    - **CSV Format**: Structured data suitable for Excel, databases, and data analysis
+    - **Markdown Format**: Human-readable report format with detailed formatting
+    - All exports include timestamp in filename for version control
+    - Large text fields are truncated in Markdown format for readability
+    """)
 
 # Summary metrics
 st.markdown("---")

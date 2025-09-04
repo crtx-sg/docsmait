@@ -626,7 +626,7 @@ with tab1:
                                 st.info("No other project members available as reviewers")
                         
                         with col_b:
-                            if st.button("❌ Close"):
+                            if st.button("❌ Close", key="close_editable_doc"):
                                 if 'selected_doc' in st.session_state:
                                     del st.session_state.selected_doc
                                 if 'mode' in st.session_state:
@@ -634,7 +634,7 @@ with tab1:
                                 st.rerun()
                     else:
                         st.info(f"Document is currently {doc_status.replace('_', ' ')}")
-                        if st.button("❌ Close"):
+                        if st.button("❌ Close", key="close_readonly_doc"):
                             if 'selected_doc' in st.session_state:
                                 del st.session_state.selected_doc
                             if 'mode' in st.session_state:
@@ -772,7 +772,7 @@ with tab1:
                                 st.error("Please provide a comment with your approval")
                     
                     with col_r3:
-                        if st.button("❌ Close"):
+                        if st.button("❌ Close", key="close_review_doc"):
                             del st.session_state.selected_review_doc
                             st.rerun()
                 else:

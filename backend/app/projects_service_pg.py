@@ -143,6 +143,10 @@ class ProjectsService:
             resources = []
             try:
                 for resource in project.resources:
+                    # Get uploader username
+                    uploader = db.query(User).filter(User.id == resource.uploaded_by).first()
+                    uploaded_by_username = uploader.username if uploader else "Unknown"
+                    
                     resources.append({
                         "id": resource.id,
                         "name": resource.name,
@@ -152,7 +156,9 @@ class ProjectsService:
                         "file_size_bytes": resource.file_size_bytes,
                         "content_type": resource.content_type,
                         "uploaded_by": resource.uploaded_by,
-                        "uploaded_at": resource.uploaded_at.isoformat() if resource.uploaded_at else None
+                        "uploaded_by_username": uploaded_by_username,
+                        "uploaded_at": resource.uploaded_at.isoformat() if resource.uploaded_at else None,
+                        "updated_at": resource.updated_at.isoformat() if hasattr(resource, 'updated_at') and resource.updated_at else None
                     })
             except Exception as e:
                 print(f"Error loading project resources: {e}")
@@ -168,7 +174,9 @@ class ProjectsService:
                 "updated_at": project.updated_at.isoformat() if project.updated_at else None,
                 "members": members,
                 "resources": resources,
-                "user_role": membership.role
+                "user_role": membership.role,
+                "current_user_id": user_id,
+                "is_creator": project.created_by == user_id
             }
             
         except Exception as e:
@@ -355,9 +363,90 @@ class ProjectsService:
         finally:
             db.close()
     
+    def update_project_resource(self, resource_id: str, user_id: int, name: str = None, 
+                              content: str = None, resource_type: str = None) -> Dict[str, Any]:
+        """Update project resource"""
+        db = next(get_db())
+        try:
+            # Get the resource first
+            resource = db.query(ProjectResource).filter(
+                ProjectResource.id == resource_id
+            ).first()
+            
+            if not resource:
+                return {"success": False, "error": "Resource not found"}
+            
+            # Check if user can update (creator or resource uploader)
+            project = db.query(Project).filter(Project.id == resource.project_id).first()
+            if not project:
+                return {"success": False, "error": "Project not found"}
+            
+            # Check permissions: project creator or resource uploader
+            if project.created_by != user_id and resource.uploaded_by != user_id:
+                return {"success": False, "error": "Only project creator or resource uploader can update this resource"}
+            
+            # Update fields if provided
+            if name is not None:
+                resource.name = name
+            if content is not None:
+                resource.content = content
+            if resource_type is not None:
+                resource.resource_type = resource_type
+            
+            resource.updated_at = datetime.utcnow()
+            
+            db.commit()
+            
+            return {
+                "success": True,
+                "message": "Resource updated successfully",
+                "resource_id": resource_id
+            }
+            
+        except Exception as e:
+            db.rollback()
+            print(f"Error updating project resource: {e}")
+            return {"success": False, "error": f"Failed to update resource: {str(e)}"}
+        finally:
+            db.close()
+    
     def delete_project_resource(self, resource_id: str, user_id: int) -> Dict[str, Any]:
-        """Delete project resource (placeholder - not implemented yet)"""
-        return {"success": False, "error": "Delete project resource not implemented yet"}
+        """Delete project resource"""
+        db = next(get_db())
+        try:
+            # Get the resource first
+            resource = db.query(ProjectResource).filter(
+                ProjectResource.id == resource_id
+            ).first()
+            
+            if not resource:
+                return {"success": False, "error": "Resource not found"}
+            
+            # Check if user can delete (creator or resource uploader)
+            project = db.query(Project).filter(Project.id == resource.project_id).first()
+            if not project:
+                return {"success": False, "error": "Project not found"}
+            
+            # Check permissions: project creator or resource uploader
+            if project.created_by != user_id and resource.uploaded_by != user_id:
+                return {"success": False, "error": "Only project creator or resource uploader can delete this resource"}
+            
+            # Delete the resource
+            db.delete(resource)
+            db.commit()
+            
+            return {
+                "success": True,
+                "message": "Resource deleted successfully",
+                "resource_id": resource_id
+            }
+            
+        except Exception as e:
+            db.rollback()
+            print(f"Error deleting project resource: {e}")
+            return {"success": False, "error": f"Failed to delete resource: {str(e)}"}
+        finally:
+            db.close()
 
 # Create global instance
 projects_service = ProjectsService()

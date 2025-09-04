@@ -23,7 +23,8 @@
    - [6.7 Design Record Management](#67-design-record-management)
    - [6.8 Records Management](#68-records-management)
    - [6.9 Audit Management](#69-audit-management)
-   - [6.10 AI Configuration](#610-ai-configuration)
+   - [6.10 Training System](#610-training-system)
+   - [6.11 AI Configuration](#611-ai-configuration)
 7. [Advanced Features](#7-advanced-features)
 8. [Troubleshooting](#8-troubleshooting)
 9. [API Reference](#9-api-reference)
@@ -393,9 +394,36 @@ JWT_SECRET_KEY=your_production_secret
 3. First-time login requires password change
 
 #### Password Management
-- Strong password requirements enforced
-- Password reset via admin interface
-- Session timeout configurable
+
+1. **Password Requirements**:
+   - Minimum 8 characters length (configurable)
+   - Strong password recommendations
+   - Password complexity validation
+
+2. **Admin Password Reset**:
+   - **Access**: Only super admins can reset user passwords
+   - **Security**: Admins cannot reset their own passwords
+   - **Process**:
+     1. Go to **Settings** → **User Management** 
+     2. Navigate to **"🔐 Reset User Password"** section
+     3. Select user from dropdown (excludes current admin)
+     4. Enter new password (minimum 8 characters)
+     5. Confirm new password
+     6. Click **"🔐 Reset Password"**
+     7. Securely communicate new password to user
+
+3. **Security Features**:
+   - Password confirmation validation
+   - User role identification in selection
+   - Secure communication guidance
+   - Success confirmation with next steps
+   - Automatic UI refresh after successful reset
+
+4. **Best Practices**:
+   - Communicate passwords securely (email, in-person, secure messaging)
+   - Encourage users to change password after reset
+   - Password resets are logged for security auditing
+   - Use strong, unique passwords for each reset
 
 ### 6.2 Project Management
 
@@ -909,7 +937,37 @@ Comprehensive ISO 13485 compliant records management system for regulatory compl
    - **Advanced Filters**: Status, category, date range filtering
    - **Search Capability**: Text search across all record fields
    - **Quick Access**: Streamlined record location and selection
-   - **Export Functions**: CSV, Excel, PDF export capabilities
+
+#### Export & Reporting
+
+**Dedicated Export Tab** provides comprehensive data export functionality for all record categories:
+
+1. **Export Categories**:
+   - **🏢 Supplier Management**: Complete supplier data with performance metrics
+   - **📦 Parts & Inventory**: Inventory data with UDI and stock information
+   - **🔬 Lab Equipment**: Calibration records and equipment status
+   - **😟 Customer Complaints**: Complaint data with investigation details
+   - **⚠️ Non-Conformances**: NC records with CAPA linkage
+
+2. **Export Formats**:
+   - **CSV Format**: Structured data suitable for Excel, databases, and analysis
+   - **Markdown Format**: Human-readable reports with detailed formatting
+   - **Automatic Timestamping**: All exports include timestamp in filename
+   - **Version Control**: Timestamped filenames prevent overwrites
+
+3. **Export Features**:
+   - **Category Selection**: Choose specific record type to export
+   - **Format Selection**: Select CSV or Markdown format
+   - **Complete Data**: All fields and metadata included
+   - **Text Truncation**: Long text fields truncated in Markdown for readability
+   - **Download Management**: Direct browser download with proper MIME types
+
+4. **Export Process**:
+   1. Go to **Records** → **📥 Export** tab
+   2. Select record category from dropdown
+   3. Choose export format (CSV/Markdown)
+   4. Click **"📥 Export [Category] ([Format])"**
+   5. File downloads automatically with timestamped filename
 
 #### Compliance Features
 - **ISO 13485 Alignment**: Full compliance with quality management requirements
@@ -952,11 +1010,46 @@ ISO 13485:2016 compliant audit management system for quality and compliance audi
    - **Effectiveness Verification**: Follow-up verification
 
 #### Audit Reporting
-- **Standardized Reports**: ISO-compliant audit report templates
-- **Executive Summary**: High-level findings and recommendations
-- **Detailed Findings**: Comprehensive evidence and analysis
-- **Action Plans**: Corrective action tracking
-- **Trend Analysis**: Historical audit data analysis
+
+**Enhanced Reporting System** with comprehensive export capabilities:
+
+1. **Report Generation**:
+   - **Audit Selection**: Choose specific audit from dropdown list
+   - **Format Options**: CSV and Markdown export formats
+   - **Comprehensive Data**: Complete audit, findings, and corrective actions
+   - **Standardized Reports**: ISO-compliant audit report templates
+
+2. **Report Formats**:
+   - **CSV Format**: Structured data with all audit details, findings, and corrective actions
+     - **Audit Details**: Audit metadata, scope, standards, and team information
+     - **Findings Data**: Complete findings with descriptions, evidence, and severity
+     - **Corrective Actions**: Linked CAPA items with responsible parties and due dates
+     - **Data Analysis**: Suitable for Excel analysis and database import
+
+   - **Markdown Format**: Professional, human-readable audit reports
+     - **Executive Summary**: Audit overview with key metrics and findings count
+     - **Detailed Findings**: Structured findings with evidence and root cause analysis
+     - **Corrective Actions**: Organized action items with assignments and timelines
+     - **Performance Analysis**: Trend analysis and compliance assessment
+
+3. **Report Features**:
+   - **Complete Coverage**: All audit data including header, findings, and actions
+   - **Timestamped Files**: Automatic filename generation with audit number and timestamp
+   - **Direct Download**: Browser-based download with proper file types
+   - **Empty Audit Support**: Handles audits with no findings gracefully
+
+4. **Report Access**:
+   1. Go to **Audit Management** → **Reports** tab
+   2. Select audit from **"Select Audit for Report"** dropdown
+   3. Choose report format (CSV or Markdown)
+   4. Click **"📥 Download Audit Report ([Format])"**
+   5. File downloads automatically as `audit_report_[audit_number]_[timestamp].[ext]`
+
+5. **Legacy Features**:
+   - **Executive Summary**: High-level findings and recommendations
+   - **Detailed Analysis**: Comprehensive evidence documentation
+   - **Action Tracking**: Corrective action progress monitoring
+   - **Trend Analysis**: Historical audit data analysis
 
 #### Compliance Features
 - **Regulatory Requirements**: Built-in compliance checklists
@@ -964,7 +1057,77 @@ ISO 13485:2016 compliant audit management system for quality and compliance audi
 - **Training Records**: Auditor qualifications tracking
 - **Certification Support**: External audit preparation
 
-### 6.9 AI Configuration
+### 6.10 Training System
+
+Comprehensive learning and assessment platform leveraging the knowledge base for continuous education and skill development.
+
+#### Learning Content Generation
+
+1. **Topic Selection**:
+   - **Document Types**: Planning Documents, Process Documents, Specifications, Records, Templates, Policies, Manuals, SOPs, Work Instructions, Quality Plans, Risk Assessments, Test Reports, Audit Reports
+   - **Multi-Topic Learning**: Select multiple topics for comprehensive learning
+   - **Knowledge Base Integration**: Content generated from uploaded documents and templates
+
+2. **Learning Content Features**:
+   - **AI-Generated Content**: Comprehensive learning materials from knowledge base
+   - **Source Document Tracking**: References to source documents for deeper learning
+   - **Structured Format**: Well-organized content with clear sections and examples
+
+#### Assessment System
+
+1. **Assessment Configuration**:
+   - **Question Range**: 5-50 questions per assessment (default: 20)
+   - **True/False Format**: Simple, clear question format
+   - **Pass Threshold**: 80% score required to pass (configurable)
+   - **Topic-Based**: Questions generated from selected learning topics
+
+2. **Assessment Features**:
+   - **Immediate Feedback**: Results displayed immediately after submission
+   - **Detailed Analysis**: Question-by-question review with correct answers
+   - **Performance Tracking**: Progress tracking across multiple assessments
+   - **Pass/Fail Indicator**: Clear success/failure indication with improvement guidance
+
+#### Training Results & Analytics
+
+1. **Performance Metrics**:
+   - **Total Assessments**: Complete assessment history
+   - **Average Score**: Overall performance tracking
+   - **Pass Rate**: Success rate calculation
+   - **Recent Trends**: Performance improvement/decline analysis
+
+2. **Training Reports**:
+   - **CSV Export**: Structured data for analysis and record-keeping
+   - **Markdown Reports**: Human-readable comprehensive reports
+   - **Assessment History**: Complete record with dates, scores, and outcomes
+   - **Performance Analysis**: Trends and document type performance breakdown
+
+3. **Report Features**:
+   - **Always Available**: Download functionality available even with no assessments
+   - **Timestamped Files**: Automatic filename generation with timestamps
+   - **User-Specific**: Individual training records per user
+   - **Comprehensive Data**: Includes summary metrics, detailed history, and analysis
+
+#### Training Workflow
+
+1. **Learning Phase**:
+   - Select document types for learning
+   - Generate comprehensive learning content
+   - Review AI-generated materials with source references
+   - Access structured learning with examples and explanations
+
+2. **Assessment Phase**:
+   - Configure assessment parameters (questions, topics)
+   - Take True/False assessments
+   - Receive immediate feedback and results
+   - Review detailed question analysis
+
+3. **Progress Tracking**:
+   - Monitor performance across assessments
+   - Track improvement over time
+   - Analyze performance by document type
+   - Generate reports for compliance and records
+
+### 6.11 AI Configuration
 
 Comprehensive AI model and performance management.
 
@@ -1242,53 +1405,97 @@ Authorization: Bearer {token}
 
 ---
 
-## 10. Backup & Migration
+## 10. System Management
 
-### 10.1 Regular Backups
+### 10.1 Data Management
 
-#### Automated Backup Script
+#### Data Reset and Cleanup
+
+**Complete System Reset**:
 ```bash
-#!/bin/bash
-# backup.sh
+# Stop all services
+docker compose down
 
-DATE=$(date +%Y%m%d_%H%M%S)
-BACKUP_DIR="/backups/docsmait_$DATE"
+# Remove all data volumes (WARNING: This deletes ALL data)
+docker volume prune -f
+docker system prune -f
 
-mkdir -p $BACKUP_DIR
-
-# Database backup
-docker compose exec postgres pg_dump -U docsmait_user docsmait > $BACKUP_DIR/database.sql
-
-# Vector database backup
-docker compose cp qdrant:/qdrant/storage $BACKUP_DIR/qdrant/
-
-# Configuration backup
-cp .env $BACKUP_DIR/
-cp docker-compose.yml $BACKUP_DIR/
-
-echo "Backup completed: $BACKUP_DIR"
+# Restart services (will reinitialize empty databases)
+docker compose up -d
 ```
 
-#### Schedule with Cron
+**Selective Data Reset**:
 ```bash
-# Add to crontab (crontab -e)
-0 2 * * * /path/to/backup.sh  # Daily at 2 AM
+# Reset only PostgreSQL database
+docker compose down
+docker volume rm docsmait_postgres_data
+docker compose up -d
+
+# Reset only Vector database
+docker compose down  
+docker volume rm docsmait_qdrant_storage
+docker compose up -d
+
+# Reset only Ollama models
+docker compose down
+docker volume rm docsmait_ollama_data
+docker compose up -d
 ```
 
-### 10.2 Migration Between Environments
+#### Template Management
 
-#### Export Configuration
+**Bulk Template Upload**:
 ```bash
-# Create migration package
+# 1. Prepare templates in JSON format
+cat > templates.json << 'EOF'
+[
+  {
+    "name": "SOP Template",
+    "description": "Standard Operating Procedure Template",
+    "document_type": "SOP",
+    "content": "# SOP: [Title]\n\n## Purpose\n\n## Scope\n\n## Procedure\n\n",
+    "tags": ["sop", "procedure"],
+    "version": "1.0"
+  }
+]
+EOF
+
+# 2. Copy templates to container
+docker cp templates.json docsmait-backend:/app/
+
+# 3. Import templates
+docker compose exec backend python -c "
+import json
+from app.database_config import get_database
+from app.db_models import Template
+
+with open('/app/templates.json') as f:
+    templates = json.load(f)
+
+db = get_database()
+session = db.get_db_session()
+
+for t_data in templates:
+    template = Template(**t_data)
+    template.created_by = 1  # Admin user
+    session.add(template)
+    
+session.commit()
+print(f'Imported {len(templates)} templates')
+"
+```
+
+**Template Export for Backup**:
+```bash
+# Export all templates
 docker compose exec backend python -c "
 from app.database_config import get_database
-from app.db_models import *
+from app.db_models import Template
 import json
 
 db = get_database()
 session = db.get_db_session()
 
-# Export all templates
 templates = session.query(Template).all()
 template_data = []
 for t in templates:
@@ -1298,23 +1505,287 @@ for t in templates:
         'document_type': t.document_type,
         'content': t.content,
         'tags': t.tags,
-        'version': t.version
+        'version': t.version,
+        'status': t.status
     })
 
-with open('/app/export_templates.json', 'w') as f:
+with open('/app/templates_backup.json', 'w') as f:
     json.dump(template_data, f, indent=2)
+    
+print(f'Exported {len(template_data)} templates')
 "
+
+# Copy backup file to host
+docker cp docsmait-backend:/app/templates_backup.json ./
 ```
 
-#### Import to New Environment
+### 10.2 Backup & Migration
+
+#### Comprehensive Backup System
+
+**Complete System Backup Script**:
 ```bash
-# Import templates
+#!/bin/bash
+# comprehensive_backup.sh
+
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/backups/docsmait_$DATE"
+
+echo "Starting comprehensive backup..."
+mkdir -p $BACKUP_DIR
+
+# 1. Database backup (PostgreSQL)
+echo "Backing up PostgreSQL database..."
+docker compose exec -T postgres pg_dump -U docsmait_user docsmait > $BACKUP_DIR/database.sql
+
+# 2. Vector database backup (Qdrant)
+echo "Backing up Qdrant vector database..."
+docker compose cp qdrant:/qdrant/storage $BACKUP_DIR/qdrant/
+
+# 3. Ollama models backup
+echo "Backing up Ollama models..."
+docker compose cp ollama:/root/.ollama $BACKUP_DIR/ollama/
+
+# 4. Configuration backup
+echo "Backing up configuration..."
+cp .env $BACKUP_DIR/ 2>/dev/null || echo "Warning: .env file not found"
+cp docker-compose.yml $BACKUP_DIR/
+cp docker-compose.override.yml $BACKUP_DIR/ 2>/dev/null || echo "Override file not found"
+
+# 5. Template backup
+echo "Backing up templates..."
+docker compose exec -T backend python -c "
+from app.database_config import get_database
+from app.db_models import Template
+import json
+
+db = get_database()
+session = db.get_db_session()
+
+templates = session.query(Template).all()
+template_data = []
+for t in templates:
+    template_data.append({
+        'name': t.name,
+        'description': t.description,
+        'document_type': t.document_type,
+        'content': t.content,
+        'tags': t.tags,
+        'version': t.version,
+        'status': t.status
+    })
+
+with open('/app/templates_backup.json', 'w') as f:
+    json.dump(template_data, f, indent=2)
+    
+print(f'Exported {len(template_data)} templates')
+" && docker cp docsmait-backend:/app/templates_backup.json $BACKUP_DIR/
+
+# 6. Create backup metadata
+echo "Creating backup metadata..."
+cat > $BACKUP_DIR/backup_info.txt << EOF
+Docsmait Backup Information
+==========================
+Backup Date: $(date)
+Backup Directory: $BACKUP_DIR
+System: $(uname -a)
+Docker Compose Version: $(docker compose version --short)
+
+Contents:
+- database.sql: PostgreSQL database dump
+- qdrant/: Vector database storage
+- ollama/: AI models and data
+- templates_backup.json: Template export
+- .env: Environment configuration
+- docker-compose.yml: Service configuration
+
+Restore Command:
+./restore.sh $BACKUP_DIR
+EOF
+
+# 7. Create compressed archive
+echo "Creating compressed archive..."
+cd /backups
+tar -czf "docsmait_backup_$DATE.tar.gz" "docsmait_$DATE/"
+
+echo "Backup completed successfully!"
+echo "Backup location: $BACKUP_DIR"
+echo "Archive: /backups/docsmait_backup_$DATE.tar.gz"
+echo "Size: $(du -sh $BACKUP_DIR | cut -f1)"
+```
+
+**System Restore Script**:
+```bash
+#!/bin/bash
+# restore.sh
+
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <backup_directory>"
+    echo "Example: $0 /backups/docsmait_20240315_143022"
+    exit 1
+fi
+
+BACKUP_DIR="$1"
+
+if [ ! -d "$BACKUP_DIR" ]; then
+    echo "Error: Backup directory $BACKUP_DIR does not exist"
+    exit 1
+fi
+
+echo "Starting system restore from: $BACKUP_DIR"
+echo "WARNING: This will overwrite existing data!"
+read -p "Continue? (y/N): " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Restore cancelled"
+    exit 1
+fi
+
+# Stop services
+echo "Stopping services..."
+docker compose down
+
+# 1. Restore PostgreSQL database
+if [ -f "$BACKUP_DIR/database.sql" ]; then
+    echo "Restoring PostgreSQL database..."
+    docker compose up -d postgres
+    sleep 10  # Wait for postgres to start
+    docker compose exec -T postgres psql -U docsmait_user -d docsmait -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+    docker compose exec -T postgres psql -U docsmait_user -d docsmait < "$BACKUP_DIR/database.sql"
+    docker compose down
+fi
+
+# 2. Restore Qdrant vector database
+if [ -d "$BACKUP_DIR/qdrant" ]; then
+    echo "Restoring Qdrant vector database..."
+    docker volume rm docsmait_qdrant_storage 2>/dev/null || true
+    docker compose up -d qdrant
+    sleep 5
+    docker cp "$BACKUP_DIR/qdrant/." qdrant:/qdrant/storage/
+    docker compose down
+fi
+
+# 3. Restore Ollama models
+if [ -d "$BACKUP_DIR/ollama" ]; then
+    echo "Restoring Ollama models..."
+    docker volume rm docsmait_ollama_data 2>/dev/null || true
+    docker compose up -d ollama
+    sleep 5
+    docker cp "$BACKUP_DIR/ollama/." ollama:/root/.ollama/
+    docker compose down
+fi
+
+# 4. Restore configuration files
+echo "Restoring configuration..."
+[ -f "$BACKUP_DIR/.env" ] && cp "$BACKUP_DIR/.env" ./
+[ -f "$BACKUP_DIR/docker-compose.yml" ] && cp "$BACKUP_DIR/docker-compose.yml" ./
+[ -f "$BACKUP_DIR/docker-compose.override.yml" ] && cp "$BACKUP_DIR/docker-compose.override.yml" ./
+
+# 5. Start all services
+echo "Starting all services..."
+docker compose up -d
+
+# 6. Wait for services and restore templates
+echo "Waiting for services to start..."
+sleep 30
+
+if [ -f "$BACKUP_DIR/templates_backup.json" ]; then
+    echo "Restoring templates..."
+    docker cp "$BACKUP_DIR/templates_backup.json" docsmait-backend:/app/
+    docker compose exec backend python -c "
+import json
+from app.database_config import get_database
+from app.db_models import Template
+
+with open('/app/templates_backup.json') as f:
+    templates = json.load(f)
+
+db = get_database()
+session = db.get_db_session()
+
+for t_data in templates:
+    template = Template(**t_data)
+    template.created_by = 1  # Admin user
+    session.add(template)
+    
+session.commit()
+print(f'Restored {len(templates)} templates')
+"
+fi
+
+echo "Restore completed successfully!"
+echo "Services should be available at:"
+echo "- Frontend: http://localhost:8501"
+echo "- Backend API: http://localhost:8001"
+```
+
+#### Automated Backup Scheduling
+```bash
+# Add to crontab (crontab -e)
+0 2 * * * /path/to/comprehensive_backup.sh  # Daily at 2 AM
+0 14 * * 0 /path/to/comprehensive_backup.sh  # Weekly on Sunday at 2 PM
+
+# Make scripts executable
+chmod +x /path/to/comprehensive_backup.sh
+chmod +x /path/to/restore.sh
+```
+
+### 10.3 Migration Between Environments
+
+#### Full Environment Migration
+```bash
+# 1. Create backup on source environment
+./comprehensive_backup.sh
+
+# 2. Transfer backup to target environment
+scp /backups/docsmait_backup_*.tar.gz user@target-server:/backups/
+
+# 3. Extract and restore on target
+cd /backups
+tar -xzf docsmait_backup_*.tar.gz
+./restore.sh /backups/docsmait_*
+```
+
+#### Selective Migration (Templates Only)
+```bash
+# Export templates from source
+docker compose exec backend python -c "
+from app.database_config import get_database
+from app.db_models import Template
+import json
+
+db = get_database()
+session = db.get_db_session()
+
+templates = session.query(Template).all()
+template_data = []
+for t in templates:
+    template_data.append({
+        'name': t.name,
+        'description': t.description,
+        'document_type': t.document_type,
+        'content': t.content,
+        'tags': t.tags,
+        'version': t.version,
+        'status': t.status
+    })
+
+with open('/app/migration_templates.json', 'w') as f:
+    json.dump(template_data, f, indent=2)
+"
+
+# Copy to target environment
+docker cp docsmait-backend:/app/migration_templates.json ./
+scp migration_templates.json user@target-server:~/
+
+# Import on target environment
+docker cp migration_templates.json docsmait-backend:/app/
 docker compose exec backend python -c "
 import json
 from app.database_config import get_database
-from app.db_models import *
+from app.db_models import Template
 
-with open('/app/export_templates.json') as f:
+with open('/app/migration_templates.json') as f:
     templates = json.load(f)
 
 db = get_database()
@@ -1326,6 +1797,7 @@ for t_data in templates:
     session.add(template)
 
 session.commit()
+print(f'Migrated {len(templates)} templates')
 "
 ```
 

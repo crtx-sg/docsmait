@@ -20,8 +20,11 @@ Docsmait is a comprehensive AI-powered document and compliance management system
 - ⚠️ **Risk & Hazard Analysis** - FMEA, risk assessment, mitigation tracking
 - 🧪 **Test Management** - Test planning, execution, and validation protocols
 - 📊 **Audit & Compliance** - Complete audit trails and compliance reporting
-- 🎓 **Training System** - AI-generated learning content and assessments
-- 📄 **Template Management** - Pre-built and custom document templates
+- 🎓 **Training System** - AI-generated learning content and assessments with progress tracking
+- 📄 **Template Management** - Pre-built and custom document templates with version control
+- 📧 **Email Notifications** - SMTP integration with configurable delivery settings
+- 🔐 **Advanced Security** - Admin password reset, user management, and audit controls
+- 📈 **Export & Analytics** - CSV/Markdown exports with comprehensive reporting capabilities
 
 ## 🏗️ Architecture
 
@@ -154,9 +157,10 @@ QDRANT_URL=http://qdrant:6333
 ### 📊 Activity Logging & Audit Trail
 - **Comprehensive Tracking**: All user actions logged with timestamps and details
 - **Audit Compliance**: Tamper-proof logs with 5+ year retention for regulatory requirements
-- **Export Capabilities**: CSV export for external audit purposes
+- **Export Capabilities**: CSV/Markdown export for external audit purposes and regulatory reporting
 - **Security Tracking**: IP addresses and user agents captured for security analysis
 - **Project Correlation**: Activity linking across different modules and projects
+- **Advanced Filtering**: Export filtering by date range, user, action type, and project scope
 
 ### 📄 Template Management  
 - Pre-built industry templates
@@ -189,16 +193,20 @@ QDRANT_URL=http://qdrant:6333
 - Evidence collection and reporting
 
 ### 🎓 Training System
-- AI-powered learning content generation
-- Automated assessment creation
-- Progress tracking and analytics
-- Knowledge base integration
+- **AI-Powered Content Generation**: Creates comprehensive learning materials from knowledge base content
+- **Multi-Topic Assessments**: True/false questions generated from organizational knowledge  
+- **Progress Tracking**: Individual performance analytics with topic-specific competency levels
+- **Knowledge Base Integration**: Leverages approved documents and templates for training content
+- **Assessment Scoring**: Configurable passing scores with detailed feedback and recommendations
+- **Learning Analytics**: User performance tracking across different subject areas and time periods
 
 ### 📚 Knowledge Base
-- AI-powered semantic search
-- Automated content vectorization
-- Cross-referencing and relationships
-- Integration with all system modules
+- **AI-Powered Semantic Search**: Advanced RAG (Retrieval Augmented Generation) pipeline with vector similarity
+- **Automated Content Vectorization**: Automatic embedding generation for all approved content
+- **Cross-Referencing**: Intelligent relationships between documents, templates, and knowledge artifacts
+- **Module Integration**: Seamless integration with documents, templates, audits, and training systems
+- **Collection Management**: Organized knowledge repositories by project, document type, and subject area
+- **Query Analytics**: Search performance tracking and content usage optimization
 
 ## 🛠️ Development
 
@@ -230,31 +238,59 @@ Interactive API documentation available at:
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 
-## 🧹 Maintenance
+## 🧹 Maintenance & System Management
 
-### System Cleanup
+### System Cleanup & Data Management
 
 ```bash
-cd scripts
+# Full system data reset (preserves admin user)
+./reset_all_data.sh
 
-# Preview cleanup operations (safe)
-python cleanup_system.py --dry-run
+# Clean up old logs and temporary files
+./cleanup_logs.sh
 
-# Run maintenance tasks
-python maintenance_tasks.py --all --verbose
+# Remove test/demo data
+./cleanup_test_data.sh
+```
 
-# System reset (CAUTION!)
-python reset_system.py --keep-admin --confirm
+### Template Management
+
+```bash
+# Bulk upload templates from directory
+./upload_templates.sh /path/to/template/directory
+
+# Export all templates for backup
+./export_templates.sh /backup/templates/
+
+# Import templates from backup
+./import_templates.sh /backup/templates/
 ```
 
 ### Backup & Restore
 
 ```bash
-# Create full backup
-python backup.py --full --compress
+# Create comprehensive backup (database, vector store, AI models, files)
+./comprehensive_backup.sh
 
-# Restore from backup  
-python restore.py --backup-file backup_20240101_120000.tar.gz
+# Restore from comprehensive backup
+./restore.sh /backup/path/backup_20250115_143000/
+
+# Schedule automated daily backups
+crontab -e
+# Add: 0 2 * * * /path/to/docsmait/comprehensive_backup.sh
+```
+
+### System Health & Monitoring
+
+```bash
+# Check system health status
+curl http://localhost:8000/settings/system-health
+
+# Monitor service logs
+docker-compose logs -f backend frontend
+
+# View system metrics
+docker stats
 ```
 
 ## 🏥 Industry Compliance
@@ -273,14 +309,27 @@ python restore.py --backup-file backup_20240101_120000.tar.gz
 - **IEC 61508** - Functional Safety  
 - **SIL 1/2/3/4** - Safety Integrity Levels
 
-## 🔐 Security
+## 🔐 Security & User Management
 
-- JWT-based authentication
-- Role-based access control (RBAC)
-- Secure password hashing (bcrypt)
-- API rate limiting and validation
-- Comprehensive audit logging
-- Data encryption at rest and in transit
+### Authentication & Authorization
+- **JWT-Based Authentication**: Secure token-based session management with automatic refresh
+- **Role-Based Access Control**: Super Admin, Admin, and User roles with granular permissions
+- **Secure Password Management**: bcrypt hashing with configurable minimum length requirements
+- **Admin Password Reset**: Super admin capability to reset user passwords with comprehensive logging
+- **Session Security**: HTTP-only cookies with secure flags and CSRF protection
+
+### Security Features
+- **API Rate Limiting**: Configurable limits to prevent abuse and ensure system stability
+- **Input Validation**: Comprehensive request validation using Pydantic models
+- **Audit Logging**: Complete security event logging with IP tracking and user agent capture
+- **Data Encryption**: Encryption at rest for sensitive data and in-transit via HTTPS/TLS
+- **Access Controls**: Project-level permissions with member management and resource isolation
+
+### User Administration
+- **Super Admin Controls**: First user automatically becomes super admin with system-wide access
+- **Admin User Creation**: Super admins can create additional admin users via secure interface
+- **User Management**: Comprehensive user list with admin status management and activity tracking
+- **Password Policies**: Configurable password complexity requirements and reset workflows
 
 ## 📊 Performance
 
@@ -310,11 +359,13 @@ python restore.py --backup-file backup_20240101_120000.tar.gz
 
 ### Code Standards
 
-- Python: PEP 8, type hints, docstrings
-- FastAPI: Async/await patterns, Pydantic models
-- Streamlit: Component-based architecture
-- Database: SQLAlchemy ORM, migration scripts
-- Testing: Pytest, 80%+ coverage target
+- **Python**: PEP 8 compliance, type hints, comprehensive docstrings
+- **Configuration**: Centralized config management with environment variable support
+- **FastAPI**: Async/await patterns, Pydantic models for request/response validation
+- **Streamlit**: Component-based architecture with reusable UI elements
+- **Database**: SQLAlchemy ORM with proper migrations and relationship management
+- **Security**: Secure coding practices with input validation and output sanitization
+- **Testing**: Pytest framework with 80%+ coverage target and integration tests
 
 ## 📝 License
 
@@ -362,7 +413,33 @@ curl http://localhost:8000/health
 
 Docsmait is developed by **[Coherentix Labs](https://www.coherentix.com)** for organizations requiring comprehensive document management and regulatory compliance in highly regulated industries.
 
-**Built for**: Medical Device Companies, Automotive Manufacturers, Industrial Safety Organizations, Regulatory Affairs Teams, Quality Assurance Departments
+**Built for**: Medical Device Companies, Automotive Manufacturers, Industrial Safety Organizations, Regulatory Affairs Teams, Quality Assurance Departments, Training Organizations, Compliance Teams
+
+### Recent Updates (v1.1)
+
+**🎓 Training System Enhancements**
+- AI-powered learning content generation from organizational knowledge base
+- Multi-topic assessment creation with configurable difficulty levels
+- Comprehensive progress tracking and competency analysis
+- Integration with document and template knowledge repositories
+
+**🔐 Enhanced Security & Administration**
+- Super admin and admin user management with secure password reset capabilities
+- Comprehensive user administration interface with role management
+- Enhanced audit logging with detailed security event tracking
+- SMTP email notification configuration and management
+
+**📈 Improved Export & Analytics**
+- Advanced CSV and Markdown export capabilities across all modules
+- Configurable export formats with custom timestamp and filtering options
+- Enhanced audit reporting with comprehensive data export functionality
+- Training analytics with detailed performance and progress reporting
+
+**🛠️ System Management Tools**
+- Comprehensive backup and restore scripts for all system components
+- Template bulk upload and management capabilities
+- System health monitoring and configuration management
+- Data cleanup and maintenance tools for production environments
 
 ---
 
@@ -379,3 +456,7 @@ Docsmait is developed by **[Coherentix Labs](https://www.coherentix.com)** for o
 - [ ] Establish backup and maintenance procedures
 
 **Ready to transform your document and compliance management?** Start with our [Installation Guide](INSTALL.md)!
+
+---
+
+**🔄 Latest Version**: v1.1 | **📅 Last Updated**: January 2025 | **🏷️ Release Notes**: Enhanced training system, advanced security controls, comprehensive export capabilities, and improved system management tools.

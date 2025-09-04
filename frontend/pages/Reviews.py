@@ -255,50 +255,65 @@ with col2:
         st.subheader("📄 Document Content")
         content = doc.get('content', '')
         if content:
-            st.markdown(content)
+            # Show document in readonly markdown editor
+            st_ace(
+                value=content,
+                language='markdown',
+                theme='github',
+                height=400,
+                key=f"review_editor_{doc.get('id', doc.get('document_id'))}",
+                read_only=True,
+                wrap=True,
+                font_size=14
+            )
         else:
             st.info("No content available")
         
         # Review Controls
         st.subheader("👨‍⚖️ Review Decision")
         
-        reviewer_comment = st.text_area("Your Review Comment:", height=100, placeholder="Provide your review feedback...")
+        # Review form
+        col_comment, col_actions = st.columns([2, 1])
         
-        # Action buttons
-        col_r1, col_r2, col_r3 = st.columns([1, 1, 1])
+        with col_comment:
+            reviewer_comment = st.text_area("Your Review Comment:", height=100, placeholder="Provide your review feedback...")
         
-        with col_r1:
-            if st.button("⚠️ Needs Update", type="secondary", help="Request author to make changes"):
-                if reviewer_comment.strip():
-                    doc_id = doc.get('id', doc.get('document_id'))
-                    result = submit_review(doc_id, reviewer_comment, "needs_update")
-                    if result.get("success"):
-                        st.success(result["message"])
-                        del st.session_state.selected_review_doc
-                        st.rerun()
+        with col_actions:
+            # Document Next State dropdown
+            st.write("**Document Next State:**")
+            next_state = st.selectbox(
+                "Choose outcome:",
+                options=[
+                    ("needs_update", "⚠️ Needs Update"),
+                    ("approved", "✅ Approved")
+                ],
+                format_func=lambda x: x[1],
+                key=f"next_state_{doc.get('id', doc.get('document_id'))}"
+            )
+            
+            st.write("")  # Add some spacing
+            
+            # Action buttons
+            col_submit, col_close = st.columns(2)
+            
+            with col_submit:
+                if st.button("📋 Submit Review", type="primary"):
+                    if reviewer_comment.strip():
+                        doc_id = doc.get('id', doc.get('document_id'))
+                        result = submit_review(doc_id, reviewer_comment, next_state[0])
+                        if result.get("success"):
+                            st.success(result["message"])
+                            del st.session_state.selected_review_doc
+                            st.rerun()
+                        else:
+                            st.error(result.get("error", "Failed to submit review"))
                     else:
-                        st.error(result.get("error", "Failed to submit review"))
-                else:
-                    st.error("Please provide a comment explaining what needs to be updated")
-        
-        with col_r2:
-            if st.button("✅ Approved", type="primary", help="Approve the document"):
-                if reviewer_comment.strip():
-                    doc_id = doc.get('id', doc.get('document_id'))
-                    result = submit_review(doc_id, reviewer_comment, "approved")
-                    if result.get("success"):
-                        st.success(result["message"])
-                        del st.session_state.selected_review_doc
-                        st.rerun()
-                    else:
-                        st.error(result.get("error", "Failed to submit review"))
-                else:
-                    st.error("Please provide a comment with your approval")
-        
-        with col_r3:
-            if st.button("❌ Close"):
-                del st.session_state.selected_review_doc
-                st.rerun()
+                        st.error("Please provide a review comment")
+            
+            with col_close:
+                if st.button("❌ Close", key="close_review_editor"):
+                    del st.session_state.selected_review_doc
+                    st.rerun()
         
         # Help text
         st.caption("💡 **Tips:** Review the document content and comment history above. Provide clear, actionable feedback in your comment before making a decision.")

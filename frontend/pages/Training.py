@@ -1,45 +1,52 @@
-# frontend/pages/_Training.py
+# frontend/pages/Training.py
 import streamlit as st
 import requests
 import json
+import pandas as pd
 from datetime import datetime
 from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers, BACKEND_URL
+from config import (
+    DEFAULT_TRAINING_DOCUMENT_TYPES, DEFAULT_ASSESSMENT_QUESTIONS, 
+    MIN_ASSESSMENT_QUESTIONS, MAX_ASSESSMENT_QUESTIONS, TRAINING_PASS_PERCENTAGE,
+    COMPACT_FONT_SIZE, COMPACT_PADDING, COMPACT_MARGIN, TAB_GAP,
+    EXPORT_FILENAME_FORMAT, MARKDOWN_TRUNCATE_LENGTH
+)
 
 require_auth()
 
 st.set_page_config(page_title="Training", page_icon="🎓", layout="wide")
 
 # Add CSS for compact layout
-st.markdown("""
+st.markdown(f"""
 <style>
-    .element-container {
-        margin-bottom: 0.5rem;
-    }
-    .stSelectbox > div > div > div {
-        font-size: 14px;
-    }
-    .stMultiSelect > div > div > div {
-        font-size: 14px;
-    }
-    .stTextArea > div > div > textarea {
-        font-size: 14px;
-    }
-    .stMetric {
-        font-size: 14px;
-    }
-    .stButton > button {
-        font-size: 14px;
-        padding: 0.25rem 0.5rem;
-    }
-    .stRadio > div {
-        font-size: 14px;
-    }
-    .stNumberInput > div > div > input {
-        font-size: 14px;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
+    .element-container {{
+        margin-bottom: {COMPACT_MARGIN};
+    }}
+    .stSelectbox > div > div > div {{
+        font-size: {COMPACT_FONT_SIZE}px;
+    }}
+    .stMultiSelect > div > div > div {{
+        font-size: {COMPACT_FONT_SIZE}px;
+    }}
+    .stTextArea > div > div > textarea {{
+        font-size: {COMPACT_FONT_SIZE}px;
+    }}
+    .stMetric {{
+        font-size: {COMPACT_FONT_SIZE}px;
+    }}
+    .stButton > button {{
+        font-size: {COMPACT_FONT_SIZE}px;
+        padding: {COMPACT_PADDING};
+    }}
+    .stRadio > div {{
+        font-size: {COMPACT_FONT_SIZE}px;
+    }}
+    .stNumberInput > div > div > input {{
+        font-size: {COMPACT_FONT_SIZE}px;
+    }}
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: {TAB_GAP};
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -49,24 +56,27 @@ setup_authenticated_sidebar()
 
 # Helper functions
 def get_available_document_types():
-    """Get available document types from KB collections"""
+    """Get available document types"""
+    # Use standard document types from config
+    document_types = DEFAULT_TRAINING_DOCUMENT_TYPES
+    
     try:
-        response = requests.get(f"{BACKEND_URL}/kb/collections", headers=get_auth_headers())
+        # Try to get document types from backend if available
+        response = requests.get(f"{BACKEND_URL}/templates/document-types", headers=get_auth_headers())
         if response.status_code == 200:
-            collections = response.json()
-            # Extract document types from collection names
-            document_types = []
-            for collection in collections:
-                name = collection.get('name', '')
-                # Convert back from collection format to readable format
-                doc_type = name.replace('_', ' ').title()
-                if doc_type not in document_types:
-                    document_types.append(doc_type)
-            return sorted(document_types)
-        return []
+            backend_types = response.json()
+            if backend_types:
+                # Extract labels from backend response
+                backend_labels = [item.get('label', '') for item in backend_types if item.get('label')]
+                if backend_labels:
+                    return sorted(backend_labels)
+        
+        # Fallback to predefined types
+        return sorted(document_types)
+        
     except Exception as e:
-        st.error(f"Error fetching document types: {e}")
-        return []
+        # Return predefined types on error
+        return sorted(document_types)
 
 def generate_learning_content(topics):
     """Request learning content generation from KB"""
@@ -149,7 +159,7 @@ def test_training_endpoint():
 st.markdown("**Training System** - Generic learning and assessment platform using Knowledge Base content")
 
 # Main navigation tabs
-main_tabs = st.tabs(["Learning", "Assessment", "Results"])
+main_tabs = st.tabs(["📚 Learning", "📝 Assessment", "📊 Results"])
 
 # === LEARNING TAB ===
 with main_tabs[0]:
@@ -249,11 +259,11 @@ with main_tabs[1]:
     with col2:
         num_questions = st.number_input(
             "Number of Questions",
-            min_value=5,
-            max_value=50,
-            value=20,
+            min_value=MIN_ASSESSMENT_QUESTIONS,
+            max_value=MAX_ASSESSMENT_QUESTIONS,
+            value=DEFAULT_ASSESSMENT_QUESTIONS,
             step=5,
-            help="Choose between 5-50 questions"
+            help=f"Choose between {MIN_ASSESSMENT_QUESTIONS}-{MAX_ASSESSMENT_QUESTIONS} questions"
         )
     
     with col3:
@@ -277,7 +287,7 @@ with main_tabs[1]:
     if hasattr(st.session_state, 'assessment_questions') and st.session_state.assessment_questions:
         st.markdown("---")
         assessment_topics_display = ", ".join(st.session_state.assessment_topics) if hasattr(st.session_state, 'assessment_topics') else "Multiple Topics"
-        st.markdown(f"**Instructions:** Answer each question as True or False. You need 80% or higher to pass.")
+        st.markdown(f"**Instructions:** Answer each question as True or False. You need {TRAINING_PASS_PERCENTAGE}% or higher to pass.")
         
         questions = st.session_state.assessment_questions
         
@@ -348,7 +358,7 @@ with main_tabs[1]:
                     if passed:
                         st.success("🎉 **Congratulations!** You passed the assessment!")
                     else:
-                        st.error("📚 **Study More Required** - You need 80% or higher to pass. Review the learning content and try again.")
+                        st.error(f"📚 **Study More Required** - You need {TRAINING_PASS_PERCENTAGE}% or higher to pass. Review the learning content and try again.")
                     
                     # Detailed results
                     if st.checkbox("Show Detailed Results"):
@@ -406,11 +416,121 @@ with main_tabs[2]:
             pass_rate = (passed_count / total_assessments * 100) if total_assessments > 0 else 0
             st.metric("Pass Rate", f"{pass_rate:.1f}%")
         
+        # Download section - always available
+        st.markdown("---")
+        st.subheader("📥 Download Training Report")
+        
+        col_format, col_download = st.columns([1, 2])
+        
+        with col_format:
+            download_format = st.selectbox(
+                "Report Format",
+                options=["CSV", "Markdown"],
+                help="Choose the format for your training report download",
+                key="training_report_format"
+            )
+        
+        with col_download:
+            if st.button(f"📥 Download Training Report ({download_format})", type="primary"):
+                # Generate timestamp for filename
+                timestamp = datetime.now().strftime(EXPORT_FILENAME_FORMAT)
+                
+                if download_format == "CSV":
+                    if total_assessments > 0:
+                        # Create assessment data for CSV
+                        assessment_data = []
+                        for assessment in assessments:
+                            assessment_data.append({
+                                "Date": assessment.get("assessment_date", ""),
+                                "Document Type": assessment.get("document_type", ""),
+                                "Score": f"{assessment.get('score', 0)}/{assessment.get('total_questions', 0)}",
+                                "Percentage": f"{assessment.get('percentage', 0)}%",
+                                "Result": "PASS" if assessment.get('passed', False) else "FAIL"
+                            })
+                        df = pd.DataFrame(assessment_data)
+                        csv_data = df.to_csv(index=False)
+                    else:
+                        # Empty CSV with headers
+                        df = pd.DataFrame(columns=["Date", "Document Type", "Score", "Percentage", "Result"])
+                        csv_data = df.to_csv(index=False)
+                    
+                    filename = f"training_report_{user_id}_{timestamp}.csv"
+                    mime_type = "text/csv"
+                    
+                    st.download_button(
+                        label="📁 Download CSV Report",
+                        data=csv_data,
+                        file_name=filename,
+                        mime=mime_type,
+                        type="primary"
+                    )
+                    
+                else:  # Markdown format
+                    # Create comprehensive Markdown report
+                    markdown_lines = []
+                    
+                    # Header
+                    markdown_lines.append(f"# Training Report")
+                    markdown_lines.append(f"## User ID: {user_id}")
+                    markdown_lines.append("")
+                    markdown_lines.append(f"**Report Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                    markdown_lines.append("")
+                    
+                    # Summary section
+                    markdown_lines.append("## 📊 Training Summary")
+                    markdown_lines.append("")
+                    markdown_lines.append(f"- **Total Assessments**: {total_assessments}")
+                    markdown_lines.append(f"- **Average Score**: {average_score}%")
+                    markdown_lines.append(f"- **Passed Assessments**: {passed_count}/{total_assessments}")
+                    markdown_lines.append(f"- **Pass Rate**: {pass_rate:.1f}%")
+                    markdown_lines.append("")
+                    
+                    if total_assessments > 0:
+                        # Assessment details
+                        markdown_lines.append("## 📝 Assessment History")
+                        markdown_lines.append("")
+                        
+                        for i, assessment in enumerate(assessments, 1):
+                            result_emoji = "✅" if assessment.get('passed', False) else "❌"
+                            markdown_lines.append(f"### {i}. Assessment on {assessment.get('assessment_date', 'Unknown Date')} {result_emoji}")
+                            markdown_lines.append("")
+                            markdown_lines.append(f"- **Document Type**: {assessment.get('document_type', 'Unknown')}")
+                            markdown_lines.append(f"- **Score**: {assessment.get('score', 0)}/{assessment.get('total_questions', 0)}")
+                            markdown_lines.append(f"- **Percentage**: {assessment.get('percentage', 0)}%")
+                            markdown_lines.append(f"- **Result**: {'PASS' if assessment.get('passed', False) else 'FAIL'}")
+                            markdown_lines.append("")
+                    else:
+                        markdown_lines.append("## 📝 Assessment History")
+                        markdown_lines.append("")
+                        markdown_lines.append("No assessments completed yet. Take your first assessment to see detailed results here!")
+                        markdown_lines.append("")
+                    
+                    # Footer
+                    markdown_lines.append("---")
+                    markdown_lines.append("")
+                    markdown_lines.append("*This report provides a comprehensive overview of training performance and assessment results.*")
+                    
+                    markdown_data = "\n".join(markdown_lines)
+                    filename = f"training_report_{user_id}_{timestamp}.md"
+                    mime_type = "text/markdown"
+                    
+                    st.download_button(
+                        label="📁 Download Markdown Report",
+                        data=markdown_data,
+                        file_name=filename,
+                        mime=mime_type,
+                        type="primary"
+                    )
+                
+                if total_assessments > 0:
+                    st.success(f"✅ {download_format} training report ready! Contains {total_assessments} assessments with {pass_rate:.1f}% pass rate.")
+                else:
+                    st.success(f"✅ {download_format} training report ready! Currently no assessments completed - report shows summary metrics.")
+        
         if total_assessments > 0:
             st.markdown("---")
             
             # Display assessments in a table
-            import pandas as pd
             
             assessment_data = []
             for assessment in assessments:

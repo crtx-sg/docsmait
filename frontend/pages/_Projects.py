@@ -187,6 +187,24 @@ def add_project_resource(project_id, name, resource_type, content=None):
     except Exception as e:
         return False, str(e)
 
+def update_project_resource(project_id, resource_id, name, resource_type, content=None):
+    """Update project resource"""
+    try:
+        payload = {
+            "name": name,
+            "resource_type": resource_type,
+            "content": content if content is not None else ""
+        }
+            
+        response = requests.put(
+            f"{BACKEND_URL}/projects/{project_id}/resources/{resource_id}",
+            json=payload,
+            headers=get_auth_headers()
+        )
+        return response.status_code == 200, response.json() if response.status_code == 200 else response.text
+    except Exception as e:
+        return False, str(e)
+
 def delete_project_resource(project_id, resource_id):
     """Delete project resource"""
     try:
@@ -810,23 +828,35 @@ with tab3:
                 with res_tab2:
                     if glossary_resources:
                         # Create DataFrame for glossary resources
-                        glos_df_data = []
+                        glos_grid_data = []
                         for resource in glossary_resources:
                             uploaded_date = resource.get('uploaded_at', resource.get('created_at', 'Unknown'))
                             if uploaded_date != 'Unknown':
                                 uploaded_date = uploaded_date[:10]
                             
-                            glos_df_row = {
+                            glos_grid_row = {
                                 'Name': resource['name'],
                                 'Added By': resource.get('uploaded_by_username', resource.get('uploaded_by', 'Unknown')),
                                 'Date': uploaded_date,
-                                'Content': (resource["content"][:50] + "..." if resource["content"] and len(resource["content"]) > 50 else resource["content"] or "No content")
+                                'Content Preview': (resource["content"][:50] + "..." if resource["content"] and len(resource["content"]) > 50 else resource["content"] or "No content"),
+                                'full_resource_data': resource
+                            }
+                            glos_grid_data.append(glos_grid_row)
+                        
+                        # Create DataFrame for display (without full data)
+                        glos_df_data = []
+                        for row in glos_grid_data:
+                            glos_df_row = {
+                                'Name': row['Name'],
+                                'Added By': row['Added By'],
+                                'Date': row['Date'],
+                                'Content Preview': row['Content Preview']
                             }
                             glos_df_data.append(glos_df_row)
                         
                         glos_df = pd.DataFrame(glos_df_data)
                         
-                        # Display DataFrame
+                        # Display DataFrame with selection
                         glos_selected_indices = st.dataframe(
                             glos_df,
                             use_container_width=True,
@@ -836,50 +866,154 @@ with tab3:
                             height=300
                         )
                         
-                        st.caption("💡 Select a row to view/delete glossary resource")
+                        st.caption("💡 Select a row to view/edit/delete glossary resource")
                         
-                        # Handle selection for deletion
+                        # Handle selection
                         if glos_selected_indices and len(glos_selected_indices.selection.rows) > 0:
                             selected_idx = glos_selected_indices.selection.rows[0]
-                            selected_resource = glossary_resources[selected_idx]
+                            selected_resource = glos_grid_data[selected_idx]['full_resource_data']
                             
-                            # Show full content and delete option
-                            with st.expander("Selected Glossary Resource", expanded=True):
-                                st.markdown(f"**Name:** {selected_resource['name']}")
-                                st.markdown(f"**Content:**")
-                                st.text(selected_resource["content"] if selected_resource["content"] else "No content")
-                                
-                                if project_details.get("is_creator", False) or selected_resource["uploaded_by"] == project_details.get("current_user_id"):
-                                    if st.button(f"🗑️ Delete {selected_resource['name']}", key=f"del_glos_{selected_resource['id']}"):
-                                        success, result = delete_project_resource(project_id, selected_resource["id"])
-                                        if success:
-                                            st.success("Resource deleted!")
-                                            st.rerun()
+                            # Only update session state if different resource selected
+                            if st.session_state.get('selected_glossary_id') != selected_resource.get('id'):
+                                st.session_state.selected_glossary_id = selected_resource.get('id')
+                                st.session_state.selected_glossary_data = selected_resource
+                                st.rerun()
+                        
+                        # Show editable details for selected resource
+                        if st.session_state.get('selected_glossary_data'):
+                            resource = st.session_state.selected_glossary_data
+                            st.markdown("---")
+                            st.markdown("### 📝 Edit Selected Glossary Resource")
+                            
+                            # Check permissions once
+                            can_edit = (project_details.get("is_creator", False) or 
+                                      resource["uploaded_by"] == project_details.get("current_user_id"))
+                            
+                            if not can_edit:
+                                st.warning("⚠️ You can only edit resources you created or if you're the project creator")
+                            else:
+                                # Edit form - only show if user can edit
+                                with st.form("edit_glossary_form"):
+                                    col1, col2 = st.columns(2)
+                                    
+                                    with col1:
+                                        edited_name = st.text_input("Resource Name*", value=resource.get('name', ''))
+                                        edited_type = st.selectbox("Type", ["glossary"], index=0, disabled=True)
+                                    
+                                    with col2:
+                                        st.write("**Current Details:**")
+                                        st.write(f"Added by: {resource.get('uploaded_by_username', 'Unknown')}")
+                                        st.write(f"Date: {resource.get('uploaded_at', resource.get('created_at', 'Unknown'))[:10] if resource.get('uploaded_at', resource.get('created_at', 'Unknown')) != 'Unknown' else 'Unknown'}")
+                                    
+                                    edited_content = st.text_area("Glossary Content", 
+                                                                value=resource.get('content', ''),
+                                                                height=200,
+                                                                placeholder="Term 1: Definition 1\nTerm 2: Definition 2\n...")
+                                    
+                                    # Single form submit button
+                                    submitted = st.form_submit_button("💾 Save Changes", type="primary")
+                                    
+                                    if submitted:
+                                        if not edited_name:
+                                            st.error("Resource name is required!")
                                         else:
-                                            st.error(f"Failed to delete: {result}")
+                                            # Update resource via API
+                                            with st.spinner("Updating resource..."):
+                                                success, result = update_project_resource(
+                                                    project_id, resource.get('id'), 
+                                                    edited_name, "glossary", edited_content
+                                                )
+                                            
+                                            if success:
+                                                st.success("✅ Glossary resource updated successfully!")
+                                                # Clear selection to refresh data
+                                                if 'selected_glossary_id' in st.session_state:
+                                                    del st.session_state.selected_glossary_id
+                                                if 'selected_glossary_data' in st.session_state:
+                                                    del st.session_state.selected_glossary_data
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ Failed to update: {result}")
+                            
+                            # Action buttons outside form (always shown if user can edit/delete)
+                            if can_edit:
+                                col_actions = st.columns([1, 1, 2])
+                                
+                                with col_actions[0]:
+                                    if st.button("🗑️ Delete Resource", type="secondary", key="delete_glossary_btn"):
+                                        # Check delete permission again  
+                                        can_delete = (project_details.get("is_creator", False) or 
+                                                    resource["uploaded_by"] == project_details.get("current_user_id"))
+                                        
+                                        if can_delete:
+                                            with st.spinner("Deleting resource..."):
+                                                success, result = delete_project_resource(project_id, resource["id"])
+                                            
+                                            if success:
+                                                st.success("✅ Resource deleted!")
+                                                # Clear selection
+                                                if 'selected_glossary_id' in st.session_state:
+                                                    del st.session_state.selected_glossary_id
+                                                if 'selected_glossary_data' in st.session_state:
+                                                    del st.session_state.selected_glossary_data
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ Failed to delete: {result}")
+                                        else:
+                                            st.error("❌ You can only delete resources you created or if you're the project creator")
+                                
+                                with col_actions[1]:
+                                    if st.button("❌ Cancel Edit", key="cancel_glossary_btn"):
+                                        # Clear selection
+                                        if 'selected_glossary_id' in st.session_state:
+                                            del st.session_state.selected_glossary_id
+                                        if 'selected_glossary_data' in st.session_state:
+                                            del st.session_state.selected_glossary_data
+                                        st.rerun()
+                            else:
+                                # Show cancel button for read-only users
+                                if st.button("❌ Close", key="close_glossary_btn"):
+                                    # Clear selection
+                                    if 'selected_glossary_id' in st.session_state:
+                                        del st.session_state.selected_glossary_id
+                                    if 'selected_glossary_data' in st.session_state:
+                                        del st.session_state.selected_glossary_data
+                                    st.rerun()
                     else:
                         st.info("No glossary resources yet.")
                 
                 with res_tab3:
                     if reference_resources:
                         # Create DataFrame for reference resources
-                        ref_df_data = []
+                        ref_grid_data = []
                         for resource in reference_resources:
                             uploaded_date = resource.get('uploaded_at', resource.get('created_at', 'Unknown'))
                             if uploaded_date != 'Unknown':
                                 uploaded_date = uploaded_date[:10]
                             
-                            ref_df_row = {
+                            ref_grid_row = {
                                 'Name': resource['name'],
                                 'Added By': resource.get('uploaded_by_username', resource.get('uploaded_by', 'Unknown')),
                                 'Date': uploaded_date,
-                                'Content': (resource["content"][:50] + "..." if resource["content"] and len(resource["content"]) > 50 else resource["content"] or "No content")
+                                'Content Preview': (resource["content"][:50] + "..." if resource["content"] and len(resource["content"]) > 50 else resource["content"] or "No content"),
+                                'full_resource_data': resource
+                            }
+                            ref_grid_data.append(ref_grid_row)
+                        
+                        # Create DataFrame for display (without full data)
+                        ref_df_data = []
+                        for row in ref_grid_data:
+                            ref_df_row = {
+                                'Name': row['Name'],
+                                'Added By': row['Added By'],
+                                'Date': row['Date'],
+                                'Content Preview': row['Content Preview']
                             }
                             ref_df_data.append(ref_df_row)
                         
                         ref_df = pd.DataFrame(ref_df_data)
                         
-                        # Display DataFrame
+                        # Display DataFrame with selection
                         ref_selected_indices = st.dataframe(
                             ref_df,
                             use_container_width=True,
@@ -889,50 +1023,154 @@ with tab3:
                             height=300
                         )
                         
-                        st.caption("💡 Select a row to view/delete reference resource")
+                        st.caption("💡 Select a row to view/edit/delete reference resource")
                         
-                        # Handle selection for deletion
+                        # Handle selection
                         if ref_selected_indices and len(ref_selected_indices.selection.rows) > 0:
                             selected_idx = ref_selected_indices.selection.rows[0]
-                            selected_resource = reference_resources[selected_idx]
+                            selected_resource = ref_grid_data[selected_idx]['full_resource_data']
                             
-                            # Show full content and delete option
-                            with st.expander("Selected Reference Resource", expanded=True):
-                                st.markdown(f"**Name:** {selected_resource['name']}")
-                                st.markdown(f"**Content:**")
-                                st.text(selected_resource["content"] if selected_resource["content"] else "No content")
-                                
-                                if project_details.get("is_creator", False) or selected_resource["uploaded_by"] == project_details.get("current_user_id"):
-                                    if st.button(f"🗑️ Delete {selected_resource['name']}", key=f"del_ref_{selected_resource['id']}"):
-                                        success, result = delete_project_resource(project_id, selected_resource["id"])
-                                        if success:
-                                            st.success("Resource deleted!")
-                                            st.rerun()
+                            # Only update session state if different resource selected
+                            if st.session_state.get('selected_reference_id') != selected_resource.get('id'):
+                                st.session_state.selected_reference_id = selected_resource.get('id')
+                                st.session_state.selected_reference_data = selected_resource
+                                st.rerun()
+                        
+                        # Show editable details for selected resource
+                        if st.session_state.get('selected_reference_data'):
+                            resource = st.session_state.selected_reference_data
+                            st.markdown("---")
+                            st.markdown("### 📝 Edit Selected Reference Resource")
+                            
+                            # Check permissions once
+                            can_edit = (project_details.get("is_creator", False) or 
+                                      resource["uploaded_by"] == project_details.get("current_user_id"))
+                            
+                            if not can_edit:
+                                st.warning("⚠️ You can only edit resources you created or if you're the project creator")
+                            else:
+                                # Edit form - only show if user can edit
+                                with st.form("edit_reference_form"):
+                                    col1, col2 = st.columns(2)
+                                    
+                                    with col1:
+                                        edited_name = st.text_input("Resource Name*", value=resource.get('name', ''))
+                                        edited_type = st.selectbox("Type", ["reference"], index=0, disabled=True)
+                                    
+                                    with col2:
+                                        st.write("**Current Details:**")
+                                        st.write(f"Added by: {resource.get('uploaded_by_username', 'Unknown')}")
+                                        st.write(f"Date: {resource.get('uploaded_at', resource.get('created_at', 'Unknown'))[:10] if resource.get('uploaded_at', resource.get('created_at', 'Unknown')) != 'Unknown' else 'Unknown'}")
+                                    
+                                    edited_content = st.text_area("Reference Description", 
+                                                                value=resource.get('content', ''),
+                                                                height=200,
+                                                                placeholder="Description or notes about this reference resource...")
+                                    
+                                    # Single form submit button
+                                    submitted = st.form_submit_button("💾 Save Changes", type="primary")
+                                    
+                                    if submitted:
+                                        if not edited_name:
+                                            st.error("Resource name is required!")
                                         else:
-                                            st.error(f"Failed to delete: {result}")
+                                            # Update resource via API
+                                            with st.spinner("Updating resource..."):
+                                                success, result = update_project_resource(
+                                                    project_id, resource.get('id'), 
+                                                    edited_name, "reference", edited_content
+                                                )
+                                            
+                                            if success:
+                                                st.success("✅ Reference resource updated successfully!")
+                                                # Clear selection to refresh data
+                                                if 'selected_reference_id' in st.session_state:
+                                                    del st.session_state.selected_reference_id
+                                                if 'selected_reference_data' in st.session_state:
+                                                    del st.session_state.selected_reference_data
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ Failed to update: {result}")
+                            
+                            # Action buttons outside form (always shown if user can edit/delete)
+                            if can_edit:
+                                col_actions = st.columns([1, 1, 2])
+                                
+                                with col_actions[0]:
+                                    if st.button("🗑️ Delete Resource", type="secondary", key="delete_reference_btn"):
+                                        # Check delete permission again  
+                                        can_delete = (project_details.get("is_creator", False) or 
+                                                    resource["uploaded_by"] == project_details.get("current_user_id"))
+                                        
+                                        if can_delete:
+                                            with st.spinner("Deleting resource..."):
+                                                success, result = delete_project_resource(project_id, resource["id"])
+                                            
+                                            if success:
+                                                st.success("✅ Resource deleted!")
+                                                # Clear selection
+                                                if 'selected_reference_id' in st.session_state:
+                                                    del st.session_state.selected_reference_id
+                                                if 'selected_reference_data' in st.session_state:
+                                                    del st.session_state.selected_reference_data
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ Failed to delete: {result}")
+                                        else:
+                                            st.error("❌ You can only delete resources you created or if you're the project creator")
+                                
+                                with col_actions[1]:
+                                    if st.button("❌ Cancel Edit", key="cancel_reference_btn"):
+                                        # Clear selection
+                                        if 'selected_reference_id' in st.session_state:
+                                            del st.session_state.selected_reference_id
+                                        if 'selected_reference_data' in st.session_state:
+                                            del st.session_state.selected_reference_data
+                                        st.rerun()
+                            else:
+                                # Show cancel button for read-only users
+                                if st.button("❌ Close", key="close_reference_btn"):
+                                    # Clear selection
+                                    if 'selected_reference_id' in st.session_state:
+                                        del st.session_state.selected_reference_id
+                                    if 'selected_reference_data' in st.session_state:
+                                        del st.session_state.selected_reference_data
+                                    st.rerun()
                     else:
                         st.info("No reference resources yet.")
                 
                 with res_tab4:
                     if book_resources:
                         # Create DataFrame for book resources
-                        book_df_data = []
+                        book_grid_data = []
                         for resource in book_resources:
                             uploaded_date = resource.get('uploaded_at', resource.get('created_at', 'Unknown'))
                             if uploaded_date != 'Unknown':
                                 uploaded_date = uploaded_date[:10]
                             
-                            book_df_row = {
+                            book_grid_row = {
                                 'Name': resource['name'],
                                 'Added By': resource.get('uploaded_by_username', resource.get('uploaded_by', 'Unknown')),
                                 'Date': uploaded_date,
-                                'Content': (resource["content"][:50] + "..." if resource["content"] and len(resource["content"]) > 50 else resource["content"] or "No content")
+                                'Content Preview': (resource["content"][:50] + "..." if resource["content"] and len(resource["content"]) > 50 else resource["content"] or "No content"),
+                                'full_resource_data': resource
+                            }
+                            book_grid_data.append(book_grid_row)
+                        
+                        # Create DataFrame for display (without full data)
+                        book_df_data = []
+                        for row in book_grid_data:
+                            book_df_row = {
+                                'Name': row['Name'],
+                                'Added By': row['Added By'],
+                                'Date': row['Date'],
+                                'Content Preview': row['Content Preview']
                             }
                             book_df_data.append(book_df_row)
                         
                         book_df = pd.DataFrame(book_df_data)
                         
-                        # Display DataFrame
+                        # Display DataFrame with selection
                         book_selected_indices = st.dataframe(
                             book_df,
                             use_container_width=True,
@@ -942,27 +1180,119 @@ with tab3:
                             height=300
                         )
                         
-                        st.caption("💡 Select a row to view/delete book resource")
+                        st.caption("💡 Select a row to view/edit/delete book resource")
                         
-                        # Handle selection for deletion
+                        # Handle selection
                         if book_selected_indices and len(book_selected_indices.selection.rows) > 0:
                             selected_idx = book_selected_indices.selection.rows[0]
-                            selected_resource = book_resources[selected_idx]
+                            selected_resource = book_grid_data[selected_idx]['full_resource_data']
                             
-                            # Show full content and delete option
-                            with st.expander("Selected Book Resource", expanded=True):
-                                st.markdown(f"**Name:** {selected_resource['name']}")
-                                st.markdown(f"**Content:**")
-                                st.text(selected_resource["content"] if selected_resource["content"] else "No content")
-                                
-                                if project_details.get("is_creator", False) or selected_resource["uploaded_by"] == project_details.get("current_user_id"):
-                                    if st.button(f"🗑️ Delete {selected_resource['name']}", key=f"del_book_{selected_resource['id']}"):
-                                        success, result = delete_project_resource(project_id, selected_resource["id"])
-                                        if success:
-                                            st.success("Resource deleted!")
-                                            st.rerun()
+                            # Only update session state if different resource selected
+                            if st.session_state.get('selected_book_id') != selected_resource.get('id'):
+                                st.session_state.selected_book_id = selected_resource.get('id')
+                                st.session_state.selected_book_data = selected_resource
+                                st.rerun()
+                        
+                        # Show editable details for selected resource
+                        if st.session_state.get('selected_book_data'):
+                            resource = st.session_state.selected_book_data
+                            st.markdown("---")
+                            st.markdown("### 📝 Edit Selected Book Resource")
+                            
+                            # Check permissions once
+                            can_edit = (project_details.get("is_creator", False) or 
+                                      resource["uploaded_by"] == project_details.get("current_user_id"))
+                            
+                            if not can_edit:
+                                st.warning("⚠️ You can only edit resources you created or if you're the project creator")
+                            else:
+                                # Edit form - only show if user can edit
+                                with st.form("edit_book_form"):
+                                    col1, col2 = st.columns(2)
+                                    
+                                    with col1:
+                                        edited_name = st.text_input("Resource Name*", value=resource.get('name', ''))
+                                        edited_type = st.selectbox("Type", ["book"], index=0, disabled=True)
+                                    
+                                    with col2:
+                                        st.write("**Current Details:**")
+                                        st.write(f"Added by: {resource.get('uploaded_by_username', 'Unknown')}")
+                                        st.write(f"Date: {resource.get('uploaded_at', resource.get('created_at', 'Unknown'))[:10] if resource.get('uploaded_at', resource.get('created_at', 'Unknown')) != 'Unknown' else 'Unknown'}")
+                                    
+                                    edited_content = st.text_area("Book Description", 
+                                                                value=resource.get('content', ''),
+                                                                height=200,
+                                                                placeholder="Description, notes, or summary about this book resource...")
+                                    
+                                    # Single form submit button
+                                    submitted = st.form_submit_button("💾 Save Changes", type="primary")
+                                    
+                                    if submitted:
+                                        if not edited_name:
+                                            st.error("Resource name is required!")
                                         else:
-                                            st.error(f"Failed to delete: {result}")
+                                            # Update resource via API
+                                            with st.spinner("Updating resource..."):
+                                                success, result = update_project_resource(
+                                                    project_id, resource.get('id'), 
+                                                    edited_name, "book", edited_content
+                                                )
+                                            
+                                            if success:
+                                                st.success("✅ Book resource updated successfully!")
+                                                # Clear selection to refresh data
+                                                if 'selected_book_id' in st.session_state:
+                                                    del st.session_state.selected_book_id
+                                                if 'selected_book_data' in st.session_state:
+                                                    del st.session_state.selected_book_data
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ Failed to update: {result}")
+                            
+                            # Action buttons outside form (always shown if user can edit/delete)
+                            if can_edit:
+                                col_actions = st.columns([1, 1, 2])
+                                
+                                with col_actions[0]:
+                                    if st.button("🗑️ Delete Resource", type="secondary", key="delete_book_btn"):
+                                        # Check delete permission again  
+                                        can_delete = (project_details.get("is_creator", False) or 
+                                                    resource["uploaded_by"] == project_details.get("current_user_id"))
+                                        
+                                        if can_delete:
+                                            with st.spinner("Deleting resource..."):
+                                                success, result = delete_project_resource(project_id, resource["id"])
+                                            
+                                            if success:
+                                                st.success("✅ Resource deleted!")
+                                                # Clear selection
+                                                if 'selected_book_id' in st.session_state:
+                                                    del st.session_state.selected_book_id
+                                                if 'selected_book_data' in st.session_state:
+                                                    del st.session_state.selected_book_data
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ Failed to delete: {result}")
+                                        else:
+                                            st.error("❌ You can only delete resources you created or if you're the project creator")
+                                
+                                with col_actions[1]:
+                                    if st.button("❌ Cancel Edit", key="cancel_book_btn"):
+                                        # Clear selection
+                                        if 'selected_book_id' in st.session_state:
+                                            del st.session_state.selected_book_id
+                                        if 'selected_book_data' in st.session_state:
+                                            del st.session_state.selected_book_data
+                                        st.rerun()
+                            else:
+                                # Show cancel button for read-only users
+                                if st.button("❌ Close", key="close_book_btn"):
+                                    # Clear selection
+                                    if 'selected_book_id' in st.session_state:
+                                        del st.session_state.selected_book_id
+                                    if 'selected_book_data' in st.session_state:
+                                        del st.session_state.selected_book_data
+                                    st.rerun()
                     else:
                         st.info("No book resources yet.")
     else:
@@ -972,3 +1302,13 @@ with tab3:
 # Clean up session state
 if hasattr(st.session_state, 'selected_project_id'):
     del st.session_state.selected_project_id
+
+# Clean up resource selection states when leaving the page
+cleanup_states = [
+    'selected_glossary_id', 'selected_glossary_data',
+    'selected_reference_id', 'selected_reference_data', 
+    'selected_book_id', 'selected_book_data'
+]
+for state in cleanup_states:
+    if hasattr(st.session_state, state):
+        del st.session_state[state]

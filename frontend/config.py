@@ -74,3 +74,38 @@ MEDICAL_DEVICE_STANDARDS = ["ISO 13485:2016", "ISO 14971:2019", "IEC 62304:2006"
 AUTOMOTIVE_STANDARDS = ["ISO 26262", "ASPICE", "MISRA C"] 
 INDUSTRIAL_STANDARDS = ["IEC 61508", "IEC 61511", "DO-178C"]
 AVIATION_STANDARDS = ["DO-178C", "DO-254", "ARP4754A"]
+
+# User Management Configuration
+MIN_PASSWORD_LENGTH = int(os.getenv("MIN_PASSWORD_LENGTH", "8"))
+PASSWORD_COMPLEXITY_REQUIRED = os.getenv("PASSWORD_COMPLEXITY_REQUIRED", "false").lower() == "true"
+SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
+MAX_LOGIN_ATTEMPTS = int(os.getenv("MAX_LOGIN_ATTEMPTS", "5"))
+
+# Training System Configuration
+DEFAULT_TRAINING_DOCUMENT_TYPES = [
+    "Planning Documents", "Process Documents", "Specifications", "Records",
+    "Templates", "Policies", "Manuals", "SOPs", "Work Instructions", 
+    "Quality Plans", "Risk Assessments", "Test Reports", "Audit Reports"
+]
+TRAINING_PASS_PERCENTAGE = int(os.getenv("TRAINING_PASS_PERCENTAGE", "80"))
+DEFAULT_ASSESSMENT_QUESTIONS = int(os.getenv("DEFAULT_ASSESSMENT_QUESTIONS", "20"))
+MIN_ASSESSMENT_QUESTIONS = int(os.getenv("MIN_ASSESSMENT_QUESTIONS", "5"))
+MAX_ASSESSMENT_QUESTIONS = int(os.getenv("MAX_ASSESSMENT_QUESTIONS", "50"))
+
+# Download and Export Configuration
+MARKDOWN_TRUNCATE_LENGTH = int(os.getenv("MARKDOWN_TRUNCATE_LENGTH", "200"))
+CSV_ENCODING = os.getenv("CSV_ENCODING", "utf-8")
+EXPORT_FILENAME_FORMAT = os.getenv("EXPORT_FILENAME_FORMAT", "%Y%m%d_%H%M%S")
+
+# UI Element Heights and Sizes
+TEXT_AREA_SMALL_HEIGHT = int(os.getenv("TEXT_AREA_SMALL_HEIGHT", "80"))
+TEXT_AREA_MEDIUM_HEIGHT = int(os.getenv("TEXT_AREA_MEDIUM_HEIGHT", "100"))
+TEXT_AREA_LARGE_HEIGHT = int(os.getenv("TEXT_AREA_LARGE_HEIGHT", "150"))
+DATAFRAME_DISPLAY_HEIGHT = int(os.getenv("DATAFRAME_DISPLAY_HEIGHT", "300"))
+EDITOR_HEIGHT = int(os.getenv("EDITOR_HEIGHT", "400"))
+
+# CSS and Styling Configuration
+COMPACT_FONT_SIZE = int(os.getenv("COMPACT_FONT_SIZE", "14"))
+COMPACT_PADDING = os.getenv("COMPACT_PADDING", "0.25rem 0.5rem")
+COMPACT_MARGIN = os.getenv("COMPACT_MARGIN", "0.5rem")
+TAB_GAP = os.getenv("TAB_GAP", "8px")

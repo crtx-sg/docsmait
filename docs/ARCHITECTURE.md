@@ -94,7 +94,7 @@ frontend/
     ├── Activity_Logs.py          # Activity log tracking
     ├── AISettings.py             # AI configuration
     ├── Settings.py               # System settings
-    ├── _Training.py              # Training management
+    ├── Training.py               # Training management system
     └── Help.py                   # Help and documentation
 ```
 
@@ -106,7 +106,9 @@ frontend/
 - **Error Handling**: User-friendly error messages and validation feedback
 - **Interactive Tables**: st.dataframe implementation with single-row selection
 - **Comprehensive Forms**: Full editing capability for all data fields
-- **Export Capabilities**: Multiple format export including Markdown
+- **Export Capabilities**: Multiple format export including CSV and Markdown
+- **Training System**: AI-powered learning content generation and assessment
+- **Password Management**: Admin-level password reset with security controls
 - **Knowledge Base Integration**: Intelligent updates and project summaries
 
 #### 2.1.3 State Management
@@ -145,7 +147,8 @@ backend/app/
 ├── code_review_service.py    # Code review service
 ├── ai_service.py             # AI integration service
 ├── email_service.py          # Email notification service
-└── settings_service.py       # System settings service
+├── settings_service.py       # System settings service
+└── training_service.py       # Training system service
 ```
 
 #### 2.2.2 API Design Patterns
@@ -197,6 +200,23 @@ backend/app/
 ├── GET  /                           # List activity logs
 ├── POST /                           # Create activity log
 └── GET  /export                     # Export activity logs
+
+/training/                 # Training system
+├── GET  /learning-content           # Generate learning content
+├── POST /assessment                 # Create training assessment
+├── GET  /results/{user_id}          # Get training results
+└── POST /submit-assessment          # Submit assessment answers
+
+/settings/                 # System settings
+├── GET  /smtp                       # Get SMTP configuration
+├── POST /smtp                       # Update SMTP settings
+└── GET  /system-health              # System health check
+
+/admin/                    # Admin functions
+├── GET  /users                      # List all users
+├── POST /users                      # Create admin user
+├── POST /users/{id}/reset-password  # Reset user password
+└── PUT  /users/{id}/admin-status    # Update admin status
 
 /kb/                      # Knowledge base
 ├── POST /collections                # Create collection
@@ -250,6 +270,33 @@ class RecordCreate(BaseModel):
     status: str = Field(..., pattern="^(active|pending|approved|rejected|...)$")
     created_date: datetime = Field(default_factory=datetime.utcnow)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+class TrainingContentRequest(BaseModel):
+    topics: List[str] = Field(..., min_items=1, max_items=10)
+    collections: List[str] = Field(..., min_items=1, max_items=5)
+    content_type: str = Field(..., pattern="^(learning_material|assessment_questions)$")
+    difficulty_level: str = Field(default="intermediate", pattern="^(beginner|intermediate|advanced)$")
+    question_count: int = Field(default=10, ge=5, le=50)
+
+class AssessmentSubmission(BaseModel):
+    user_id: int
+    questions: List[dict]
+    answers: List[bool]
+    time_taken_minutes: int = Field(ge=1, le=120)
+    topic_areas: List[str]
+
+class SMTPConfigUpdate(BaseModel):
+    server_name: str = Field(..., min_length=1, max_length=255)
+    port: int = Field(..., ge=1, le=65535)
+    username: str = Field(..., min_length=1, max_length=255)
+    password: str = Field(..., min_length=1)
+    auth_method: str = Field(default="normal_password")
+    connection_security: str = Field(default="STARTTLS")
+    enabled: bool = Field(default=True)
+
+class PasswordResetRequest(BaseModel):
+    new_password: str = Field(..., min_length=8)
+    confirm_password: str = Field(..., min_length=8)
 ```
 
 #### 2.2.3 Authentication and Authorization
@@ -756,6 +803,32 @@ class TrainingService:
         self.kb_service = KnowledgeBaseService()
         self.ai_service = AIService()
     
+    def generate_learning_content(self, topics: List[str], collections: List[str]):
+        """Generates comprehensive learning content from knowledge base"""
+        # Aggregate content from multiple knowledge base collections
+        combined_content = []
+        for collection in collections:
+            # Search for relevant content in each collection
+            results = self.kb_service.search_collection(
+                collection_name=collection,
+                query=" ".join(topics),
+                limit=10
+            )
+            combined_content.extend(results)
+        
+        # Generate structured learning material using AI
+        learning_material = self.ai_service.generate_learning_content(
+            source_content=combined_content,
+            topics=topics,
+            format="structured_content"
+        )
+        
+        return {
+            "content": learning_material,
+            "sources": [r["metadata"] for r in combined_content],
+            "topics_covered": topics
+        }
+    
     def generate_assessment_questions_multi_topics(self, topics: List[str], collections: List[str]):
         """Generates assessment questions from knowledge base content"""
         # Retrieve relevant content from multiple collections
@@ -774,6 +847,52 @@ class TrainingService:
         )
         
         return questions
+    
+    def evaluate_assessment(self, submission: AssessmentSubmission):
+        """Evaluates training assessment and provides detailed feedback"""
+        total_questions = len(submission.questions)
+        correct_answers = sum(1 for i, answer in enumerate(submission.answers) 
+                            if answer == submission.questions[i]["correct_answer"])
+        
+        score_percentage = (correct_answers / total_questions) * 100
+        passing_score = 70  # From config.TRAINING_PASS_PERCENTAGE
+        
+        # Generate detailed feedback using AI
+        feedback = self.ai_service.generate_assessment_feedback(
+            questions=submission.questions,
+            user_answers=submission.answers,
+            topic_areas=submission.topic_areas,
+            score=score_percentage
+        )
+        
+        result = {
+            "user_id": submission.user_id,
+            "score_percentage": score_percentage,
+            "correct_answers": correct_answers,
+            "total_questions": total_questions,
+            "passed": score_percentage >= passing_score,
+            "time_taken_minutes": submission.time_taken_minutes,
+            "feedback": feedback,
+            "topic_performance": self._analyze_topic_performance(
+                submission.questions, submission.answers, submission.topic_areas
+            )
+        }
+        
+        # Store results in database
+        self._store_assessment_result(result)
+        
+        return result
+    
+    def _analyze_topic_performance(self, questions, answers, topics):
+        """Analyzes performance by topic area"""
+        topic_scores = {}
+        for topic in topics:
+            topic_questions = [q for q in questions if topic in q.get("topics", [])]
+            if topic_questions:
+                correct = sum(1 for i, q in enumerate(topic_questions) 
+                            if i < len(answers) and answers[i] == q["correct_answer"])
+                topic_scores[topic] = (correct / len(topic_questions)) * 100
+        return topic_scores
 ```
 
 #### 3.1.5 Database Schema for Knowledge Base
@@ -829,6 +948,62 @@ CREATE TABLE kb_document_tags (
 ```
 
 This comprehensive knowledge base architecture automatically builds organizational knowledge from approved documents, templates, and audit findings, providing intelligent search and AI-powered assistance throughout the document workflow system.
+
+#### 3.1.6 Training System Database Schema
+
+```sql
+-- Training System Database Schema
+CREATE TABLE training_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id INTEGER REFERENCES users(id) NOT NULL,
+    topics TEXT[] NOT NULL,
+    collections_used TEXT[] NOT NULL,
+    learning_content TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    status VARCHAR(50) DEFAULT 'active',
+    metadata JSONB
+);
+
+CREATE TABLE training_assessments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID REFERENCES training_sessions(id),
+    user_id INTEGER REFERENCES users(id) NOT NULL,
+    questions JSONB NOT NULL,
+    user_answers BOOLEAN[] NOT NULL,
+    correct_answers BOOLEAN[] NOT NULL,
+    score_percentage DECIMAL(5,2) NOT NULL,
+    passed BOOLEAN NOT NULL,
+    time_taken_minutes INTEGER NOT NULL,
+    topic_performance JSONB,
+    feedback TEXT,
+    completed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE training_progress (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id INTEGER REFERENCES users(id) NOT NULL,
+    topic VARCHAR(255) NOT NULL,
+    total_attempts INTEGER DEFAULT 0,
+    passed_attempts INTEGER DEFAULT 0,
+    best_score DECIMAL(5,2) DEFAULT 0,
+    last_attempt_date TIMESTAMP WITH TIME ZONE,
+    competency_level VARCHAR(50) DEFAULT 'beginner',
+    UNIQUE(user_id, topic)
+);
+
+CREATE TABLE system_smtp_settings (
+    id SERIAL PRIMARY KEY,
+    server_name VARCHAR(255) NOT NULL,
+    port INTEGER NOT NULL,
+    username VARCHAR(255) NOT NULL,
+    password_encrypted TEXT NOT NULL,
+    auth_method VARCHAR(50) DEFAULT 'normal_password',
+    connection_security VARCHAR(50) DEFAULT 'STARTTLS',
+    enabled BOOLEAN DEFAULT TRUE,
+    updated_by INTEGER REFERENCES users(id),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
 
 ### 3.2 Email Service Integration
 
@@ -1372,6 +1547,14 @@ class MetricsCollector:
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2024-01-15  
-**Architecture Review Date**: 2024-04-15
+**Document Version**: 1.1  
+**Last Updated**: 2025-01-15  
+**Architecture Review Date**: 2025-01-15
+
+### Recent Updates (v1.1)
+- Added Training System architecture with AI-powered content generation
+- Added SMTP email service configuration and management
+- Added admin password reset functionality with security controls  
+- Enhanced export capabilities with CSV and Markdown formats
+- Updated API endpoints for training, settings, and admin functions
+- Added comprehensive database schemas for training and system settings

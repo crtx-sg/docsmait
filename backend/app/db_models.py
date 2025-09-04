@@ -73,6 +73,7 @@ class ProjectResource(Base):
     content_type = Column(String(100))
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
     project = relationship("Project", back_populates="resources")

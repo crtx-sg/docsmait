@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-Docsmait is an AI-powered document and compliance management system designed for organizations requiring structured document management, quality assurance, audit compliance, and regulatory adherence. The system integrates knowledge base capabilities, automated document generation, review workflows, audit management, design record management, ISO 13485 records management, activity logging, and code review processes with modern interactive interfaces and comprehensive export capabilities.
+Docsmait is an AI-powered document and compliance management system designed for organizations requiring structured document management, quality assurance, audit compliance, and regulatory adherence. The system integrates knowledge base capabilities, automated document generation, review workflows, audit management, design record management, ISO 13485 records management, activity logging, training systems, email notifications, user administration, and code review processes with modern interactive interfaces and comprehensive export capabilities.
 
 ## 2. Business Requirements
 
@@ -12,11 +12,15 @@ Docsmait is an AI-powered document and compliance management system designed for
 - **Knowledge Centralization**: Create a searchable knowledge base for organizational knowledge
 - **Quality Assurance**: Implement robust review and approval workflows
 - **Audit Readiness**: Maintain audit trails and support compliance auditing processes
+- **Training System**: AI-powered learning content generation and competency assessment
 - **Process Automation**: Reduce manual effort through AI-powered document generation and management
 - **Design Record Management**: Comprehensive lifecycle documentation for regulated industries
 - **Records Management**: ISO 13485 compliant records tracking and management
 - **Traceability**: Complete requirements-to-testing traceability with risk management
-- **Export and Reporting**: Professional documentation export in multiple formats including Markdown
+- **Export and Reporting**: Professional documentation export in multiple formats including CSV and Markdown
+- **Email Notifications**: Comprehensive SMTP integration for workflow and system notifications
+- **User Administration**: Advanced user management with secure password reset capabilities
+- **System Management**: Backup, restore, and maintenance tools for production environments
 
 ### 2.2 Target Users
 1. **Quality Managers**: Document approval, compliance oversight, audit management
@@ -29,6 +33,8 @@ Docsmait is an AI-powered document and compliance management system designed for
 8. **Quality Assurance**: Records management, supplier management, non-conformance tracking
 9. **Clinical Affairs**: Post-market surveillance, adverse event management
 10. **Compliance Officers**: Design controls, regulatory compliance, audit preparation
+11. **Training Coordinators**: Learning content management, assessment creation, progress tracking
+12. **System Administrators**: Email configuration, user management, system maintenance, backups
 
 ### 2.3 Business Value Propositions
 - **Compliance Assurance**: Maintain regulatory compliance with automated tracking
@@ -57,6 +63,13 @@ Docsmait is an AI-powered document and compliance management system designed for
 - **REQ-UM-010**: System must enforce role-based access restrictions across all modules
 - **REQ-UM-011**: Super admins can create and manage admin users
 - **REQ-UM-012**: Admins can manage project memberships and roles
+
+#### 3.1.3 Password Management and Security
+- **REQ-UM-013**: Super admins must be able to reset passwords for any user except themselves
+- **REQ-UM-014**: Password reset functionality must include confirmation and validation
+- **REQ-UM-015**: Password reset actions must be logged in the audit trail
+- **REQ-UM-016**: Password complexity requirements must be configurable via system settings
+- **REQ-UM-017**: User management interface must display comprehensive user information and roles
 
 ### 3.2 Project Management
 
@@ -429,8 +442,32 @@ Docsmait is an AI-powered document and compliance management system designed for
 - **REQ-AL-006**: Complete audit trail must be maintained for compliance purposes
 - **REQ-AL-007**: Activity logs must be tamper-proof and immutable once created
 - **REQ-AL-008**: Log retention must meet regulatory requirements (minimum 5 years)
-- **REQ-AL-009**: System must support activity log export for external audit purposes
+- **REQ-AL-009**: System must support activity log export in CSV and Markdown formats
 - **REQ-AL-010**: Activity correlation must link related actions across different modules
+- **REQ-AL-011**: Export filtering must support date range, user, and action type filters
+
+### 3.14 System Management and Administration
+
+#### 3.14.1 Backup and Restore Capabilities
+- **REQ-SM-001**: System must provide comprehensive backup scripts for all components
+- **REQ-SM-002**: Backup must include PostgreSQL database, Qdrant vector store, Ollama models, and configuration files
+- **REQ-SM-003**: Restore functionality must support complete system recovery from backup
+- **REQ-SM-004**: Automated backup scheduling must be configurable via cron jobs
+- **REQ-SM-005**: Backup verification must ensure data integrity and completeness
+
+#### 3.14.2 Data Management and Cleanup
+- **REQ-SM-006**: System must provide data reset capabilities while preserving administrative users
+- **REQ-SM-007**: Log cleanup functionality must remove old logs while preserving recent activity
+- **REQ-SM-008**: Template management must support bulk upload and export operations
+- **REQ-SM-009**: System health monitoring must provide service status and performance metrics
+- **REQ-SM-010**: Environment migration tools must support moving between development and production
+
+#### 3.14.3 Configuration Management
+- **REQ-SM-011**: System configuration must be centralized and version-controlled
+- **REQ-SM-012**: Configuration changes must be tracked and auditable
+- **REQ-SM-013**: Environment-specific settings must be properly isolated
+- **REQ-SM-014**: Hardcoded values must be eliminated and moved to configuration files
+- **REQ-SM-015**: Configuration validation must prevent invalid settings
 
 ## 4. Non-Functional Requirements
 
@@ -586,6 +623,16 @@ Docsmait is an AI-powered document and compliance management system designed for
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2024-01-15  
-**Next Review**: 2024-04-15
+**Document Version**: 1.1  
+**Last Updated**: 2025-01-15  
+**Next Review**: 2025-04-15
+
+### Recent Updates (v1.1)
+- Added Training System requirements with AI-powered content generation and assessment
+- Enhanced password management and user administration requirements
+- Added comprehensive system management and backup/restore requirements
+- Updated export capabilities to include CSV and Markdown formats
+- Enhanced activity logging requirements with advanced filtering and export options
+- Added email notification system requirements with SMTP configuration
+- Updated security requirements with admin password reset functionality
+- Enhanced configuration management requirements with centralized config support

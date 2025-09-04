@@ -117,7 +117,7 @@ def setup_authenticated_sidebar():
         st.sidebar.page_link("pages/Audit.py", label="📊 Audit")
         st.sidebar.page_link("pages/Records.py", label="📋 Records")
         st.sidebar.page_link("pages/Activity_Logs.py", label="📊 Activity Logs")
-        st.sidebar.page_link("pages/_Training.py", label="🎓 Training")
+        st.sidebar.page_link("pages/Training.py", label="🎓 Training")
         st.sidebar.page_link("pages/_Knowledge_Base.py", label="📚 Knowledge Base")
         st.sidebar.page_link("pages/Help.py", label="❓ Help")
         

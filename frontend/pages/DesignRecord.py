@@ -139,21 +139,21 @@ st.markdown("---")
 
 # Main navigation tabs - comprehensive lifecycle management
 main_tabs = st.tabs([
-    "Requirements", 
-    "Hazards & Risks", 
-    "FMEA Analysis", 
-    "Design Artifacts",
-    "Test Artifacts",
-    "Traceability",
-    "Compliance",
-    "Post-Market",
-    "Export"
+    "📋 Requirements", 
+    "⚠️ Hazards & Risks", 
+    "🔍 FMEA Analysis", 
+    "🏗️ Design Artifacts",
+    "🧪 Test Artifacts",
+    "🔗 Traceability",
+    "✅ Compliance",
+    "📊 Post-Market",
+    "📤 Export"
 ])
 
 # === REQUIREMENTS TAB ===
 with main_tabs[0]:
     
-    req_subtabs = st.tabs(["View Requirements", "Create Requirement", "Requirements Dashboard"])
+    req_subtabs = st.tabs(["👀 View Requirements", "➕ Create Requirement", "📊 Requirements Dashboard"])
     
     with req_subtabs[0]:
         st.markdown("**Filter Requirements:**")
@@ -436,7 +436,7 @@ with main_tabs[0]:
 # === HAZARDS & RISKS TAB ===
 with main_tabs[1]:
     
-    hazard_subtabs = st.tabs(["View Hazards", "Create Hazard", "Medical Risks", "Risk Dashboard"])
+    hazard_subtabs = st.tabs(["👀 View Hazards", "➕ Create Hazard", "🏥 Medical Risks", "📊 Risk Dashboard"])
     
     with hazard_subtabs[0]:
         st.markdown("**Filter Hazards:**")
@@ -720,7 +720,7 @@ with main_tabs[1]:
 # === FMEA ANALYSIS TAB ===
 with main_tabs[2]:
     
-    fmea_subtabs = st.tabs(["View FMEA", "Create FMEA", "FMEA Dashboard", "Actions Tracking"])
+    fmea_subtabs = st.tabs(["👀 View FMEA", "➕ Create FMEA", "📊 FMEA Dashboard", "📋 Actions Tracking"])
     
     with fmea_subtabs[0]:
         col1, col2, col3 = st.columns(3)
@@ -1006,7 +1006,7 @@ with main_tabs[2]:
 # === DESIGN ARTIFACTS TAB ===
 with main_tabs[3]:
     
-    design_subtabs = st.tabs(["View Designs", "Create Design", "Safety Measures", "Medical Controls"])
+    design_subtabs = st.tabs(["👀 View Designs", "➕ Create Design", "🛡️ Safety Measures", "🏥 Medical Controls"])
     
     with design_subtabs[0]:
         col1, col2 = st.columns(2)
@@ -1284,7 +1284,7 @@ with main_tabs[3]:
 # === TEST ARTIFACTS TAB ===
 with main_tabs[4]:
     
-    test_subtabs = st.tabs(["View Tests", "Create Test", "Medical Testing", "Test Dashboard"])
+    test_subtabs = st.tabs(["👀 View Tests", "➕ Create Test", "🏥 Medical Testing", "📊 Test Dashboard"])
     
     with test_subtabs[0]:
         col1, col2, col3 = st.columns(3)
@@ -1614,7 +1614,7 @@ with main_tabs[4]:
 # === TRACEABILITY TAB ===
 with main_tabs[5]:
     
-    trace_subtabs = st.tabs(["Traceability Matrix", "Create Links", "Impact Analysis", "Coverage Report"])
+    trace_subtabs = st.tabs(["📋 Traceability Matrix", "🔗 Create Links", "📈 Impact Analysis", "📊 Coverage Report"])
     
     with trace_subtabs[0]:
         st.markdown("**Comprehensive Traceability Matrix**")
@@ -1852,7 +1852,7 @@ with main_tabs[5]:
 # === COMPLIANCE TAB ===
 with main_tabs[6]:
     
-    compliance_subtabs = st.tabs(["Standards", "Compliance Status", "Audit Findings", "Evidence Matrix"])
+    compliance_subtabs = st.tabs(["📜 Standards", "✅ Compliance Status", "🔍 Audit Findings", "🗺️ Evidence Matrix"])
     
     with compliance_subtabs[0]:
         st.markdown("**Applicable Standards**")
@@ -2105,7 +2105,7 @@ with main_tabs[6]:
 # === POST-MARKET TAB ===
 with main_tabs[7]:
     
-    postmarket_subtabs = st.tabs(["Adverse Events", "Customer Feedback", "Field Actions", "Surveillance Reports"])
+    postmarket_subtabs = st.tabs(["⚠️ Adverse Events", "🗨️ Customer Feedback", "🛠️ Field Actions", "📊 Surveillance Reports"])
     
     with postmarket_subtabs[0]:
         col1, col2, col3 = st.columns(3)

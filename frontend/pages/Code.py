@@ -123,7 +123,7 @@ def get_code_reviews(pr_id=None):
         return []
 
 # Main tab navigation
-tab1, tab2, tab3, tab4 = st.tabs(["Code Dashboard", "Repositories", "Pull Requests", "Reviews"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Code Dashboard", "📁 Repositories", "🔀 Pull Requests", "👁️ Reviews"])
 
 with tab1:
     
@@ -288,7 +288,7 @@ with tab3:
         selected_repo_str = st.selectbox("Select Repository for Pull Requests", repo_options, key="pr_repo")
         selected_repo = repositories[repo_options.index(selected_repo_str)]
         
-        pr_tab1, pr_tab2 = st.tabs(["View Pull Requests", "Create Pull Request"])
+        pr_tab1, pr_tab2 = st.tabs(["👀 View Pull Requests", "➕ Create Pull Request"])
         
         with pr_tab1:
             pull_requests = get_pull_requests(selected_repo["id"])
@@ -412,7 +412,7 @@ with tab4:
             selected_pr_str = st.selectbox("Select Pull Request", pr_options, key="review_pr")
             selected_pr = pull_requests[pr_options.index(selected_pr_str)]
             
-            review_tab1, review_tab2 = st.tabs(["View Reviews", "Create Review"])
+            review_tab1, review_tab2 = st.tabs(["👀 View Reviews", "➕ Create Review"])
             
             with review_tab1:
                 reviews = get_code_reviews(selected_pr["id"])
