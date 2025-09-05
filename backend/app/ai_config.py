@@ -22,7 +22,8 @@ class AIConfig:
     """AI Configuration Management"""
     
     def __init__(self):
-        self.config_file = Path("/app/config/ai_config.json")
+        from .config import config
+        self.config_file = Path(f"{config.CONFIG_DIR}/ai_config.json")
         self.ensure_config_directory()
         self.load_config()
     

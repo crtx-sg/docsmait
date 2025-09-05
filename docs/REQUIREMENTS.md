@@ -1,652 +1,373 @@
-# Docsmait - Detailed Requirements Specification
-
-## 1. Executive Summary
-
-Docsmait is an AI-powered document and compliance management system designed for organizations requiring structured document management, quality assurance, audit compliance, and regulatory adherence. The system integrates knowledge base capabilities, automated document generation, review workflows, audit management, design record management, ISO 13485 records management, activity logging, training systems, email notifications, user administration, and code review processes with modern interactive interfaces and comprehensive export capabilities.
-
-## 2. Business Requirements
-
-### 2.1 Primary Business Objectives
-- **Compliance Management**: Ensure regulatory compliance across all organizational processes
-- **Document Lifecycle Management**: Streamline creation, review, approval, and archival of documents
-- **Knowledge Centralization**: Create a searchable knowledge base for organizational knowledge
-- **Quality Assurance**: Implement robust review and approval workflows
-- **Audit Readiness**: Maintain audit trails and support compliance auditing processes
-- **Training System**: AI-powered learning content generation and competency assessment
-- **Process Automation**: Reduce manual effort through AI-powered document generation and management
-- **Design Record Management**: Comprehensive lifecycle documentation for regulated industries
-- **Records Management**: ISO 13485 compliant records tracking and management
-- **Traceability**: Complete requirements-to-testing traceability with risk management
-- **Export and Reporting**: Professional documentation export in multiple formats including CSV and Markdown
-- **Email Notifications**: Comprehensive SMTP integration for workflow and system notifications
-- **User Administration**: Advanced user management with secure password reset capabilities
-- **System Management**: Backup, restore, and maintenance tools for production environments
-
-### 2.2 Target Users
-1. **Quality Managers**: Document approval, compliance oversight, audit management
-2. **Engineers/Developers**: Document creation, code reviews, technical documentation
-3. **Regulatory Affairs**: Compliance tracking, audit preparation, regulatory submissions
-4. **Project Managers**: Project document coordination, team collaboration
-5. **Auditors**: Audit execution, findings management, corrective action tracking
-6. **System Administrators**: User management, system configuration, maintenance
-7. **Design Engineers**: Requirements management, risk analysis, FMEA, traceability
-8. **Quality Assurance**: Records management, supplier management, non-conformance tracking
-9. **Clinical Affairs**: Post-market surveillance, adverse event management
-10. **Compliance Officers**: Design controls, regulatory compliance, audit preparation
-11. **Training Coordinators**: Learning content management, assessment creation, progress tracking
-12. **System Administrators**: Email configuration, user management, system maintenance, backups
-
-### 2.3 Business Value Propositions
-- **Compliance Assurance**: Maintain regulatory compliance with automated tracking
-- **Operational Efficiency**: Reduce document management overhead by 60%
-- **Quality Improvement**: Standardize document quality through templates and AI assistance
-- **Risk Mitigation**: Early detection of compliance gaps and quality issues
-- **Knowledge Retention**: Capture and retain organizational knowledge
-- **Audit Readiness**: Maintain continuous audit-ready state
-
-## 3. Functional Requirements
-
-### 3.1 User Management and Authentication
-
-#### 3.1.1 User Registration and Authentication
-- **REQ-UM-001**: Users must register with username, email, and secure password
-- **REQ-UM-002**: System must support role-based access control (User, Admin, Super Admin)
-- **REQ-UM-003**: System must implement JWT-based authentication with token expiration
-- **REQ-UM-004**: Passwords must meet complexity requirements (minimum 8 characters)
-- **REQ-UM-005**: System must support password reset functionality via email
-- **REQ-UM-006**: First registered user automatically becomes super admin
-
-#### 3.1.2 User Roles and Permissions
-- **REQ-UM-007**: **User Role** - Basic document creation, viewing, and collaboration
-- **REQ-UM-008**: **Admin Role** - Project management, user administration within projects
-- **REQ-UM-009**: **Super Admin Role** - System-wide administration, settings management
-- **REQ-UM-010**: System must enforce role-based access restrictions across all modules
-- **REQ-UM-011**: Super admins can create and manage admin users
-- **REQ-UM-012**: Admins can manage project memberships and roles
-
-#### 3.1.3 Password Management and Security
-- **REQ-UM-013**: Super admins must be able to reset passwords for any user except themselves
-- **REQ-UM-014**: Password reset functionality must include confirmation and validation
-- **REQ-UM-015**: Password reset actions must be logged in the audit trail
-- **REQ-UM-016**: Password complexity requirements must be configurable via system settings
-- **REQ-UM-017**: User management interface must display comprehensive user information and roles
-
-### 3.2 Project Management
-
-#### 3.2.1 Project Creation and Management
-- **REQ-PM-001**: Users must be able to create projects with name and description
-- **REQ-PM-002**: Project creators become project admins automatically
-- **REQ-PM-003**: Project admins can add/remove members with specific roles
-- **REQ-PM-004**: System must support project-level permissions and access control
-- **REQ-PM-005**: Projects must have unique names across the system
-- **REQ-PM-006**: Projects must track creation, modification timestamps and creators
-
-#### 3.2.2 Project Membership Management
-- **REQ-PM-007**: Project admins can invite users by email address
-- **REQ-PM-008**: System must send email notifications for project invitations
-- **REQ-PM-009**: Members can have roles: member, admin
-- **REQ-PM-010**: Project creators cannot be removed from their projects
-- **REQ-PM-011**: System must maintain member addition history and audit trail
-- **REQ-PM-012**: Members must have visibility only to projects they belong to
-
-#### 3.2.3 Project Resources
-- **REQ-PM-013**: Projects must support resource attachments (glossary, reference, book)
-- **REQ-PM-014**: Project members can upload and share resources within project scope
-- **REQ-PM-015**: Resources must be categorized by type with metadata
-- **REQ-PM-016**: System must track resource upload history and ownership
-
-### 3.3 Document Management
-
-#### 3.3.1 Document Creation and Editing
-- **REQ-DM-001**: Users must be able to create documents within project scope
-- **REQ-DM-002**: Documents must be categorized by type (planning_documents, process_documents, specifications, records, templates, policies, manuals)
-- **REQ-DM-003**: System must support document creation from templates
-- **REQ-DM-004**: Documents must have unique names within project scope
-- **REQ-DM-005**: System must support rich text editing with markdown support
-- **REQ-DM-006**: Documents must track creation and modification metadata
-
-#### 3.3.2 Document Status and Workflow
-- **REQ-DM-007**: Documents must support status workflow: draft → request_review → approved
-- **REQ-DM-008**: Only document creators can edit documents in draft status
-- **REQ-DM-009**: Documents in review status cannot be edited until review completion
-- **REQ-DM-010**: Approved documents require version control for modifications
-- **REQ-DM-011**: System must maintain complete document revision history
-- **REQ-DM-012**: Each revision must include change comments and reviewer information
-
-#### 3.3.3 Document Review Process
-- **REQ-DM-013**: Document creators can assign specific reviewers for documents
-- **REQ-DM-014**: Reviewers must be project members with appropriate permissions
-- **REQ-DM-015**: Review process must support approve/reject with mandatory comments
-- **REQ-DM-016**: System must send email notifications for review assignments and completions
-- **REQ-DM-017**: Reviews must be tracked with timestamps and reviewer information
-- **REQ-DM-018**: Documents require all assigned reviewers to approve before final approval
-
-#### 3.3.4 Document Version Control
-- **REQ-DM-019**: System must maintain complete revision history for all documents
-- **REQ-DM-020**: Each revision must be numbered sequentially
-- **REQ-DM-021**: Users must be able to view and compare document revisions
-- **REQ-DM-022**: System must support reverting to previous document versions
-- **REQ-DM-023**: Revision metadata must include author, timestamp, and change description
-
-#### 3.3.5 Document Export and Sharing
-- **REQ-DM-024**: System must support PDF export for approved documents
-- **REQ-DM-025**: Exported documents must include metadata and approval information
-- **REQ-DM-026**: System must support bulk document export by project or type
-- **REQ-DM-027**: Export functionality must respect user access permissions
-
-### 3.4 Template Management
-
-#### 3.4.1 Template Creation and Management
-- **REQ-TM-001**: Users must be able to create document templates
-- **REQ-TM-002**: Templates must be categorized by document type
-- **REQ-TM-003**: Templates must support rich content with placeholders
-- **REQ-TM-004**: System must support template versioning and revision control
-- **REQ-TM-005**: Templates must have status workflow: draft → request_review → approved
-
-#### 3.4.2 Template Approval Process
-- **REQ-TM-006**: Template creators can request approval from specific users
-- **REQ-TM-007**: Template approval process must include reviewer comments
-- **REQ-TM-008**: Only approved templates can be used for document creation
-- **REQ-TM-009**: System must maintain template approval history and audit trail
-- **REQ-TM-010**: Template approvals must send email notifications to stakeholders
-
-#### 3.4.3 Template Library Management
-- **REQ-TM-011**: System must provide a searchable template library
-- **REQ-TM-012**: Templates must support tagging for categorization and search
-- **REQ-TM-013**: Users must be able to filter templates by type, status, and creator
-- **REQ-TM-014**: System must support template import/export functionality
-- **REQ-TM-015**: Pre-built templates must be available for ISO 13485 compliance
-
-### 3.5 Knowledge Base Management
-
-#### 3.5.1 Knowledge Base Structure
-- **REQ-KB-001**: System must support multiple knowledge base collections
-- **REQ-KB-002**: Collections must be created with name, description, and tags
-- **REQ-KB-003**: System must support document upload in multiple formats (PDF, DOCX, TXT, MD)
-- **REQ-KB-004**: Documents must be automatically processed and indexed for search
-- **REQ-KB-005**: System must support manual text addition to knowledge base
-
-#### 3.5.2 Search and Retrieval
-- **REQ-KB-006**: System must provide semantic search across knowledge base content
-- **REQ-KB-007**: Search must support vector similarity and keyword matching
-- **REQ-KB-008**: Search results must include relevance scoring and source attribution
-- **REQ-KB-009**: Users must be able to query knowledge base using natural language
-- **REQ-KB-010**: System must support advanced search filters (collection, date, type)
-
-#### 3.5.3 AI-Powered Chat Interface
-- **REQ-KB-011**: System must provide conversational interface for knowledge base queries
-- **REQ-KB-012**: Chat responses must include source citations and references
-- **REQ-KB-013**: System must maintain chat history for reference
-- **REQ-KB-014**: Chat interface must support follow-up questions and context awareness
-- **REQ-KB-015**: Responses must be generated using approved AI models with configurable parameters
-
-#### 3.5.4 Knowledge Base Analytics
-- **REQ-KB-016**: System must track knowledge base usage statistics
-- **REQ-KB-017**: Analytics must include query frequency, popular content, and user engagement
-- **REQ-KB-018**: System must provide insights on knowledge gaps and content effectiveness
-- **REQ-KB-019**: Usage statistics must be available to administrators for optimization
-
-#### 3.5.5 Automatic Content Integration
-- **REQ-KB-020**: System must automatically add approved documents to knowledge base
-- **REQ-KB-021**: Document approval workflow must trigger KB integration with full content and metadata
-- **REQ-KB-022**: Template approval must automatically add template content to knowledge base
-- **REQ-KB-023**: Audit completion must trigger automatic audit report addition to knowledge base
-- **REQ-KB-024**: Design Record exports must include comprehensive project data in knowledge base
-- **REQ-KB-025**: All KB integrations must use configurable default collection
-- **REQ-KB-026**: KB integration must not disrupt main workflow if KB service is unavailable
-- **REQ-KB-027**: System must provide user feedback on successful KB content additions
-
-### 3.6 AI-Powered Document Assistance
-
-#### 3.6.1 Document Generation Support
-- **REQ-AI-001**: System must provide AI assistance for document creation
-- **REQ-AI-002**: AI assistance must be contextually aware of document type and project
-- **REQ-AI-003**: Users must be able to generate content suggestions for specific document sections
-- **REQ-AI-004**: System must support custom prompts for specialized document generation
-- **REQ-AI-005**: AI assistance must maintain consistency with organizational standards
-
-#### 3.6.2 Content Enhancement
-- **REQ-AI-006**: System must provide grammar and style checking for documents
-- **REQ-AI-007**: AI must suggest improvements for clarity and compliance language
-- **REQ-AI-008**: System must support content summarization and key point extraction
-- **REQ-AI-009**: AI assistance must be configurable by document type with specific prompts
-- **REQ-AI-010**: Generated content must be clearly marked as AI-assisted
-
-#### 3.6.3 AI Model Configuration
-- **REQ-AI-011**: Administrators must be able to configure AI model parameters
-- **REQ-AI-012**: System must support multiple AI models (Ollama integration)
-- **REQ-AI-013**: AI prompts must be customizable by document type and category
-- **REQ-AI-014**: System must track AI usage statistics and performance metrics
-- **REQ-AI-015**: AI responses must include metadata about model and processing time
-
-### 3.7 Audit Management
-
-#### 3.7.1 Audit Planning and Setup
-- **REQ-AM-001**: Users must be able to create audit records with comprehensive metadata
-- **REQ-AM-002**: Audits must support types: internal, external, supplier, regulatory
-- **REQ-AM-003**: Audit planning must include scope, dates, auditors, and auditee departments
-- **REQ-AM-004**: System must generate unique audit numbers with year-based sequencing
-- **REQ-AM-005**: Audit teams must be assignable with lead auditor designation
-
-#### 3.7.2 Audit Execution
-- **REQ-AM-006**: Auditors must be able to record findings during audit execution
-- **REQ-AM-007**: Findings must be categorized by severity (critical, major, minor, observation)
-- **REQ-AM-008**: System must support evidence attachment and documentation for findings
-- **REQ-AM-009**: Findings must reference specific compliance clauses and standards
-- **REQ-AM-010**: Audit status must be trackable (planned, in_progress, completed, cancelled)
-
-#### 3.7.3 Finding Management
-- **REQ-AM-011**: Each finding must have unique identifier and detailed description
-- **REQ-AM-012**: Findings must support root cause analysis documentation
-- **REQ-AM-013**: System must track finding status (open, closed, verified)
-- **REQ-AM-014**: Findings must have due dates and responsible parties
-- **REQ-AM-015**: System must send notifications for overdue findings
-
-#### 3.7.4 Corrective Action Management
-- **REQ-AM-016**: Findings must support corrective action planning and tracking
-- **REQ-AM-017**: Corrective actions must have responsible persons, target dates, and priorities
-- **REQ-AM-018**: System must track corrective action implementation and effectiveness
-- **REQ-AM-019**: Effectiveness verification must be documented with verification dates
-- **REQ-AM-020**: System must generate corrective action reports and dashboards
-
-### 3.8 Code Review Management
-
-#### 3.8.1 Repository Management
-- **REQ-CR-001**: System must support code repository integration and management
-- **REQ-CR-002**: Repositories must be associated with projects and have access controls
-- **REQ-CR-003**: System must support multiple Git providers (GitHub, GitLab, Bitbucket)
-- **REQ-CR-004**: Repository metadata must include branch information and privacy settings
-- **REQ-CR-005**: System must track repository activity and statistics
-
-#### 3.8.2 Pull Request Management
-- **REQ-CR-006**: System must manage pull request lifecycle and metadata
-- **REQ-CR-007**: Pull requests must support file change tracking with additions/deletions
-- **REQ-CR-008**: System must track PR status (draft, open, review_requested, merged, closed)
-- **REQ-CR-009**: Pull requests must support external integration via URLs and IDs
-- **REQ-CR-010**: System must maintain PR statistics and metrics
-
-#### 3.8.3 Code Review Process
-- **REQ-CR-011**: Code reviews must support multiple reviewers per pull request
-- **REQ-CR-012**: Review process must include status tracking (pending, approved, changes_requested)
-- **REQ-CR-013**: Reviewers must be able to provide summary comments and detailed feedback
-- **REQ-CR-014**: System must support line-level comments and discussions
-- **REQ-CR-015**: Code review completion must trigger notification workflows
-
-#### 3.8.4 Review Analytics and Reporting
-- **REQ-CR-016**: System must provide code review analytics and metrics
-- **REQ-CR-017**: Analytics must include review turnaround times and participation rates
-- **REQ-CR-018**: System must generate code quality reports based on review outcomes
-- **REQ-CR-019**: Review statistics must be available at project and user levels
-
-### 3.9 Training and Assessment
-
-#### 3.9.1 Learning Content Generation
-- **REQ-TR-001**: System must generate learning content from knowledge base materials
-- **REQ-TR-002**: Learning content must be topic-specific and comprehensive
-- **REQ-TR-003**: System must support multi-topic learning content aggregation
-- **REQ-TR-004**: Generated content must include structured lessons and key concepts
-- **REQ-TR-005**: Learning materials must be exportable for offline use
-
-#### 3.9.2 Assessment Management
-- **REQ-TR-006**: System must generate assessment questions from knowledge base content
-- **REQ-TR-007**: Assessments must support configurable question counts and formats
-- **REQ-TR-008**: Question generation must ensure content relevance and quality
-- **REQ-TR-009**: System must support True/False and multiple-choice question types
-- **REQ-TR-010**: Assessments must be automatically graded with detailed feedback
-
-#### 3.9.3 Training Records and Compliance
-- **REQ-TR-011**: System must maintain individual training records for compliance
-- **REQ-TR-012**: Training completion must be tracked with dates and scores
-- **REQ-TR-013**: System must generate training compliance reports
-- **REQ-TR-014**: Training records must support audit trail and historical tracking
-- **REQ-TR-015**: Passing scores and requirements must be configurable by topic
-
-### 3.10 Email Notification System
-
-#### 3.10.1 SMTP Configuration
-- **REQ-EN-001**: System must support configurable SMTP settings for email notifications
-- **REQ-EN-002**: Email configuration must include server, port, authentication, and security settings
-- **REQ-EN-003**: Only super administrators can configure email settings
-- **REQ-EN-004**: Email settings must be stored securely in the database
-- **REQ-EN-005**: System must support connection security options (STARTTLS, SSL/TLS)
-
-#### 3.10.2 Project and Membership Notifications
-- **REQ-EN-006**: System must send welcome emails when users are added to projects
-- **REQ-EN-007**: Welcome emails must include project information and user role details
-- **REQ-EN-008**: Member addition must trigger notifications to relevant stakeholders
-- **REQ-EN-009**: Email templates must be professional and include system branding
-
-#### 3.10.3 Review Workflow Notifications
-- **REQ-EN-010**: System must notify reviewers when documents are assigned for review
-- **REQ-EN-011**: Document status changes must trigger email notifications to stakeholders
-- **REQ-EN-012**: Review completion must notify document creators with outcomes
-
-### 3.11 Design Record Management
-
-#### 3.11.1 Requirements Management
-- **REQ-DR-001**: System must support comprehensive requirements management with unique identifiers
-- **REQ-DR-002**: Requirements must be categorized by type (functional, performance, safety, usability, interface)
-- **REQ-DR-003**: Each requirement must have priority level (low, medium, high, critical)
-- **REQ-DR-004**: Requirements must specify verification methods (test, inspection, analysis, demonstration)
-- **REQ-DR-005**: System must track requirement dependencies and parent-child relationships
-- **REQ-DR-006**: Requirements must integrate with risk assessment and traceability
-
-#### 3.11.2 Hazards and Risk Analysis
-- **REQ-DR-007**: System must manage hazard identification with unique hazard IDs
-- **REQ-DR-008**: Hazards must document hazardous situations, sequences, and potential harm
-- **REQ-DR-009**: Risk assessment must include severity and probability classifications
-- **REQ-DR-010**: System must support safety integrity levels (ASIL, SIL, DAL, Medical Risk Class)
-- **REQ-DR-011**: Risk mitigation strategies must be tracked with effectiveness measures
-- **REQ-DR-012**: Post-mitigation residual risk must be calculated and documented
-
-#### 3.11.3 FMEA Analysis
-- **REQ-DR-013**: System must support multiple FMEA types (Design, Process, System, Software)
-- **REQ-DR-014**: FMEA must include element identification and functional analysis
-- **REQ-DR-015**: Failure modes must be linked to causes, effects, and controls
-- **REQ-DR-016**: FMEA must calculate Risk Priority Numbers (RPN) automatically
-- **REQ-DR-017**: System must track FMEA team members and review status
-- **REQ-DR-018**: FMEA analysis must support multiple hierarchy levels
-
-#### 3.11.4 Design and Test Artifacts
-- **REQ-DR-019**: System must manage design documentation (specifications, architecture, interfaces)
-- **REQ-DR-020**: Test artifacts must cover all testing types (unit, integration, system, safety, clinical)
-- **REQ-DR-021**: Test execution must be tracked with status and results
-- **REQ-DR-022**: Coverage metrics must show requirements-to-test traceability percentages
-- **REQ-DR-023**: Test environments must be documented with configurations and standards
-
-#### 3.11.5 Traceability Management
-- **REQ-DR-024**: System must provide interactive requirements-to-hazards traceability matrix
-- **REQ-DR-025**: Traceability relationships must be selectable and editable
-- **REQ-DR-026**: Multi-select linking must allow requirements to link to multiple hazards
-- **REQ-DR-027**: Traceability rationale must be documented for all relationships
-- **REQ-DR-028**: Bidirectional traceability must be maintained automatically
-
-#### 3.11.6 Compliance Management
-- **REQ-DR-029**: System must track compliance to multiple standards (ISO 13485, ISO 14971, IEC 62304, ISO 26262, FDA 21 CFR Part 820)
-- **REQ-DR-030**: Compliance status must be tracked (compliant, partially compliant, non-compliant, not assessed)
-- **REQ-DR-031**: Evidence must be linked to compliance requirements with references
-- **REQ-DR-032**: Review dates and next review planning must be tracked
-- **REQ-DR-033**: Compliance gaps must be identified and tracked for resolution
-
-#### 3.11.7 Post-Market Surveillance
-- **REQ-DR-034**: System must track adverse events with severity classifications
-- **REQ-DR-035**: Field actions must be managed with effectiveness assessments
-- **REQ-DR-036**: Regulatory reporting must track FDA and Notified Body notifications
-- **REQ-DR-037**: Post-market data must integrate with risk management processes
-- **REQ-DR-038**: Trend analysis must be performed on post-market data
-
-#### 3.11.8 Interactive Interface Features
-- **REQ-DR-039**: System must use st.dataframe for interactive table interfaces with single-row selection
-- **REQ-DR-040**: All data entry forms must provide comprehensive field editing
-- **REQ-DR-041**: Tables must maintain consistent 400px height for optimal visibility
-- **REQ-DR-042**: Real-time updates must occur immediately after data changes
-- **REQ-DR-043**: Export capabilities must include multiple formats (CSV, Excel, PDF, JSON, Markdown)
-
-#### 3.11.9 Export and Reporting
-- **REQ-DR-044**: System must generate professional Markdown tables for documentation
-- **REQ-DR-045**: Export types must include Complete Design Record, Requirements Traceability, Risk Management Summary
-- **REQ-DR-046**: FMEA Analysis, Compliance Evidence, and Test Execution Summary exports must be available
-- **REQ-DR-047**: Post-Market Surveillance and Regulatory Submission Package exports must be supported
-- **REQ-DR-048**: Filtered exports must support date range and status filtering with metadata inclusion
-
-### 3.12 Records Management (ISO 13485)
-
-#### 3.12.1 Supplier Management
-- **REQ-RM-001**: System must manage supplier records with performance tracking
-- **REQ-RM-002**: Supplier performance must include ratings, quality ratings, and on-time delivery rates
-- **REQ-RM-003**: Risk assessment must classify suppliers by risk levels
-- **REQ-RM-004**: Certification management must track status and contract details
-- **REQ-RM-005**: Contact management must maintain complete supplier information
-- **REQ-RM-006**: Approval status must be tracked (Pending, Approved, Conditional, Rejected)
-
-#### 3.12.2 Parts and Inventory Management
-- **REQ-RM-007**: Parts inventory must support UDI tracking and lot/serial number management
-- **REQ-RM-008**: Stock management must track current stock, minimum levels, and locations
-- **REQ-RM-009**: Expiration management must handle expiration dates and received dates
-- **REQ-RM-010**: Status control must track (In Stock, Quarantined, Expired, Disposed) status
-- **REQ-RM-011**: Cost tracking must include unit costs and inventory valuations
-- **REQ-RM-012**: Supplier linking must connect parts to approved suppliers
-
-#### 3.12.3 Lab Equipment Management
-- **REQ-RM-013**: Equipment tracking must manage calibration and maintenance schedules
-- **REQ-RM-014**: Calibration management must track last calibration, next calibration, and frequency
-- **REQ-RM-015**: Status monitoring must track (Calibrated, Due, Overdue, Out of Service) status
-- **REQ-RM-016**: Technician assignment must track calibration technicians and responsibility
-- **REQ-RM-017**: Standards documentation must maintain calibration standards and compliance notes
-- **REQ-RM-018**: Results recording must capture calibration results and adjustments
-
-#### 3.12.4 Customer Complaints Management
-- **REQ-RM-019**: Complaint tracking must include MDR reportability assessment
-- **REQ-RM-020**: Investigation management must track status and root cause analysis
-- **REQ-RM-021**: Product traceability must link Product ID, lot numbers, and serial numbers
-- **REQ-RM-022**: Response tracking must manage response dates and corrective actions
-- **REQ-RM-023**: MDR compliance must support Medical Device Reporting requirements
-- **REQ-RM-024**: Resolution documentation must provide complete workflow tracking
-
-#### 3.12.5 Non-Conformances Management
-- **REQ-RM-025**: Non-conformance tracking must classify by severity (Critical, Major, Minor)
-- **REQ-RM-026**: Risk assessment must determine risk levels and impact analysis
-- **REQ-RM-027**: Disposition management must support (Use As Is, Rework, Scrap, Return) decisions
-- **REQ-RM-028**: CAPA integration must link to Corrective and Preventive Action systems
-- **REQ-RM-029**: Status tracking must manage (Open, In Progress, Closed) status transitions
-- **REQ-RM-030**: Root cause analysis must be documented for all non-conformances
-
-#### 3.12.6 Records Interface Features
-- **REQ-RM-031**: Modern table interface must use 2:3 width ratio between dataframe and forms
-- **REQ-RM-032**: Professional table interface must implement st.dataframe with selection
-- **REQ-RM-033**: Comprehensive editing must allow access to all table columns and fields
-- **REQ-RM-034**: Form validation must include data type validation and required field checking
-- **REQ-RM-035**: Dropdown controls must standardize values for consistency
-- **REQ-RM-036**: Advanced filtering must support status, category, and date range filtering
-
-### 3.13 Activity Logging
-
-#### 3.13.1 Activity Tracking
-- **REQ-AL-001**: System must log all significant user actions with timestamps
-- **REQ-AL-002**: Activity logs must include user identification, action type, and details
-- **REQ-AL-003**: IP address and user agent must be captured for security tracking
-- **REQ-AL-004**: Project-specific activities must be linked to appropriate projects
-- **REQ-AL-005**: System must provide activity filtering and search capabilities
-
-#### 3.13.2 Audit Trail Requirements
-- **REQ-AL-006**: Complete audit trail must be maintained for compliance purposes
-- **REQ-AL-007**: Activity logs must be tamper-proof and immutable once created
-- **REQ-AL-008**: Log retention must meet regulatory requirements (minimum 5 years)
-- **REQ-AL-009**: System must support activity log export in CSV and Markdown formats
-- **REQ-AL-010**: Activity correlation must link related actions across different modules
-- **REQ-AL-011**: Export filtering must support date range, user, and action type filters
-
-### 3.14 System Management and Administration
-
-#### 3.14.1 Backup and Restore Capabilities
-- **REQ-SM-001**: System must provide comprehensive backup scripts for all components
-- **REQ-SM-002**: Backup must include PostgreSQL database, Qdrant vector store, Ollama models, and configuration files
-- **REQ-SM-003**: Restore functionality must support complete system recovery from backup
-- **REQ-SM-004**: Automated backup scheduling must be configurable via cron jobs
-- **REQ-SM-005**: Backup verification must ensure data integrity and completeness
-
-#### 3.14.2 Data Management and Cleanup
-- **REQ-SM-006**: System must provide data reset capabilities while preserving administrative users
-- **REQ-SM-007**: Log cleanup functionality must remove old logs while preserving recent activity
-- **REQ-SM-008**: Template management must support bulk upload and export operations
-- **REQ-SM-009**: System health monitoring must provide service status and performance metrics
-- **REQ-SM-010**: Environment migration tools must support moving between development and production
-
-#### 3.14.3 Configuration Management
-- **REQ-SM-011**: System configuration must be centralized and version-controlled
-- **REQ-SM-012**: Configuration changes must be tracked and auditable
-- **REQ-SM-013**: Environment-specific settings must be properly isolated
-- **REQ-SM-014**: Hardcoded values must be eliminated and moved to configuration files
-- **REQ-SM-015**: Configuration validation must prevent invalid settings
-- **REQ-SM-016**: Knowledge Base timeout values must be configurable via environment variables
-- **REQ-SM-017**: Demo data for regulatory systems must be externalized to configuration
-- **REQ-SM-018**: UI element timeouts and display durations must be configurable
-- **REQ-SM-019**: All KB integration parameters must be environment-configurable
-
-## 4. Non-Functional Requirements
-
-### 4.1 Performance Requirements
-- **REQ-NF-001**: System must support concurrent access by 100+ users
-- **REQ-NF-002**: Page load times must not exceed 3 seconds for standard operations
-- **REQ-NF-003**: Knowledge base searches must return results within 2 seconds
-- **REQ-NF-004**: Document uploads must support files up to 50MB
-- **REQ-NF-005**: AI-powered operations must complete within 30 seconds
-
-### 4.2 Security Requirements
-- **REQ-NF-006**: All data transmission must use HTTPS encryption
-- **REQ-NF-007**: Passwords must be stored using bcrypt hashing
-- **REQ-NF-008**: System must implement rate limiting for API endpoints
-- **REQ-NF-009**: User sessions must timeout after 2 hours of inactivity
-- **REQ-NF-010**: All administrative actions must be logged and auditable
-
-### 4.3 Reliability Requirements
-- **REQ-NF-011**: System uptime must be 99.5% or higher
-- **REQ-NF-012**: Data backup must occur automatically every 24 hours
-- **REQ-NF-013**: System must gracefully handle database connection failures
-- **REQ-NF-014**: Error messages must be user-friendly and informative
-- **REQ-NF-015**: System must recover from failures within 15 minutes
-
-### 4.4 Usability Requirements
-- **REQ-NF-016**: Interface must be responsive and mobile-friendly
-- **REQ-NF-017**: System must provide contextual help and documentation
-- **REQ-NF-018**: Navigation must be intuitive and consistent across modules
-- **REQ-NF-019**: User feedback must be provided for all significant actions
-- **REQ-NF-020**: System must support keyboard navigation and accessibility features
-
-### 4.5 Scalability Requirements
-- **REQ-NF-021**: Database must support horizontal scaling for growth
-- **REQ-NF-022**: Knowledge base must handle 10,000+ documents efficiently
-- **REQ-NF-023**: System must support multi-tenant architecture capabilities
-- **REQ-NF-024**: API endpoints must be designed for microservices scalability
-- **REQ-NF-025**: Vector database must scale to handle large document collections
-
-### 4.6 Compliance Requirements
-- **REQ-NF-026**: System must maintain audit trails for all significant actions
-- **REQ-NF-027**: Document management must comply with ISO 13485 standards
-- **REQ-NF-028**: Data retention policies must be configurable and enforceable
-- **REQ-NF-029**: System must support regulatory compliance reporting
-- **REQ-NF-030**: Access controls must meet enterprise security standards
-
-## 5. Integration Requirements
-
-### 5.1 AI Model Integration
-- **REQ-IN-001**: System must integrate with Ollama for local AI model deployment
-- **REQ-IN-002**: Support for multiple embedding models for knowledge base indexing
-- **REQ-IN-003**: Configurable AI model parameters and prompt management
-- **REQ-IN-004**: AI model health monitoring and fallback mechanisms
-- **REQ-IN-005**: Support for model updates and version management
-
-### 5.2 Database Integration
-- **REQ-IN-006**: PostgreSQL integration for relational data storage
-- **REQ-IN-007**: Qdrant vector database for semantic search capabilities
-- **REQ-IN-008**: Database connection pooling and optimization
-- **REQ-IN-009**: Support for database migrations and schema updates
-- **REQ-IN-010**: Cross-database transaction support where necessary
-
-### 5.3 Email Service Integration
-- **REQ-IN-011**: SMTP integration for email notifications
-- **REQ-IN-012**: Support for multiple email providers and configurations
-- **REQ-IN-013**: Email template management and customization
-- **REQ-IN-014**: Email delivery tracking and error handling
-- **REQ-IN-015**: Support for HTML and plain text email formats
-
-### 5.4 File Storage Integration
-- **REQ-IN-016**: Local file system integration for document storage
-- **REQ-IN-017**: Support for cloud storage providers (future enhancement)
-- **REQ-IN-018**: File type validation and security scanning
-- **REQ-IN-019**: Automatic file cleanup and archival policies
-- **REQ-IN-020**: File versioning and metadata management
-
-## 6. Data Requirements
-
-### 6.1 Data Models
-- **REQ-DA-001**: User profiles with role-based attributes
-- **REQ-DA-002**: Project hierarchies with member relationships
-- **REQ-DA-003**: Document metadata with version control
-- **REQ-DA-004**: Template libraries with approval workflows
-- **REQ-DA-005**: Knowledge base collections with semantic indexing
-- **REQ-DA-006**: Audit records with finding relationships
-- **REQ-DA-007**: Code review metadata with file change tracking
-- **REQ-DA-008**: Training records with assessment results
-- **REQ-DA-009**: System configuration with change history
-- **REQ-DA-010**: Email notification logs with delivery status
-- **REQ-DA-011**: Design record models (Requirements, Hazards, FMEA, Test Artifacts, Design Artifacts, Traceability, Compliance)
-- **REQ-DA-012**: Records management models (Suppliers, Parts, Lab Equipment, Customer Complaints, Non-Conformances)
-- **REQ-DA-013**: Activity log models with user actions and system events
-- **REQ-DA-014**: Post-market surveillance models with adverse events and field actions
-- **REQ-DA-015**: Traceability matrix models with relationship mapping and rationale documentation
-
-### 6.2 Data Integrity
-- **REQ-DA-016**: Foreign key constraints must maintain referential integrity
-- **REQ-DA-017**: Data validation must occur at both client and server levels
-- **REQ-DA-018**: Concurrent access must be handled with appropriate locking
-- **REQ-DA-019**: Data corruption detection and recovery mechanisms
-- **REQ-DA-020**: Regular data consistency checks and reporting
-
-### 6.3 Data Privacy
-- **REQ-DA-021**: Personal data must be handled according to privacy regulations
-- **REQ-DA-022**: Data anonymization capabilities for reporting and analytics
-- **REQ-DA-023**: User consent tracking for data processing activities
-- **REQ-DA-024**: Data retention policies with automated cleanup
-- **REQ-DA-025**: Right to data portability and deletion support
-
-## 7. Compliance and Regulatory Requirements
-
-### 7.1 ISO 13485 Compliance
-- **REQ-CO-001**: Document control procedures must align with ISO 13485
-- **REQ-CO-002**: Design control documentation and traceability
-- **REQ-CO-003**: Risk management process documentation and tracking
-- **REQ-CO-004**: Corrective and preventive action (CAPA) management
-- **REQ-CO-005**: Management review and audit trail maintenance
-
-### 7.2 Quality Management System
-- **REQ-CO-006**: Quality manual and procedure documentation
-- **REQ-CO-007**: Training record maintenance and compliance tracking
-- **REQ-CO-008**: Supplier evaluation and monitoring documentation
-- **REQ-CO-009**: Product realization process documentation
-- **REQ-CO-010**: Customer feedback and complaint handling
-
-### 7.3 Audit and Inspection Readiness
-- **REQ-CO-011**: Complete audit trail for all system activities
-- **REQ-CO-012**: Electronic signature support for critical documents
-- **REQ-CO-013**: Document retention and archival compliance
-- **REQ-CO-014**: Regulatory submission package generation
-- **REQ-CO-015**: Inspection readiness reports and documentation export
-
-## 8. Success Criteria
-
-### 8.1 User Adoption Metrics
-- **Target**: 90% of intended users actively using the system within 3 months
-- **Measure**: Monthly active user rate and feature utilization statistics
-- **Goal**: Reduce document management time by 50% for regular users
-
-### 8.2 Compliance Metrics
-- **Target**: 100% compliance with ISO 13485 requirements for document control
-- **Measure**: Successful audit completion with zero critical findings
-- **Goal**: Reduce audit preparation time by 70%
-
-### 8.3 Operational Metrics
-- **Target**: 99.5% system uptime with <3 second response times
-- **Measure**: System monitoring and performance metrics
-- **Goal**: Zero data loss incidents and robust backup/recovery
-
-### 8.4 Business Value Metrics
-- **Target**: 60% reduction in document creation and approval time
-- **Measure**: Process time tracking before/after implementation
-- **Goal**: ROI achievement within 12 months of deployment
+# Docsmait System Requirements
+
+## Overview
+
+This document outlines the functional and non-functional requirements for the Docsmait AI-powered document and compliance management system.
+
+## 1. Functional Requirements
+
+### 1.1 User Management and Authentication
+
+#### REQ-001: User Registration and Login
+- **Description**: System shall provide secure user registration and authentication
+- **Priority**: High
+- **Acceptance Criteria**:
+  - Users can create accounts with email and password
+  - First user automatically becomes super admin
+  - JWT-based authentication with configurable token expiration
+  - Password hashing using bcrypt
+  - Role-based access control (Super Admin, Admin, User)
+
+#### REQ-002: Admin User Management
+- **Description**: Super admins shall manage user accounts and permissions
+- **Priority**: High
+- **Acceptance Criteria**:
+  - Super admin can create additional admin users
+  - Admin password reset functionality
+  - User list with role management
+  - Activity tracking for administrative actions
+
+### 1.2 Project Management
+
+#### REQ-003: Multi-Project Organization
+- **Description**: System shall support multiple projects with member management
+- **Priority**: High
+- **Acceptance Criteria**:
+  - Create, update, delete projects
+  - Add/remove project members with roles
+  - Project-level access control
+  - Project dashboard with health metrics
+
+#### REQ-004: Project Collaboration
+- **Description**: Project members shall collaborate on documents and processes
+- **Priority**: Medium
+- **Acceptance Criteria**:
+  - Project-specific document repositories
+  - Member notification systems
+  - Shared templates and resources
+  - Activity logging per project
+
+### 1.3 Document Management
+
+#### REQ-005: Document Repository
+- **Description**: System shall provide centralized document storage and management
+- **Priority**: High
+- **Acceptance Criteria**:
+  - Upload documents in supported formats (PDF, DOCX, TXT, MD)
+  - Version control with change tracking
+  - Document categorization and metadata
+  - Search functionality with AI-powered semantic search
+
+#### REQ-006: Document Workflows
+- **Description**: Documents shall follow approval workflows with review processes
+- **Priority**: High
+- **Acceptance Criteria**:
+  - Template-based document creation
+  - Review and approval workflows
+  - Status tracking (draft, review, approved)
+  - Email notifications for workflow events
+
+### 1.4 Issues Management
+
+#### REQ-007: Issue Tracking System
+- **Description**: System shall provide comprehensive issue tracking and management
+- **Priority**: High
+- **Acceptance Criteria**:
+  - Create issues with title, description, type, priority, and severity
+  - Human-readable issue IDs (e.g., DOC-001, DOC-002)
+  - Multi-assignee support with project member integration
+  - Status workflow (open, in_progress, closed, resolved)
+
+#### REQ-008: Issue Metadata Management
+- **Description**: Issues shall support rich metadata for project management
+- **Priority**: Medium
+- **Acceptance Criteria**:
+  - Labels, components, and version tracking
+  - Story points for agile workflows
+  - Due date management
+  - Comment threads with user attribution
+
+#### REQ-009: Issue Notifications
+- **Description**: System shall send email notifications for issue events
+- **Priority**: Medium
+- **Acceptance Criteria**:
+  - Notifications for issue creation and updates
+  - Include human-readable issue ID in emails
+  - Configurable SMTP settings
+  - HTML and plain text email formats
+
+### 1.5 Design Record System
+
+#### REQ-010: Requirements Management
+- **Description**: System shall manage requirements with full traceability
+- **Priority**: High
+- **Acceptance Criteria**:
+  - Unique requirement IDs with versioning
+  - Requirement categories and priorities
+  - Verification methods and acceptance criteria
+  - Traceability matrix linking requirements to hazards
+
+#### REQ-011: Risk and Hazard Analysis
+- **Description**: System shall support comprehensive risk management
+- **Priority**: High
+- **Acceptance Criteria**:
+  - Hazard identification and analysis
+  - FMEA (Failure Mode and Effects Analysis)
+  - Risk assessment with severity and probability
+  - Safety integrity levels (ASIL, SIL, DAL)
+
+#### REQ-012: Test Management
+- **Description**: System shall manage test planning and execution
+- **Priority**: High
+- **Acceptance Criteria**:
+  - Test case creation and management
+  - Test execution tracking
+  - Integration with requirements for verification
+  - Biocompatibility and EMC testing support
+
+### 1.6 Compliance Management
+
+#### REQ-013: Standards Compliance Tracking
+- **Description**: System shall track compliance with industry standards
+- **Priority**: High
+- **Acceptance Criteria**:
+  - Support for medical device standards (ISO 13485, ISO 14971, IEC 62304)
+  - Automotive standards (ISO 26262) support
+  - Industrial standards (IEC 61508) support
+  - Compliance status tracking and reporting
+
+#### REQ-014: Audit Management
+- **Description**: System shall support audit planning and execution
+- **Priority**: Medium
+- **Acceptance Criteria**:
+  - Audit scheduling and team assignment
+  - Audit trail generation
+  - Finding management and CAPA tracking
+  - Audit reporting and export capabilities
+
+### 1.7 Training System
+
+#### REQ-015: AI-Powered Training Content
+- **Description**: System shall generate training content from knowledge base
+- **Priority**: Medium
+- **Acceptance Criteria**:
+  - AI-generated learning materials
+  - Multi-topic assessments with configurable difficulty
+  - True/false question generation from organizational content
+  - Integration with approved documents and templates
+
+#### REQ-016: Progress Tracking and Analytics
+- **Description**: System shall track user learning progress and competency
+- **Priority**: Medium
+- **Acceptance Criteria**:
+  - Individual performance analytics
+  - Topic-specific competency tracking
+  - Configurable passing scores with detailed feedback
+  - Learning analytics across time periods
+
+### 1.8 Knowledge Base
+
+#### REQ-017: AI-Powered Semantic Search
+- **Description**: System shall provide intelligent content search and retrieval
+- **Priority**: High
+- **Acceptance Criteria**:
+  - Vector-based semantic search using RAG pipeline
+  - Automatic content vectorization and embedding generation
+  - Cross-referencing between documents and templates
+  - Query analytics and content usage optimization
+
+#### REQ-018: Collection Management
+- **Description**: System shall organize knowledge into structured collections
+- **Priority**: Medium
+- **Acceptance Criteria**:
+  - Project-specific knowledge repositories
+  - Document type categorization
+  - Subject area organization
+  - Integration across all system modules
+
+### 1.9 Email Notifications
+
+#### REQ-019: SMTP Configuration Management
+- **Description**: System shall provide configurable email notification services
+- **Priority**: Medium
+- **Acceptance Criteria**:
+  - SMTP server configuration with SSL/TLS support
+  - Connection testing and validation
+  - Template-based email generation
+  - Notification preferences per user and event type
+
+### 1.10 Export and Reporting
+
+#### REQ-020: Data Export Capabilities
+- **Description**: System shall provide comprehensive export functionality
+- **Priority**: High
+- **Acceptance Criteria**:
+  - CSV and Markdown export formats
+  - Configurable export filters and date ranges
+  - Comprehensive reporting across all modules
+  - Audit-compliant export with timestamps
+
+## 2. Non-Functional Requirements
+
+### 2.1 Performance Requirements
+
+#### REQ-NFR-001: Response Time
+- **Description**: System response time shall meet user expectations
+- **Criteria**:
+  - Web page load time < 3 seconds
+  - API response time < 1 second for standard operations
+  - AI query response time < 30 seconds
+  - Database query optimization for large datasets
+
+#### REQ-NFR-002: Scalability
+- **Description**: System shall support growing user base and data volume
+- **Criteria**:
+  - Support 50+ concurrent users
+  - Handle 10,000+ documents per project
+  - Horizontal scaling with Docker Swarm/Kubernetes
+  - Database connection pooling and optimization
+
+### 2.2 Security Requirements
+
+#### REQ-NFR-003: Data Security
+- **Description**: System shall protect sensitive data and user privacy
+- **Criteria**:
+  - Encryption at rest and in transit
+  - Secure password storage with bcrypt
+  - JWT-based authentication with secure token management
+  - Input validation and sanitization
+
+#### REQ-NFR-004: Access Control
+- **Description**: System shall enforce proper access controls
+- **Criteria**:
+  - Role-based access control (RBAC)
+  - Project-level permission isolation
+  - Admin and super admin privilege separation
+  - Audit logging of all security events
+
+### 2.3 Reliability Requirements
+
+#### REQ-NFR-005: System Availability
+- **Description**: System shall maintain high availability
+- **Criteria**:
+  - 99.5% uptime target
+  - Graceful error handling and recovery
+  - Database backup and disaster recovery
+  - Health monitoring and alerting
+
+#### REQ-NFR-006: Data Integrity
+- **Description**: System shall maintain data consistency and integrity
+- **Criteria**:
+  - ACID compliance for critical operations
+  - Data validation at all input points
+  - Backup verification and restore testing
+  - Version control for all document changes
+
+### 2.4 Usability Requirements
+
+#### REQ-NFR-007: User Interface
+- **Description**: System shall provide intuitive and efficient user interface
+- **Criteria**:
+  - Responsive design for desktop and tablet usage
+  - Consistent UI patterns across modules
+  - Interactive dataframes with filtering and sorting
+  - Context-sensitive help and documentation
+
+#### REQ-NFR-008: Accessibility
+- **Description**: System shall be accessible to users with disabilities
+- **Criteria**:
+  - Keyboard navigation support
+  - Screen reader compatibility
+  - High contrast mode support
+  - WCAG 2.1 AA compliance target
+
+### 2.5 Compliance Requirements
+
+#### REQ-NFR-009: Regulatory Compliance
+- **Description**: System shall meet regulatory requirements for target industries
+- **Criteria**:
+  - 21 CFR Part 11 electronic records compliance
+  - ISO 13485 quality management system requirements
+  - Audit trail requirements for regulated environments
+  - Data retention and archival policies
+
+### 2.6 Maintainability Requirements
+
+#### REQ-NFR-010: System Configuration
+- **Description**: System shall be easily configurable and maintainable
+- **Criteria**:
+  - Environment variable configuration management
+  - Centralized configuration with .env support
+  - Docker-based deployment and scaling
+  - Comprehensive logging and monitoring
+
+#### REQ-NFR-011: Documentation
+- **Description**: System shall include comprehensive documentation
+- **Criteria**:
+  - API documentation with interactive examples
+  - User manual with step-by-step procedures
+  - Architecture documentation with system diagrams
+  - Installation and maintenance guides
+
+## 3. System Constraints
+
+### 3.1 Technology Constraints
+- **Programming Languages**: Python 3.9+
+- **Web Framework**: Streamlit (Frontend), FastAPI (Backend)
+- **Database**: PostgreSQL 13+
+- **AI/ML**: Ollama, Qdrant Vector Database
+- **Deployment**: Docker and Docker Compose
+
+### 3.2 Environmental Constraints
+- **Minimum Hardware**: 4GB RAM, 2 CPU cores, 20GB storage
+- **Recommended Hardware**: 8GB+ RAM, 4+ CPU cores, 100GB+ storage
+- **Network**: Internet connection required for AI model downloads
+- **Operating System**: Linux, Windows, macOS (via Docker)
+
+### 3.3 Regulatory Constraints
+- Must comply with applicable industry regulations (FDA, ISO, IEC)
+- Data privacy and protection requirements (GDPR compliance where applicable)
+- Electronic signature and audit trail requirements
+- Document retention and archival policies
+
+## 4. Acceptance Criteria
+
+### 4.1 Functional Acceptance
+- All functional requirements implemented and tested
+- User acceptance testing completed for all major workflows
+- Integration testing across all system modules
+- Performance benchmarking meets specified criteria
+
+### 4.2 Non-Functional Acceptance
+- Security penetration testing passed
+- Load testing confirms scalability requirements
+- Backup and disaster recovery procedures validated
+- Documentation review and approval completed
+
+### 4.3 Compliance Acceptance
+- Industry standard compliance validation
+- Regulatory audit preparation and testing
+- Quality management system integration verified
+- Training and user adoption metrics achieved
+
+## 5. Change Management
+
+### 5.1 Requirements Traceability
+- All requirements shall be traceable to business needs
+- Impact analysis required for requirement changes
+- Version control for requirements documentation
+- Stakeholder approval for significant changes
+
+### 5.2 Testing Requirements
+- Unit testing coverage > 80%
+- Integration testing for all API endpoints
+- End-to-end testing for critical workflows
+- User acceptance testing with domain experts
 
 ---
 
-**Document Version**: 1.1  
-**Last Updated**: 2025-01-15  
-**Next Review**: 2025-04-15
-
-### Recent Updates (v1.1)
-- Added Training System requirements with AI-powered content generation and assessment
-- Enhanced password management and user administration requirements
-- Added comprehensive system management and backup/restore requirements
-- Updated export capabilities to include CSV and Markdown formats
-- Enhanced activity logging requirements with advanced filtering and export options
-- Added email notification system requirements with SMTP configuration
-- Updated security requirements with admin password reset functionality
-- Enhanced configuration management requirements with centralized config support
+**Document Control:**
+- **Version**: 1.2
+- **Last Updated**: January 2025
+- **Next Review**: July 2025
+- **Approved By**: System Architecture Team

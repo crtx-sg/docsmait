@@ -19,7 +19,16 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class DocsmaitBackup:
-    def __init__(self, backup_dir="/tmp/docsmait_backup"):
+    def __init__(self, backup_dir=""):
+        # Import here to avoid circular imports
+        import sys, os
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        try:
+            from backend.app.config import config
+            if not backup_dir:
+                backup_dir = config.BACKUP_DIR
+        except ImportError:
+            backup_dir = backup_dir or "/tmp/docsmait_backup"
         self.backup_dir = Path(backup_dir)
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.backup_name = f"docsmait_backup_{self.timestamp}"

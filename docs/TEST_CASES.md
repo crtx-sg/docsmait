@@ -633,6 +633,221 @@ class TestAIService:
         assert isinstance(is_healthy, bool)
 ```
 
+### 2.6 Issues Management Service Tests
+
+#### Test Suite: IssuesService
+```python
+class TestIssuesService:
+    
+    def test_create_issue_success(self):
+        """Test successful issue creation with human-readable ID"""
+        # Given
+        project_id = "test-project-uuid"
+        issue_data = {
+            "title": "Test Issue",
+            "description": "Test issue description",
+            "issue_type": "Bug",
+            "priority": "High", 
+            "severity": "Major",
+            "version": "1.0.0",
+            "labels": ["bug", "urgent"],
+            "component": "Frontend",
+            "assignees": [1, 2],
+            "comment": "Initial issue comment"
+        }
+        
+        # When
+        result = issues_service.create_issue(
+            project_id=project_id,
+            created_by=1,
+            **issue_data
+        )
+        
+        # Then
+        assert result["success"] is True
+        assert "issue_id" in result
+        assert "issue_number" in result
+        assert result["issue_number"].startswith("PROJ-")
+        assert result["message"].contains("created successfully")
+        
+    def test_generate_issue_number_sequential(self):
+        """Test that issue numbers are generated sequentially"""
+        # Given
+        project_id = "test-project-uuid"
+        
+        # When
+        issue1 = issues_service.create_issue(
+            project_id=project_id,
+            title="First Issue", 
+            description="First test issue",
+            issue_type="Bug",
+            priority="High",
+            severity="Major",
+            created_by=1
+        )
+        
+        issue2 = issues_service.create_issue(
+            project_id=project_id,
+            title="Second Issue",
+            description="Second test issue", 
+            issue_type="Feature",
+            priority="Medium",
+            severity="Minor",
+            created_by=1
+        )
+        
+        # Then
+        issue1_num = int(issue1["issue_number"].split("-")[1])
+        issue2_num = int(issue2["issue_number"].split("-")[1])
+        assert issue2_num == issue1_num + 1
+        
+    def test_get_project_issues_with_filters(self):
+        """Test retrieving project issues with status and priority filters"""
+        # Given
+        project_id = "test-project-uuid"
+        user_id = 1
+        
+        # Create test issues with different statuses
+        issues_service.create_issue(
+            project_id=project_id,
+            title="Open Bug",
+            description="Open bug issue",
+            issue_type="Bug", 
+            priority="High",
+            severity="Major",
+            created_by=user_id
+        )
+        
+        issues_service.create_issue(
+            project_id=project_id,
+            title="Closed Feature",
+            description="Closed feature issue",
+            issue_type="Feature",
+            priority="Low", 
+            severity="Minor",
+            created_by=user_id
+        )
+        
+        # When
+        open_issues = issues_service.get_project_issues(
+            project_id=project_id,
+            user_id=user_id, 
+            status_filter="open"
+        )
+        
+        high_priority_issues = issues_service.get_project_issues(
+            project_id=project_id,
+            user_id=user_id,
+            priority_filter="High"
+        )
+        
+        # Then
+        assert len(open_issues) >= 1
+        assert len(high_priority_issues) >= 1
+        assert all(issue["status"] == "open" for issue in open_issues)
+        assert all(issue["priority"] == "High" for issue in high_priority_issues)
+        
+    def test_update_issue_status_workflow(self):
+        """Test issue status workflow transitions"""
+        # Given
+        issue_id = "test-issue-uuid"
+        user_id = 1
+        
+        # When - Update to in_progress
+        result1 = issues_service.update_issue(
+            issue_id=issue_id,
+            user_id=user_id,
+            status="in_progress"
+        )
+        
+        # When - Update to closed  
+        result2 = issues_service.update_issue(
+            issue_id=issue_id,
+            user_id=user_id,
+            status="closed"
+        )
+        
+        # Then
+        assert result1["success"] is True
+        assert result2["success"] is True
+        
+        # Verify closed_at timestamp is set
+        issue = issues_service.get_issue(issue_id, user_id)
+        assert issue["status"] == "closed"
+        assert issue["closed_at"] is not None
+        
+    def test_add_issue_comment(self):
+        """Test adding comments to issues"""
+        # Given
+        issue_id = "test-issue-uuid"
+        user_id = 1
+        comment_text = "This is a test comment"
+        
+        # When
+        result = issues_service.add_comment(
+            issue_id=issue_id,
+            user_id=user_id,
+            comment_text=comment_text
+        )
+        
+        # Then
+        assert result["success"] is True
+        assert "comment_id" in result
+        
+        # Verify comment retrieval
+        comments = issues_service.get_issue_comments(issue_id, user_id)
+        assert len(comments) >= 1
+        assert any(comment["comment_text"] == comment_text for comment in comments)
+        
+    def test_delete_issue_permissions(self):
+        """Test issue deletion with proper permission checks"""
+        # Given
+        issue_id = "test-issue-uuid" 
+        creator_id = 1
+        other_user_id = 2
+        admin_user_id = 3
+        
+        # When - Non-creator, non-admin tries to delete
+        result1 = issues_service.delete_issue(issue_id, other_user_id)
+        
+        # When - Creator deletes
+        result2 = issues_service.delete_issue(issue_id, creator_id)
+        
+        # Then
+        assert result1["success"] is False
+        assert "Insufficient permissions" in result1["error"]
+        assert result2["success"] is True
+        
+    def test_issue_email_notifications(self):
+        """Test email notifications for issue events"""
+        # Given
+        project_id = "test-project-uuid"
+        assignee_ids = [1, 2]
+        
+        # Mock email service
+        with patch('issues_service.email_service') as mock_email:
+            # When
+            result = issues_service.create_issue(
+                project_id=project_id,
+                title="Test Notification Issue",
+                description="Test issue for notifications",
+                issue_type="Bug",
+                priority="High",
+                severity="Major", 
+                assignees=assignee_ids,
+                created_by=1
+            )
+            
+            # Then
+            assert result["success"] is True
+            mock_email.send_issue_created_notification.assert_called_once()
+            
+            # Verify email contains issue number
+            call_args = mock_email.send_issue_created_notification.call_args
+            assert "issue_number" in call_args.kwargs
+            assert call_args.kwargs["issue_number"].startswith("PROJ-")
+```
+
 ## 3. Integration Test Cases
 
 ### 3.1 API Endpoint Tests
@@ -911,6 +1126,269 @@ class TestDocumentManagementAPI:
         assert review.approved is True
 ```
 
+#### Test Suite: Issues Management API
+```python
+class TestIssuesManagementAPI:
+    
+    def test_create_issue_endpoint(self, test_client, auth_headers):
+        """Test issue creation API endpoint"""
+        # Given
+        user_id = get_user_id_from_headers(auth_headers)
+        project = create_test_project("Issues API Project", user_id)
+        
+        issue_data = {
+            "title": "API Test Issue",
+            "description": "Test issue created via API",
+            "issue_type": "Bug",
+            "priority": "High",
+            "severity": "Major",
+            "assignees": [user_id],
+            "labels": ["api", "test"]
+        }
+        
+        # When
+        response = test_client.post(
+            f"/projects/{project.id}/issues",
+            json=issue_data,
+            headers=auth_headers
+        )
+        
+        # Then
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "issue" in data
+        
+        issue = data["issue"]
+        assert issue["title"] == "API Test Issue"
+        assert issue["issue_number"].startswith("PROJ-")
+        assert issue["status"] == "open"
+        assert len(issue["assignees"]) == 1
+    
+    def test_get_project_issues_endpoint(self, test_client, auth_headers):
+        """Test retrieving project issues via API"""
+        # Given
+        user_id = get_user_id_from_headers(auth_headers)
+        project = create_test_project("Issues List Project", user_id)
+        
+        # Create test issues
+        issue1 = create_test_issue("Issue 1", project.id, user_id, "Bug", "High")
+        issue2 = create_test_issue("Issue 2", project.id, user_id, "Feature", "Medium")
+        
+        # When
+        response = test_client.get(
+            f"/projects/{project.id}/issues",
+            headers=auth_headers
+        )
+        
+        # Then
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert len(data["issues"]) == 2
+        
+        issue_titles = [issue["title"] for issue in data["issues"]]
+        assert "Issue 1" in issue_titles
+        assert "Issue 2" in issue_titles
+    
+    def test_update_issue_status_endpoint(self, test_client, auth_headers):
+        """Test issue status update via API"""
+        # Given
+        user_id = get_user_id_from_headers(auth_headers)
+        project = create_test_project("Status Update Project", user_id)
+        issue = create_test_issue("Status Test Issue", project.id, user_id)
+        
+        update_data = {
+            "status": "in_progress",
+            "priority": "Low",
+            "assignees": [user_id]
+        }
+        
+        # When
+        response = test_client.put(
+            f"/issues/{issue.id}",
+            json=update_data,
+            headers=auth_headers
+        )
+        
+        # Then
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        
+        # Verify status change
+        updated_issue = get_issue_by_id(issue.id)
+        assert updated_issue.status == "in_progress"
+        assert updated_issue.priority == "Low"
+    
+    def test_add_issue_comment_endpoint(self, test_client, auth_headers):
+        """Test adding comment to issue via API"""
+        # Given
+        user_id = get_user_id_from_headers(auth_headers)
+        project = create_test_project("Comment Project", user_id)
+        issue = create_test_issue("Comment Test Issue", project.id, user_id)
+        
+        comment_data = {
+            "comment_text": "This is a test comment via API"
+        }
+        
+        # When
+        response = test_client.post(
+            f"/issues/{issue.id}/comments",
+            json=comment_data,
+            headers=auth_headers
+        )
+        
+        # Then
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        
+        # Verify comment exists
+        comments = get_issue_comments(issue.id)
+        assert len(comments) == 1
+        assert comments[0]["comment_text"] == "This is a test comment via API"
+        assert comments[0]["user_id"] == user_id
+    
+    def test_get_issue_details_endpoint(self, test_client, auth_headers):
+        """Test retrieving single issue details via API"""
+        # Given
+        user_id = get_user_id_from_headers(auth_headers)
+        project = create_test_project("Issue Details Project", user_id)
+        issue = create_test_issue("Detailed Issue", project.id, user_id, "Bug", "Critical")
+        
+        # Add some comments
+        add_issue_comment(issue.id, user_id, "First comment")
+        add_issue_comment(issue.id, user_id, "Second comment")
+        
+        # When
+        response = test_client.get(f"/issues/{issue.id}", headers=auth_headers)
+        
+        # Then
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        
+        issue_data = data["issue"]
+        assert issue_data["title"] == "Detailed Issue"
+        assert issue_data["issue_type"] == "Bug"
+        assert issue_data["priority"] == "Critical"
+        assert len(issue_data["comments"]) == 2
+    
+    def test_delete_issue_endpoint(self, test_client, auth_headers):
+        """Test issue deletion via API"""
+        # Given
+        user_id = get_user_id_from_headers(auth_headers)
+        project = create_test_project("Delete Project", user_id)
+        issue = create_test_issue("Issue to Delete", project.id, user_id)
+        
+        # When
+        response = test_client.delete(f"/issues/{issue.id}", headers=auth_headers)
+        
+        # Then
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        
+        # Verify issue is deleted
+        deleted_issue = get_issue_by_id(issue.id)
+        assert deleted_issue is None
+    
+    def test_issue_access_permissions(self, test_client, auth_headers):
+        """Test issue access control and permissions"""
+        # Given
+        user_id = get_user_id_from_headers(auth_headers)
+        other_user = create_test_user("other@example.com")
+        other_headers = create_auth_headers(other_user.id)
+        
+        project = create_test_project("Permission Project", user_id)
+        issue = create_test_issue("Private Issue", project.id, user_id)
+        
+        # When - Other user tries to access issue from project they're not member of
+        response = test_client.get(f"/issues/{issue.id}", headers=other_headers)
+        
+        # Then
+        assert response.status_code == 404  # Issue not found for unauthorized user
+    
+    def test_issue_email_notification_api(self, test_client, auth_headers, mock_smtp):
+        """Test issue creation triggers email notification"""
+        # Given
+        user_id = get_user_id_from_headers(auth_headers)
+        assignee = create_test_user("assignee@example.com")
+        project = create_test_project("Email Notification Project", user_id)
+        add_project_member(project.id, assignee.id, "member")
+        
+        issue_data = {
+            "title": "Notification Test Issue",
+            "description": "This should trigger an email",
+            "issue_type": "Bug",
+            "priority": "High",
+            "severity": "Major",
+            "assignees": [assignee.id]
+        }
+        
+        # When
+        response = test_client.post(
+            f"/projects/{project.id}/issues",
+            json=issue_data,
+            headers=auth_headers
+        )
+        
+        # Then
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        
+        # Verify email notification sent
+        sent_emails = mock_smtp.get_sent_emails()
+        issue_emails = [e for e in sent_emails if "issue" in e["subject"].lower()]
+        assert len(issue_emails) >= 1
+        
+        email = issue_emails[0]
+        assert "assignee@example.com" in email["to"]
+        assert data["issue"]["issue_number"] in email["body"]
+        assert "Notification Test Issue" in email["body"]
+    
+    def test_bulk_issue_operations(self, test_client, auth_headers):
+        """Test bulk operations on multiple issues"""
+        # Given
+        user_id = get_user_id_from_headers(auth_headers)
+        project = create_test_project("Bulk Operations Project", user_id)
+        
+        # Create multiple issues
+        issues = []
+        for i in range(5):
+            issue = create_test_issue(f"Bulk Issue {i+1}", project.id, user_id)
+            issues.append(issue)
+        
+        bulk_data = {
+            "issue_ids": [issue.id for issue in issues[:3]],  # Update first 3
+            "updates": {
+                "status": "in_progress",
+                "priority": "Low"
+            }
+        }
+        
+        # When
+        response = test_client.patch(
+            f"/projects/{project.id}/issues/bulk",
+            json=bulk_data,
+            headers=auth_headers
+        )
+        
+        # Then
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["updated_count"] == 3
+        
+        # Verify updates applied
+        for issue in issues[:3]:
+            updated_issue = get_issue_by_id(issue.id)
+            assert updated_issue.status == "in_progress"
+            assert updated_issue.priority == "Low"
+```
+
 ### 3.2 Service Integration Tests
 
 #### Test Suite: Email Notification Integration
@@ -1020,6 +1498,105 @@ class TestEmailNotificationIntegration:
         assert "auditor@example.com" in recipients
         assert "team@example.com" in recipients
         assert "creator@example.com" in recipients
+    
+    def test_issue_notification_integration(self, mock_smtp):
+        """Test email notification integration for Issues Management"""
+        # Given
+        creator = create_test_user("creator@example.com")
+        assignee1 = create_test_user("assignee1@example.com")
+        assignee2 = create_test_user("assignee2@example.com")
+        project = create_test_project("Issue Notification Project", creator.id)
+        
+        # Add assignees as project members
+        add_project_member(project.id, assignee1.id, "member")
+        add_project_member(project.id, assignee2.id, "member")
+        
+        # When: Create issue with multiple assignees
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            result = issues_service.create_issue(
+                project_id=project.id,
+                title="Integration Test Issue",
+                description="Test issue for email notification integration",
+                issue_type="Bug",
+                priority="High", 
+                severity="Major",
+                assignees=[assignee1.id, assignee2.id],
+                labels=["integration", "test"],
+                created_by=creator.id
+            )
+        
+        # Then
+        assert result["success"] is True
+        issue = result["issue"]
+        
+        # Verify email notifications sent
+        sent_emails = mock_smtp.get_sent_emails()
+        issue_emails = [e for e in sent_emails if "issue" in e["subject"].lower()]
+        assert len(issue_emails) >= 1
+        
+        # Check email content includes issue number and details
+        email = issue_emails[0]
+        assert issue["issue_number"] in email["body"]
+        assert "Integration Test Issue" in email["body"]
+        assert "High" in email["body"]  # Priority
+        assert "Bug" in email["body"]   # Issue type
+        
+        # Verify correct recipients
+        recipients = set()
+        for email in issue_emails:
+            recipients.update(email["to"])
+        
+        assert "assignee1@example.com" in recipients
+        assert "assignee2@example.com" in recipients
+    
+    def test_issue_update_notification(self, mock_smtp):
+        """Test email notification for issue updates"""
+        # Given
+        creator = create_test_user("creator@example.com")
+        assignee = create_test_user("assignee@example.com")
+        project = create_test_project("Update Notification Project", creator.id)
+        add_project_member(project.id, assignee.id, "member")
+        
+        # Create initial issue
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            create_result = issues_service.create_issue(
+                project_id=project.id,
+                title="Update Test Issue",
+                description="Issue for testing updates",
+                issue_type="Feature",
+                priority="Medium",
+                assignees=[assignee.id],
+                created_by=creator.id
+            )
+        
+        issue_id = create_result["issue"]["id"]
+        mock_smtp.clear_sent_emails()  # Clear creation emails
+        
+        # When: Update issue status
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            update_result = issues_service.update_issue(
+                issue_id=issue_id,
+                user_id=assignee.id,
+                updates={
+                    "status": "in_progress",
+                    "priority": "High"
+                }
+            )
+        
+        # Then
+        assert update_result["success"] is True
+        
+        # Verify update notification email sent
+        sent_emails = mock_smtp.get_sent_emails()
+        update_emails = [e for e in sent_emails if "updated" in e["subject"].lower()]
+        
+        if update_emails:  # Email notifications may be optional for updates
+            email = update_emails[0]
+            assert "Update Test Issue" in email["body"]
+            assert "in_progress" in email["body"] or "In Progress" in email["body"]
 ```
 
 #### Test Suite: AI Service Integration
@@ -1447,6 +2024,283 @@ class TestAuditManagementWorkflow:
         print(f"   - Corrective actions: 2")
         print(f"   - Actions completed: 1")
         print(f"   - Final rating: minor_nc")
+```
+
+#### Test Suite: Issues Management Workflow
+```python
+class TestIssuesManagementWorkflow:
+    
+    def test_complete_issue_lifecycle_workflow(self):
+        """Test complete issue lifecycle from creation to resolution"""
+        # Given: Project setup with team members
+        project_manager = create_test_user("pm@company.com")
+        developer1 = create_test_user("dev1@company.com") 
+        developer2 = create_test_user("dev2@company.com")
+        tester = create_test_user("tester@company.com")
+        
+        project = create_test_project("Issue Lifecycle Project", project_manager.id)
+        add_project_member(project.id, developer1.id, "member")
+        add_project_member(project.id, developer2.id, "member")
+        add_project_member(project.id, tester.id, "member")
+        
+        # Step 1: Project Manager creates high priority bug
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            
+            create_result = issues_service.create_issue(
+                project_id=project.id,
+                title="Critical Login System Bug",
+                description="Users unable to login after password reset. Affects 50+ users.",
+                issue_type="Bug",
+                priority="High",
+                severity="Critical",
+                assignees=[developer1.id],
+                labels=["urgent", "authentication", "production"],
+                version="1.2.3",
+                component="Authentication Service",
+                due_date="2024-02-15",
+                story_points=8,
+                created_by=project_manager.id
+            )
+            
+            assert create_result["success"] is True
+            issue = create_result["issue"]
+            issue_id = issue["id"]
+            issue_number = issue["issue_number"]
+            
+            # Verify issue creation
+            assert issue["status"] == "open"
+            assert issue["title"] == "Critical Login System Bug"
+            assert issue_number.endswith("-001")  # First issue in project
+            assert len(issue["assignees"]) == 1
+            print(f"📝 Created issue: {issue_number} - Critical Login System Bug")
+        
+        # Step 2: Developer adds investigation comment and starts work
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            
+            # Add investigation comment
+            comment_result = issues_service.add_comment(
+                issue_id=issue_id,
+                user_id=developer1.id,
+                comment_text="Starting investigation. Checking password reset service logs."
+            )
+            assert comment_result["success"] is True
+            
+            # Update status to in_progress
+            update_result = issues_service.update_issue(
+                issue_id=issue_id,
+                user_id=developer1.id,
+                updates={
+                    "status": "in_progress",
+                    "assignees": [developer1.id, developer2.id]  # Add second developer
+                }
+            )
+            assert update_result["success"] is True
+            print(f"🔧 {issue_number}: Investigation started, assigned to 2 developers")
+        
+        # Step 3: Multiple team collaboration via comments
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            
+            # Developer 2 adds technical findings
+            comment2_result = issues_service.add_comment(
+                issue_id=issue_id,
+                user_id=developer2.id,
+                comment_text="Found the issue in auth-service v1.2.3. Session cleanup bug on password reset."
+            )
+            assert comment2_result["success"] is True
+            
+            # Project Manager requests status update
+            comment3_result = issues_service.add_comment(
+                issue_id=issue_id,
+                user_id=project_manager.id,
+                comment_text="What's the ETA for fix? This is blocking several customers."
+            )
+            assert comment3_result["success"] is True
+            
+            # Developer 1 provides update with technical details
+            comment4_result = issues_service.add_comment(
+                issue_id=issue_id,
+                user_id=developer1.id,
+                comment_text="Fix ready for testing. Updated session cleanup logic. ETA for deployment: tomorrow morning."
+            )
+            assert comment4_result["success"] is True
+            print(f"💬 {issue_number}: Team collaboration - 4 comments exchanged")
+        
+        # Step 4: Issue handed over to tester
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            
+            update_result = issues_service.update_issue(
+                issue_id=issue_id,
+                user_id=developer1.id,
+                updates={
+                    "assignees": [tester.id],
+                    "labels": ["urgent", "authentication", "ready-for-testing"],
+                    "priority": "Medium"  # Reduced priority after fix
+                }
+            )
+            assert update_result["success"] is True
+            
+            # Developer adds handover comment
+            handover_comment = issues_service.add_comment(
+                issue_id=issue_id,
+                user_id=developer1.id,
+                comment_text="Fix deployed to staging. Please test login flow after password reset. Test users: test1@example.com, test2@example.com"
+            )
+            assert handover_comment["success"] is True
+            print(f"🧪 {issue_number}: Handed over to testing team")
+        
+        # Step 5: Testing and verification
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            
+            # Tester adds test results
+            test_comment = issues_service.add_comment(
+                issue_id=issue_id,
+                user_id=tester.id,
+                comment_text="Testing completed successfully. Verified fix with 10 test users. Password reset flow working correctly."
+            )
+            assert test_comment["success"] is True
+            print(f"✅ {issue_number}: Testing completed successfully")
+        
+        # Step 6: Issue resolution and closure
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            
+            # Tester closes the issue
+            close_result = issues_service.update_issue(
+                issue_id=issue_id,
+                user_id=tester.id,
+                updates={
+                    "status": "resolved",
+                    "labels": ["urgent", "authentication", "resolved", "verified"]
+                }
+            )
+            assert close_result["success"] is True
+            
+            # Add final closure comment
+            closure_comment = issues_service.add_comment(
+                issue_id=issue_id,
+                user_id=tester.id,
+                comment_text="Issue resolved and verified in production. Closing issue."
+            )
+            assert closure_comment["success"] is True
+            print(f"🎯 {issue_number}: Issue resolved and closed")
+        
+        # Verification: Check complete issue state
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            
+            final_issue = issues_service.get_issue_by_id(issue_id, project_manager.id)
+            assert final_issue["success"] is True
+            
+            issue_data = final_issue["issue"]
+            assert issue_data["status"] == "resolved"
+            assert issue_data["priority"] == "Medium"
+            assert "verified" in issue_data["labels"]
+            
+            # Verify all comments recorded
+            comments = final_issue["issue"]["comments"]
+            assert len(comments) >= 6  # Initial creation + 5 workflow comments
+            
+            comment_authors = [c["username"] for c in comments]
+            assert "dev1@company.com" in comment_authors
+            assert "dev2@company.com" in comment_authors  
+            assert "pm@company.com" in comment_authors
+            assert "tester@company.com" in comment_authors
+        
+        print(f"🚀 Complete issue workflow test passed:")
+        print(f"   - Issue created: {issue_number}")
+        print(f"   - Team members involved: 4")
+        print(f"   - Comments exchanged: 6+")
+        print(f"   - Status transitions: open → in_progress → resolved")
+        print(f"   - Final resolution: verified")
+    
+    def test_bulk_issue_management_workflow(self):
+        """Test bulk issue operations and project management scenarios"""
+        # Given: Large project with multiple issues
+        project_manager = create_test_user("bulk_pm@company.com")
+        developer = create_test_user("bulk_dev@company.com")
+        
+        project = create_test_project("Bulk Management Project", project_manager.id)
+        add_project_member(project.id, developer.id, "member")
+        
+        # Create multiple related issues
+        issue_ids = []
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            
+            issue_data = [
+                ("Database Performance Issue", "Bug", "High", "Critical"),
+                ("API Rate Limiting", "Enhancement", "Medium", "Major"),
+                ("User Interface Improvements", "Feature", "Low", "Minor"),
+                ("Security Vulnerability Fix", "Bug", "High", "Critical"),
+                ("Documentation Updates", "Task", "Low", "Minor")
+            ]
+            
+            for title, issue_type, priority, severity in issue_data:
+                result = issues_service.create_issue(
+                    project_id=project.id,
+                    title=title,
+                    description=f"Description for {title}",
+                    issue_type=issue_type,
+                    priority=priority,
+                    severity=severity,
+                    assignees=[developer.id],
+                    labels=["batch-created"],
+                    created_by=project_manager.id
+                )
+                assert result["success"] is True
+                issue_ids.append(result["issue"]["id"])
+        
+        print(f"📊 Created {len(issue_ids)} issues for bulk management test")
+        
+        # Bulk operations simulation
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            
+            # Update all high priority issues to in_progress
+            high_priority_updates = 0
+            for issue_id in issue_ids:
+                issue_result = issues_service.get_issue_by_id(issue_id, project_manager.id)
+                if issue_result["success"] and issue_result["issue"]["priority"] == "High":
+                    update_result = issues_service.update_issue(
+                        issue_id=issue_id,
+                        user_id=project_manager.id,
+                        updates={"status": "in_progress"}
+                    )
+                    if update_result["success"]:
+                        high_priority_updates += 1
+            
+            assert high_priority_updates == 2  # Database and Security issues
+            print(f"⚡ Updated {high_priority_updates} high priority issues to in_progress")
+        
+        # Verify final project state
+        with get_db_session() as db:
+            issues_service = IssuesService(db)
+            
+            project_issues = issues_service.get_project_issues(
+                project_id=project.id,
+                user_id=project_manager.id
+            )
+            assert project_issues["success"] is True
+            
+            issues_list = project_issues["issues"]
+            assert len(issues_list) == 5
+            
+            # Verify status distribution
+            open_count = len([i for i in issues_list if i["status"] == "open"])
+            in_progress_count = len([i for i in issues_list if i["status"] == "in_progress"])
+            
+            assert open_count == 3  # Low priority issues remain open
+            assert in_progress_count == 2  # High priority moved to in_progress
+        
+        print(f"✅ Bulk management workflow completed:")
+        print(f"   - Total issues: {len(issue_ids)}")
+        print(f"   - In progress: 2")
+        print(f"   - Remaining open: 3")
 ```
 
 ### 4.2 Performance Test Cases

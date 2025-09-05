@@ -132,6 +132,61 @@ class Config:
     # === Logging Configuration ===
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     LOG_FILE: str = os.getenv("LOG_FILE", "/app/logs/docsmait.log")
+    
+    # === File System Configuration ===
+    TEMP_DIR: str = os.getenv("TEMP_DIR", "/tmp")
+    LOG_DIR: str = os.getenv("LOG_DIR", "/app/logs")
+    CONFIG_DIR: str = os.getenv("CONFIG_DIR", "/app/config")
+    BACKUP_DIR: str = os.getenv("BACKUP_DIR", "/tmp/docsmait_backup")
+    RESTORE_DIR: str = os.getenv("RESTORE_DIR", "/tmp/docsmait_restore")
+    
+    # === UI Configuration ===
+    # Form element heights
+    TEXTAREA_SMALL_HEIGHT: int = int(os.getenv("TEXTAREA_SMALL_HEIGHT", "80"))
+    TEXTAREA_MEDIUM_HEIGHT: int = int(os.getenv("TEXTAREA_MEDIUM_HEIGHT", "100"))
+    TEXTAREA_LARGE_HEIGHT: int = int(os.getenv("TEXTAREA_LARGE_HEIGHT", "150"))
+    EDITOR_HEIGHT: int = int(os.getenv("EDITOR_HEIGHT", "400"))
+    
+    # Pagination and limits
+    ACTIVITY_LOG_PAGE_SIZES: list = [25, 50, 100, 200]
+    DEFAULT_PAGE_SIZE: int = int(os.getenv("DEFAULT_PAGE_SIZE", "25"))
+    MAX_PREVIEW_LENGTH: int = int(os.getenv("MAX_PREVIEW_LENGTH", "1000"))
+    
+    # === Timeout Configuration ===
+    AI_REQUEST_TIMEOUT: int = int(os.getenv("AI_REQUEST_TIMEOUT", "180"))
+    API_REQUEST_TIMEOUT: int = int(os.getenv("API_REQUEST_TIMEOUT", "30"))
+    DEFAULT_REQUEST_TIMEOUT: int = int(os.getenv("DEFAULT_REQUEST_TIMEOUT", "10"))
+    
+    # === Issue Management Configuration ===
+    ISSUE_TYPES: list = ["Bug", "Feature", "Enhancement", "Task", "Documentation"]
+    ISSUE_PRIORITIES: list = ["High", "Medium", "Low"]
+    ISSUE_SEVERITIES: list = ["Critical", "Major", "Minor"]
+    ISSUE_STATUSES: list = ["open", "in_progress", "closed", "resolved"]
+    
+    # === Review Workflow Configuration ===
+    REVIEW_STATUSES: list = ["pending", "approved", "rejected", "needs_review"]
+    TEMPLATE_STATUSES: list = ["active", "draft", "request_review", "approved"]
+    
+    # === Numeric Input Ranges ===
+    SEVERITY_RATING_MIN: int = int(os.getenv("SEVERITY_RATING_MIN", "1"))
+    SEVERITY_RATING_MAX: int = int(os.getenv("SEVERITY_RATING_MAX", "10"))
+    OCCURRENCE_RATING_MIN: int = int(os.getenv("OCCURRENCE_RATING_MIN", "1"))
+    OCCURRENCE_RATING_MAX: int = int(os.getenv("OCCURRENCE_RATING_MAX", "10"))
+    DETECTION_RATING_MIN: int = int(os.getenv("DETECTION_RATING_MIN", "1"))
+    DETECTION_RATING_MAX: int = int(os.getenv("DETECTION_RATING_MAX", "10"))
+    
+    # === Database Connection Strings for Scripts ===
+    LOCAL_DATABASE_URL: str = os.getenv("LOCAL_DATABASE_URL", "postgresql://docsmait_user:docsmait_password@localhost:5433/docsmait")
+    DOCKER_DATABASE_URL: str = os.getenv("DOCKER_DATABASE_URL", "postgresql://docsmait_user:docsmait_password@docsmait_postgres:5432/docsmait")
+    
+    # === Company Information ===
+    COMPANY_NAME: str = os.getenv("COMPANY_NAME", "Docsmait")
+    COMPANY_WEBSITE: str = os.getenv("COMPANY_WEBSITE", "https://coherentix.com/")
+    SUPPORT_EMAIL: str = os.getenv("SUPPORT_EMAIL", "support@docsmait.com")
+    
+    # === Thread and Performance Configuration ===
+    THREAD_JOIN_TIMEOUT: int = int(os.getenv("THREAD_JOIN_TIMEOUT", "30"))
+    SEARCH_LIMIT_MIN: int = int(os.getenv("SEARCH_LIMIT_MIN", "3"))
 
 # Create global config instance
 config = Config()

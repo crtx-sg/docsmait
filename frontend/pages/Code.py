@@ -4,6 +4,7 @@ import requests
 from datetime import datetime, date
 import pandas as pd
 from typing import List, Dict, Any
+from streamlit_ace import st_ace
 from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers
 from config import BACKEND_URL
 
@@ -121,6 +122,78 @@ def get_code_reviews(pr_id=None):
         return []
     except:
         return []
+
+def get_pr_diff(pr_id):
+    """Get the diff content for a pull request"""
+    try:
+        response = requests.get(f"{BACKEND_URL}/pull-requests/{pr_id}/diff", headers=get_auth_headers())
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except:
+        return None
+
+def format_diff_content(diff_data):
+    """Format diff data for display in ace editor"""
+    if not diff_data:
+        return "No diff data available"
+    
+    diff_text = ""
+    for file_diff in diff_data.get('files', []):
+        diff_text += f"--- a/{file_diff['file_path']}\n"
+        diff_text += f"+++ b/{file_diff['file_path']}\n"
+        diff_text += file_diff.get('diff_content', '') + "\n\n"
+    
+    return diff_text
+
+def process_diff_for_display(diff_content):
+    """Process diff content for better visualization"""
+    if not diff_content:
+        return ""
+    
+    lines = diff_content.split('\n')
+    processed_lines = []
+    
+    for line in lines:
+        # Add visual indicators for better readability
+        if line.startswith('+++') or line.startswith('---'):
+            processed_lines.append(f"📁 {line}")
+        elif line.startswith('@@'):
+            processed_lines.append(f"📍 {line}")
+        elif line.startswith('+') and not line.startswith('+++'):
+            processed_lines.append(f"➕ {line}")
+        elif line.startswith('-') and not line.startswith('---'):
+            processed_lines.append(f"➖ {line}")
+        elif line.startswith('diff --git'):
+            processed_lines.append(f"🔄 {line}")
+        else:
+            processed_lines.append(f"   {line}")
+    
+    return '\n'.join(processed_lines)
+
+def calculate_diff_stats(diff_content):
+    """Calculate statistics from diff content"""
+    if not diff_content:
+        return None
+    
+    lines = diff_content.split('\n')
+    files = 0
+    additions = 0
+    deletions = 0
+    
+    for line in lines:
+        if line.startswith('diff --git'):
+            files += 1
+        elif line.startswith('+') and not line.startswith('+++'):
+            additions += 1
+        elif line.startswith('-') and not line.startswith('---'):
+            deletions += 1
+    
+    return {
+        'files': files,
+        'additions': additions,
+        'deletions': deletions
+    }
 
 # Main tab navigation
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Code Dashboard", "📁 Repositories", "🔀 Pull Requests", "👁️ Reviews"])
@@ -255,27 +328,62 @@ with tab2:
         
         repositories = get_repositories()
         if repositories:
-            repo_options = [f"{repo['name']} ({repo['project_name']})" for repo in repositories]
-            selected_repo_str = st.selectbox("Select Repository", repo_options)
-            selected_repo = repositories[repo_options.index(selected_repo_str)]
+            st.markdown("### Repositories")
             
-            # Display repository details
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown(f"**Name:** {selected_repo['name']}")
-                st.markdown(f"**Project:** {selected_repo['project_name']}")
-                st.markdown(f"**Git Provider:** {selected_repo['git_provider'] or 'Not specified'}")
-                st.markdown(f"**Default Branch:** {selected_repo['default_branch']}")
+            # Prepare data for dataframe
+            repo_data = []
+            for repo in repositories:
+                repo_data.append({
+                    "Repository Name": repo['name'],
+                    "Project": repo['project_name'],
+                    "Git Provider": repo['git_provider'] or 'Not specified',
+                    "Default Branch": repo['default_branch'],
+                    "Pull Requests": f"{repo['pull_requests_count']} (Open: {repo['open_prs_count']})",
+                    "Private": 'Yes' if repo['is_private'] else 'No',
+                    "Created By": repo['created_by_username'],
+                    "Created": repo['created_at'][:10]
+                })
             
-            with col2:
-                st.markdown(f"**Created By:** {selected_repo['created_by_username']}")
-                st.markdown(f"**Created:** {selected_repo['created_at'][:10]}")
-                st.markdown(f"**Pull Requests:** {selected_repo['pull_requests_count']} (Open: {selected_repo['open_prs_count']})")
-                st.markdown(f"**Private:** {'Yes' if selected_repo['is_private'] else 'No'}")
+            repo_df = pd.DataFrame(repo_data)
             
-            st.markdown(f"**Description:** {selected_repo['description'] or 'No description'}")
-            if selected_repo['git_url']:
-                st.markdown(f"**Git URL:** {selected_repo['git_url']}")
+            # Display dataframe with selection capability
+            selected_repo_indices = st.dataframe(
+                repo_df,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                height=min(400, len(repositories) * 35 + 50),  # Show up to 10 entries with scroll
+                key="repositories_dataframe"
+            )
+            
+            # Handle repository selection
+            if selected_repo_indices and len(selected_repo_indices.selection.rows) > 0:
+                selected_idx = selected_repo_indices.selection.rows[0]
+                selected_repo = repositories[selected_idx]
+                
+                st.markdown("---")
+                st.subheader(f"📁 {selected_repo['name']} Details")
+                
+                # Display repository details
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"**Name:** {selected_repo['name']}")
+                    st.markdown(f"**Project:** {selected_repo['project_name']}")
+                    st.markdown(f"**Git Provider:** {selected_repo['git_provider'] or 'Not specified'}")
+                    st.markdown(f"**Default Branch:** {selected_repo['default_branch']}")
+                
+                with col2:
+                    st.markdown(f"**Created By:** {selected_repo['created_by_username']}")
+                    st.markdown(f"**Created:** {selected_repo['created_at'][:10]}")
+                    st.markdown(f"**Pull Requests:** {selected_repo['pull_requests_count']} (Open: {selected_repo['open_prs_count']})")
+                    st.markdown(f"**Private:** {'Yes' if selected_repo['is_private'] else 'No'}")
+                
+                st.markdown(f"**Description:** {selected_repo['description'] or 'No description'}")
+                if selected_repo['git_url']:
+                    st.markdown(f"**Git URL:** {selected_repo['git_url']}")
+            else:
+                st.info("💡 Select a repository from the table above to view details")
         else:
             st.info("No repositories found.")
 
@@ -296,48 +404,140 @@ with tab3:
             if pull_requests:
                 st.markdown(f"### Pull Requests for {selected_repo['name']}")
                 
+                # Prepare data for dataframe
+                pr_data = []
                 for pr in pull_requests:
                     status_color = {
                         "draft": "🟡", "open": "🟢", "review_requested": "🔵",
                         "changes_requested": "🟠", "approved": "✅", "merged": "🟪", "closed": "⚪"
                     }
                     
-                    with st.expander(f"#{pr['pr_number']}: {pr['title']} ({status_color.get(pr['status'], '⚪')} {pr['status'].replace('_', ' ').title()})"):
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.markdown(f"**Author:** {pr['author_username']}")
-                            st.markdown(f"**Source → Target:** {pr['source_branch']} → {pr['target_branch']}")
-                            st.markdown(f"**Status:** {pr['status'].replace('_', ' ').title()}")
-                            st.markdown(f"**Merge Status:** {pr['merge_status'].title()}")
+                    pr_data.append({
+                        "PR #": f"#{pr['pr_number']}",
+                        "Title": pr['title'][:50] + "..." if len(pr['title']) > 50 else pr['title'],
+                        "Status": f"{status_color.get(pr['status'], '⚪')} {pr['status'].replace('_', ' ').title()}",
+                        "Author": pr['author_username'],
+                        "Branch": f"{pr['source_branch']} → {pr['target_branch']}",
+                        "Files": pr['files_changed_count'],
+                        "Changes": f"+{pr['additions']} -{pr['deletions']}",
+                        "Reviews": f"{pr['reviews_count']} ({pr['pending_reviews_count']} pending)",
+                        "Created": pr['created_at'][:10]
+                    })
+                
+                pr_df = pd.DataFrame(pr_data)
+                
+                # Display dataframe with selection capability
+                selected_pr_indices = st.dataframe(
+                    pr_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    height=min(400, len(pull_requests) * 35 + 50),  # Show up to 10 entries with scroll
+                    key="pull_requests_dataframe"
+                )
+                
+                # Handle pull request selection
+                if selected_pr_indices and len(selected_pr_indices.selection.rows) > 0:
+                    selected_idx = selected_pr_indices.selection.rows[0]
+                    selected_pr = pull_requests[selected_idx]
+                    
+                    st.markdown("---")
+                    
+                    # Create tabs for Reviews and Code Changes
+                    pr_detail_tab1, pr_detail_tab2 = st.tabs(["👁️ Reviews", "📝 Code Changes"])
+                    
+                    with pr_detail_tab1:
+                        st.subheader(f"Reviews for PR #{selected_pr['pr_number']}")
                         
-                        with col2:
-                            st.markdown(f"**Created:** {pr['created_at'][:10]}")
-                            st.markdown(f"**Files Changed:** {pr['files_changed_count']}")
-                            st.markdown(f"**Changes:** +{pr['additions']} -{pr['deletions']}")
-                            st.markdown(f"**Reviews:** {pr['reviews_count']} ({pr['pending_reviews_count']} pending)")
+                        # Get reviews for this PR
+                        reviews = get_code_reviews(selected_pr['id'])
+                        if reviews:
+                            # Prepare data for reviews dataframe
+                            review_data = []
+                            for review in reviews:
+                                status_color = {"pending": "⏳", "approved": "✅", "changes_requested": "🔄", "commented": "💬"}
+                                
+                                review_data.append({
+                                    "Reviewer": review['reviewer_username'],
+                                    "Status": f"{status_color.get(review['status'], '💭')} {review['status'].replace('_', ' ').title()}",
+                                    "Comments": review['comments_count'],
+                                    "Created": review['created_at'][:10],
+                                    "Submitted": review['submitted_at'][:10] if review['submitted_at'] else 'Pending',
+                                    "Summary": (review['summary_comment'][:50] + "...") if review['summary_comment'] and len(review['summary_comment']) > 50 else (review['summary_comment'] or 'No comment')
+                                })
+                            
+                            review_df = pd.DataFrame(review_data)
+                            
+                            # Display reviews dataframe with selection capability
+                            selected_review_indices = st.dataframe(
+                                review_df,
+                                use_container_width=True,
+                                hide_index=True,
+                                on_select="rerun",
+                                selection_mode="single-row",
+                                height=min(300, len(reviews) * 35 + 50),
+                                key=f"pr_reviews_dataframe_{selected_pr['id']}"
+                            )
+                            
+                            # Handle review selection - Show full comment
+                            if selected_review_indices and len(selected_review_indices.selection.rows) > 0:
+                                review_idx = selected_review_indices.selection.rows[0]
+                                selected_review = reviews[review_idx]
+                                
+                                st.markdown("---")
+                                st.markdown(f"**💬 Review by {selected_review['reviewer_username']}:**")
+                                if selected_review['summary_comment']:
+                                    st.markdown(f"> {selected_review['summary_comment']}")
+                                else:
+                                    st.info("No summary comment provided")
+                            else:
+                                st.info("💡 Select a review from the table above to see the full comment")
+                        else:
+                            st.info("No reviews found for this pull request.")
+                    
+                    with pr_detail_tab2:
+                        st.subheader(f"Code Changes for PR #{selected_pr['pr_number']}")
                         
-                        st.markdown(f"**Description:** {pr['description'] or 'No description provided'}")
-                        
-                        # Show files changed
-                        if st.button(f"View Files Changed", key=f"files_{pr['id']}"):
-                            files = get_pr_files(pr['id'])
-                            if files:
-                                st.markdown("**Files Changed:**")
+                        # Show files changed summary
+                        files = get_pr_files(selected_pr['id'])
+                        if files:
+                            with st.expander("📁 Files Changed Summary", expanded=False):
                                 for file in files:
                                     status_icon = {"added": "🆕", "modified": "📝", "deleted": "🗑️", "renamed": "📛"}
                                     st.markdown(f"- {status_icon.get(file['file_status'], '📄')} `{file['file_path']}` (+{file['additions']} -{file['deletions']})")
-                            else:
-                                st.info("No files found for this PR")
                         
-                        # Show reviews
-                        reviews = get_code_reviews(pr['id'])
-                        if reviews:
-                            st.markdown("**Reviews:**")
-                            for review in reviews:
-                                status_icon = {"pending": "⏳", "approved": "✅", "changes_requested": "🔄", "commented": "💬"}
-                                st.markdown(f"- {status_icon.get(review['status'], '💭')} **{review['reviewer_username']}**: {review['status'].replace('_', ' ').title()}")
-                                if review['summary_comment']:
-                                    st.markdown(f"  _{review['summary_comment']}_")
+                        # Diff Viewer
+                        diff_data = get_pr_diff(selected_pr['id'])
+                        if diff_data:
+                            st.markdown("**Diff Viewer:**")
+                            diff_content = format_diff_content(diff_data)
+                            st_ace(
+                                value=diff_content,
+                                language='diff',
+                                theme='monokai',  # Better theme for diff visualization
+                                height=500,  # Larger height for better code review
+                                key=f"pr_diff_viewer_{selected_pr['id']}",
+                                readonly=True,
+                                wrap=True,
+                                show_gutter=True,
+                                show_print_margin=False
+                            )
+                            
+                            # Show diff statistics
+                            stats = calculate_diff_stats(diff_content)
+                            if stats:
+                                col_stats1, col_stats2, col_stats3 = st.columns(3)
+                                with col_stats1:
+                                    st.metric("Files Changed", stats['files'])
+                                with col_stats2:
+                                    st.metric("Additions", stats['additions'], delta=f"+{stats['additions']}")
+                                with col_stats3:
+                                    st.metric("Deletions", stats['deletions'], delta=f"-{stats['deletions']}")
+                        else:
+                            st.info("No diff data available for this pull request")
+                else:
+                    st.info("💡 Select a pull request from the table above to view reviews and code changes")
             else:
                 st.info("No pull requests found for this repository.")
         
@@ -420,23 +620,142 @@ with tab4:
                 if reviews:
                     st.markdown(f"### Reviews for PR #{selected_pr['pr_number']}")
                     
+                    # Prepare data for dataframe
+                    review_data = []
                     for review in reviews:
                         status_color = {"pending": "⏳", "approved": "✅", "changes_requested": "🔄", "commented": "💬"}
                         
-                        with st.expander(f"{status_color.get(review['status'], '💭')} {review['reviewer_username']} - {review['status'].replace('_', ' ').title()}"):
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.markdown(f"**Reviewer:** {review['reviewer_username']}")
-                                st.markdown(f"**Status:** {review['status'].replace('_', ' ').title()}")
+                        review_data.append({
+                            "Reviewer": review['reviewer_username'],
+                            "Status": f"{status_color.get(review['status'], '💭')} {review['status'].replace('_', ' ').title()}",
+                            "Comments": review['comments_count'],
+                            "Created": review['created_at'][:10],
+                            "Submitted": review['submitted_at'][:10] if review['submitted_at'] else 'Pending',
+                            "Summary": (review['summary_comment'][:50] + "...") if review['summary_comment'] and len(review['summary_comment']) > 50 else (review['summary_comment'] or 'No comment')
+                        })
+                    
+                    review_df = pd.DataFrame(review_data)
+                    
+                    # Display dataframe with selection capability
+                    selected_review_indices = st.dataframe(
+                        review_df,
+                        use_container_width=True,
+                        hide_index=True,
+                        on_select="rerun",
+                        selection_mode="single-row",
+                        height=min(400, len(reviews) * 35 + 50),  # Show up to 10 entries with scroll
+                        key="reviews_dataframe"
+                    )
+                    
+                    # Handle review selection - Show 2-panel diff viewer
+                    if selected_review_indices and len(selected_review_indices.selection.rows) > 0:
+                        selected_idx = selected_review_indices.selection.rows[0]
+                        selected_review = reviews[selected_idx]
+                        
+                        st.markdown("---")
+                        st.subheader(f"🔍 Code Diff Viewer - Review by {selected_review['reviewer_username']}")
+                        
+                        # 2-Panel Diff/Merge Tool
+                        col_left, col_right = st.columns([1, 1])
+                        
+                        with col_left:
+                            st.markdown("**📝 Git Diff Input**")
+                            st.caption("Paste your git diff code here to visualize changes")
                             
-                            with col2:
-                                st.markdown(f"**Created:** {review['created_at'][:10]}")
-                                if review['submitted_at']:
-                                    st.markdown(f"**Submitted:** {review['submitted_at'][:10]}")
-                                st.markdown(f"**Comments:** {review['comments_count']}")
+                            # Get existing diff for this PR if available
+                            existing_diff = ""
+                            pr_diff_data = get_pr_diff(selected_pr['id'])
+                            if pr_diff_data:
+                                existing_diff = format_diff_content(pr_diff_data)
                             
-                            if review['summary_comment']:
-                                st.markdown(f"**Summary Comment:** {review['summary_comment']}")
+                            # Editable diff input
+                            diff_input = st_ace(
+                                value=existing_diff,
+                                language='diff',
+                                theme='github',
+                                height=400,
+                                key=f"diff_input_{selected_review['id']}",
+                                placeholder="Paste git diff output here...\n\nExample:\ndiff --git a/file.py b/file.py\nindex 1234567..abcdefg 100644\n--- a/file.py\n+++ b/file.py\n@@ -1,3 +1,4 @@\n def hello():\n+    print('Added line')\n     print('Hello World')\n-    print('Removed line')",
+                                wrap=True,
+                                auto_update=True,
+                                show_gutter=True,
+                                show_print_margin=False
+                            )
+                        
+                        with col_right:
+                            st.markdown("**🎨 Colored Diff Visualization**")
+                            st.caption("Real-time colored view of your diff")
+                            
+                            # Process and display colored diff
+                            if diff_input and diff_input.strip():
+                                try:
+                                    # Create a more visual representation of the diff
+                                    colored_diff = process_diff_for_display(diff_input)
+                                    
+                                    # Display processed diff with better visualization
+                                    st_ace(
+                                        value=colored_diff,
+                                        language='diff',
+                                        theme='monokai',  # Better colors for diff visualization
+                                        height=400,
+                                        key=f"diff_display_{selected_review['id']}",
+                                        readonly=True,
+                                        wrap=True,
+                                        show_gutter=True,
+                                        show_print_margin=False
+                                    )
+                                    
+                                    # Additional diff statistics
+                                    stats = calculate_diff_stats(diff_input)
+                                    if stats:
+                                        col_stats1, col_stats2, col_stats3 = st.columns(3)
+                                        with col_stats1:
+                                            st.metric("Files Changed", stats['files'])
+                                        with col_stats2:
+                                            st.metric("Additions", stats['additions'], delta=f"+{stats['additions']}")
+                                        with col_stats3:
+                                            st.metric("Deletions", stats['deletions'], delta=f"-{stats['deletions']}")
+                                        
+                                except Exception as e:
+                                    st.error(f"Error processing diff: {str(e)}")
+                                    # Fallback to simple display
+                                    st_ace(
+                                        value=diff_input,
+                                        language='diff',
+                                        theme='monokai',
+                                        height=400,
+                                        key=f"diff_display_fallback_{selected_review['id']}",
+                                        readonly=True,
+                                        wrap=True
+                                    )
+                            else:
+                                # Show placeholder when no diff is provided
+                                st.markdown("""
+                                <div style="
+                                    border: 2px dashed #ccc; 
+                                    border-radius: 8px; 
+                                    padding: 40px; 
+                                    text-align: center; 
+                                    height: 320px; 
+                                    display: flex; 
+                                    align-items: center; 
+                                    justify-content: center;
+                                    background-color: #f8f9fa;
+                                ">
+                                    <div>
+                                        <h4 style="color: #666;">🎨 Diff Visualization</h4>
+                                        <p style="color: #888;">Paste git diff code in the left panel<br>to see colored visualization here</p>
+                                    </div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                        
+                        # Review summary at the bottom
+                        if selected_review['summary_comment']:
+                            st.markdown("---")
+                            st.markdown("**💬 Review Summary:**")
+                            st.markdown(f"> {selected_review['summary_comment']}")
+                    else:
+                        st.info("💡 Select a review from the table above to open the diff viewer")
                 else:
                     st.info("No reviews found for this pull request.")
             

@@ -19,8 +19,9 @@
    - [6.3 Knowledge Base](#63-knowledge-base)
    - [6.4 Template Management](#64-template-management)
    - [6.5 Document Management](#65-document-management)
-   - [6.6 Code Review Management](#66-code-review-management)
-   - [6.7 Design Record Management](#67-design-record-management)
+   - [6.6 Issues Management](#66-issues-management)
+   - [6.7 Code Review Management](#67-code-review-management)
+   - [6.8 Design Record Management](#68-design-record-management)
    - [6.8 Records Management](#68-records-management)
    - [6.9 Audit Management](#69-audit-management)
    - [6.10 Training System](#610-training-system)
@@ -40,11 +41,13 @@
 
 ### Key Features
 - **AI-Powered Knowledge Base**: RAG (Retrieval Augmented Generation) pipeline with vector search
+- **Issues Management**: Complete issue tracking with human-readable IDs and email notifications
 - **Template Management**: Rich markdown templates with approval workflows
 - **Document Management**: Version control, reviews, and compliance tracking
 - **Audit Management**: ISO 13485:2016 compliant audit workflows
 - **Code Review**: Git integration for code review management
 - **Specification Management**: Requirements and risk management with traceability
+- **Enhanced Configuration**: Centralized configuration management with environment variables
 - **Multi-Domain Support**: Automotive (ASIL), Medical (ISO), Industrial (SIL), Aviation (DAL)
 
 ### Architecture
@@ -753,7 +756,147 @@ Documents are created from templates and managed through their entire lifecycle.
 - **Comment System**: Inline comments and feedback
 - **Approval Gates**: Required approvals before publication
 
-### 6.6 Code Review Management
+### 6.6 Issues Management
+
+The Issues Management system provides comprehensive issue tracking and project management capabilities with human-readable issue IDs, multi-assignee workflows, and email notifications.
+
+#### Accessing Issues Management
+1. Navigate to **Issues** in the sidebar
+2. Select your target project from the dropdown
+3. Choose from three main tabs: Create Issue, Manage Issues, Export Issues
+
+#### Creating New Issues
+
+**Step-by-Step Process:**
+1. **Basic Information**:
+   - **Title**: Brief, descriptive issue title
+   - **Description**: Detailed issue description using markdown
+   - **Type**: Bug, Feature, Enhancement, Task, or Documentation
+   - **Priority**: High, Medium, or Low
+   - **Severity**: Critical, Major, or Minor
+
+2. **Project Details**:
+   - **Version**: Target or affected version
+   - **Component**: System component (Frontend, Backend, etc.)
+   - **Labels**: Comma-separated tags for organization
+   - **Due Date**: Optional deadline for completion
+
+3. **Assignment & Workflow**:
+   - **Story Points**: Agile estimation (1, 2, 3, 5, 8, etc.)
+   - **Assignees**: Multiple team members from project
+   - **Initial Comment**: Optional detailed context
+
+4. **Form Actions**:
+   - **✅ Create Issue**: Submit and clear form for next issue
+   - **❌ Cancel**: Clear form and reset inputs
+
+**Features:**
+- **Human-Readable IDs**: Issues automatically get sequential IDs like "DOC-001", "DOC-002"
+- **Auto-Clear Form**: Form clears after successful creation
+- **Email Notifications**: Assignees and creator receive email notifications
+- **Success Feedback**: Clear confirmation of successful creation
+
+#### Managing Existing Issues
+
+**Issue List Interface:**
+- **Interactive Table**: Click any row to select and edit
+- **Filtering Options**:
+  - Status: All, open, in_progress, closed, resolved
+  - Priority: All, High, Medium, Low  
+  - Type: All, Bug, Feature, Enhancement, Task, Documentation
+- **Real-time Refresh**: 🔄 button to reload current data
+
+**Issue Details:**
+- **ID**: Human-readable identifier (e.g., DOC-001)
+- **Title**: Issue summary with full text
+- **Type, Priority, Severity**: Visual indicators
+- **Status**: Current workflow state
+- **Assignees**: Team member usernames
+- **Comments**: Total comment count
+- **Created**: Date and creator information
+
+**Editing Issues:**
+1. **Select Issue**: Click row in issues table
+2. **Edit Form**: Modify any field in the edit form
+3. **Update Actions**:
+   - **✅ Update Issue**: Save changes
+   - **🗑️ Delete Issue**: Remove issue (admin/creator only)
+
+**Status Workflow:**
+- **open** → **in_progress** → **closed**
+- **open** → **resolved**
+- Automatic timestamp tracking for status changes
+
+#### Comments System
+
+**Adding Comments:**
+1. Select an issue from the list
+2. Scroll to comments section
+3. Enter comment in text area
+4. Click "Add Comment" to submit
+
+**Comment Features:**
+- **User Attribution**: All comments show username and timestamp
+- **Interactive Display**: Click comment row to see full text
+- **Chronological Order**: Comments sorted by creation time
+- **Rich Text Support**: Markdown formatting in comments
+
+#### Email Notifications
+
+**Automatic Notifications:**
+- **Issue Created**: Sent to assignees and creator
+- **Issue Updated**: Sent to assignees and creator
+- **Rich HTML Format**: Professional email templates with issue ID
+
+**Email Content:**
+- **Subject**: Includes human-readable issue ID (e.g., "New Issue Created: DOC-001 - Bug Title")
+- **Issue Details**: Project, ID, title, type, priority, severity
+- **Status Information**: Current status and update details
+- **Action Required**: Clear next steps for recipients
+
+#### Export and Reporting
+
+**Export Options:**
+1. **CSV Export**:
+   - Complete issue data with all fields
+   - Includes both human-readable ID and UUID
+   - Suitable for spreadsheet analysis
+   - Timestamped filename
+
+2. **Markdown Export**:
+   - Formatted documentation
+   - Summary table and detailed sections
+   - Professional reporting format
+   - Includes full issue descriptions
+
+**Export Features:**
+- **Preview**: Shows first 5 issues before export
+- **Filtering**: Respects current filter settings
+- **Include Closed**: Option to include/exclude closed issues
+- **Timestamped Files**: Automatic filename with date/time
+
+#### Best Practices
+
+**Issue Creation:**
+- Use descriptive, actionable titles
+- Include clear acceptance criteria in descriptions
+- Assign appropriate priority and severity
+- Add relevant labels for organization
+- Set realistic due dates
+
+**Workflow Management:**
+- Move issues through status workflow promptly
+- Update assignees when responsibility changes
+- Use comments for status updates and decisions
+- Close issues when fully resolved
+
+**Team Collaboration:**
+- Review assigned issues regularly
+- Use comments for progress updates
+- Coordinate with assignees on complex issues
+- Maintain clear communication through the system
+
+### 6.7 Code Review Management
 
 Integrates with Git repositories to manage code review processes.
 

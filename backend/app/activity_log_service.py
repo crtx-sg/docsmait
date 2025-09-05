@@ -62,6 +62,7 @@ class ActivityLogService:
         'TEMPLATE': 'template',
         'REVIEW': 'review',
         'CODE_REVIEW': 'code_review',
+        'ISSUE': 'issue',
         'AUDIT': 'audit',
         'TRAINING': 'training',
         'REQUIREMENT': 'requirement',
@@ -483,6 +484,43 @@ class ActivityLogService:
             resource_type=self.RESOURCES['SYSTEM'],
             ip_address=ip_address,
             user_agent=user_agent,
+            db=db
+        )
+    
+    # Issue logging methods
+    def log_issue_created(self, user_id: int, issue_id: str, issue_title: str, project_id: str, db: Optional[Session] = None):
+        """Log issue creation"""
+        return self.log_activity(
+            user_id=user_id,
+            action=self.ACTIONS['CREATE'],
+            resource_type=self.RESOURCES['ISSUE'],
+            resource_id=issue_id,
+            resource_name=issue_title,
+            project_id=project_id,
+            db=db
+        )
+    
+    def log_issue_updated(self, user_id: int, issue_id: str, issue_title: str, project_id: str, db: Optional[Session] = None):
+        """Log issue update"""
+        return self.log_activity(
+            user_id=user_id,
+            action=self.ACTIONS['UPDATE'],
+            resource_type=self.RESOURCES['ISSUE'],
+            resource_id=issue_id,
+            resource_name=issue_title,
+            project_id=project_id,
+            db=db
+        )
+    
+    def log_issue_deleted(self, user_id: int, issue_id: str, issue_title: str, project_id: str, db: Optional[Session] = None):
+        """Log issue deletion"""
+        return self.log_activity(
+            user_id=user_id,
+            action=self.ACTIONS['DELETE'],
+            resource_type=self.RESOURCES['ISSUE'],
+            resource_id=issue_id,
+            resource_name=issue_title,
+            project_id=project_id,
             db=db
         )
 

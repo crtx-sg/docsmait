@@ -41,6 +41,7 @@ class Project(Base):
     members = relationship("ProjectMember", back_populates="project")
     resources = relationship("ProjectResource", back_populates="project")
     documents = relationship("Document", back_populates="project")
+    issues = relationship("Issue", back_populates="project")
 
 class ProjectMember(Base):
     __tablename__ = "project_members"
@@ -500,6 +501,59 @@ class ReviewRequest(Base):
     
     # Constraints
     __table_args__ = (UniqueConstraint('pull_request_id', 'requested_reviewer_id', name='unique_pr_review_request'),)
+
+class Issue(Base):
+    __tablename__ = "issues"
+    
+    id = Column(String(36), primary_key=True, index=True)  # UUID as string
+    issue_number = Column(String(20), unique=True, nullable=False, index=True)  # Human-readable ID like "PROJ-123"
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # Basic issue information
+    title = Column(String(500), nullable=False)
+    description = Column(Text, nullable=False)  # Markdown content from ACE editor
+    issue_type = Column(String(50), nullable=False, index=True)  # Bug, Feature, Enhancement, etc.
+    priority = Column(String(20), nullable=False, index=True)  # High, Medium, Low
+    severity = Column(String(20), nullable=False, index=True)  # Critical, Major, Minor
+    status = Column(String(20), default="open", index=True)  # open, in_progress, closed, resolved
+    
+    # Additional metadata
+    version = Column(String(50))
+    labels = Column(JSON, default=list)  # JSON array of labels
+    component = Column(String(100))
+    due_date = Column(Date)
+    story_points = Column(String(10))  # Story points as string (can include fractions like "1.5")
+    
+    # Assignment and ownership
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    assignees = Column(JSON, default=list)  # JSON array of user IDs for multi-select assignees
+    
+    # Audit trail
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    closed_at = Column(DateTime(timezone=True))
+    
+    # Relationships
+    project = relationship("Project")
+    creator = relationship("User", foreign_keys=[created_by])
+    comments = relationship("IssueComment", back_populates="issue")
+    
+    # Constraints
+    __table_args__ = (Index('idx_issue_project_status', 'project_id', 'status'),)
+
+class IssueComment(Base):
+    __tablename__ = "issue_comments"
+    
+    id = Column(String(36), primary_key=True, index=True)  # UUID as string
+    issue_id = Column(String(36), ForeignKey("issues.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    comment_text = Column(Text, nullable=False)  # Comment content
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    issue = relationship("Issue", back_populates="comments")
+    user = relationship("User")
 
 class TraceabilityMatrix(Base):
     __tablename__ = "traceability_matrix"

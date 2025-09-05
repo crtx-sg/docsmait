@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 # Page config
 st.set_page_config(page_title="AI Settings", page_icon="🤖", layout="wide")
 
-BACKEND_URL = os.getenv('BACKEND_URL', 'http://backend:8000')
+from config import BACKEND_URL
 
 def get_auth_headers():
     """Get authentication headers"""

@@ -4,3 +4,4 @@ requests
 streamlit-ace
 PyJWT
 pandas
+markdown

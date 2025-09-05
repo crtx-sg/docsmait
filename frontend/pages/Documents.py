@@ -2,6 +2,8 @@
 import streamlit as st
 import requests
 import pandas as pd
+import base64
+import markdown
 from datetime import datetime
 from streamlit_ace import st_ace
 from auth_utils import get_auth_headers, get_current_user, setup_authenticated_sidebar, BACKEND_URL
@@ -534,19 +536,158 @@ with tab1:
         else:
             st.warning("No templates available for this document type.")
     
-    with st.form("create_document_form"):
-        name = st.text_input("Document Name", placeholder="Enter document name")
+    # Document Name input (outside form for live updates)
+    name = st.text_input("Document Name", placeholder="Enter document name", key="doc_name_input")
+    
+    st.subheader("📝 Document Content")
+    
+    # Add preview toggle (outside form)
+    preview_enabled = st.checkbox("👁️ Enable Live Preview", value=True, help="Show HTML preview alongside markdown editor")
+    
+    # Content editor and preview (outside form for live updates)
+    initial_content = ""
+    editor_key = "create_document_content"
+    
+    if st.session_state.get("template_content_create"):
+        initial_content = st.session_state.template_content_create
+        if st.session_state.get("selected_template_id"):
+            editor_key = f"create_document_content_{st.session_state.selected_template_id}"
+    
+    # Preserve existing content when toggling preview
+    if editor_key in st.session_state and st.session_state[editor_key]:
+        initial_content = st.session_state[editor_key]
+    
+    if preview_enabled:
+        # Split view: Editor on left, Preview on right
+        col_editor, col_preview = st.columns([1, 1])
         
-        st.subheader("📝 Document Content")
+        with col_editor:
+            st.markdown("**Markdown Editor**")
+            content = st_ace(
+                value=initial_content,
+                language='markdown',
+                theme='github',
+                key=editor_key,
+                height=400,
+                auto_update=True,  # Enable auto update for live preview
+                wrap=True
+            )
         
-        initial_content = ""
-        editor_key = "create_document_content"
-        
-        if st.session_state.get("template_content_create"):
-            initial_content = st.session_state.template_content_create
-            if st.session_state.get("selected_template_id"):
-                editor_key = f"create_document_content_{st.session_state.selected_template_id}"
-        
+        with col_preview:
+            col_preview_title, col_font_info = st.columns([2, 1])
+            with col_preview_title:
+                st.markdown("**HTML Preview**")
+            with col_font_info:
+                st.markdown("<div style='text-align: right;'><em>Font: Source Sans Pro, 14px, single-spacing</em></div>", unsafe_allow_html=True)
+            if content and content.strip():
+                try:
+                    # Convert markdown to HTML
+                    html_content = markdown.markdown(
+                        content, 
+                        extensions=['tables', 'fenced_code', 'codehilite', 'toc']
+                    )
+                    
+                    # Display with single line spacing and font info
+                    st.markdown(
+                        f"""
+                        <div style="
+                            border: 1px solid #ddd; 
+                            border-radius: 4px; 
+                            padding: 16px; 
+                            height: 400px; 
+                            overflow-y: auto; 
+                            background-color: #ffffff;
+                            color: #262730;
+                            font-family: 'Source Sans Pro', sans-serif;
+                            font-size: 14px;
+                            line-height: 1.2;
+                        ">
+                            <style>
+                                .markdown-preview h1, .markdown-preview h2, .markdown-preview h3, 
+                                .markdown-preview h4, .markdown-preview h5, .markdown-preview h6 {{
+                                    color: #262730 !important;
+                                    margin-top: 1rem;
+                                    margin-bottom: 0.3rem;
+                                    line-height: 1.2;
+                                }}
+                                .markdown-preview p {{
+                                    color: #262730 !important;
+                                    margin-bottom: 0.5rem;
+                                    line-height: 1.2;
+                                }}
+                                .markdown-preview ul, .markdown-preview ol {{
+                                    color: #262730 !important;
+                                    margin-bottom: 0.5rem;
+                                }}
+                                .markdown-preview li {{
+                                    color: #262730 !important;
+                                    line-height: 1.2;
+                                    margin-bottom: 0.2rem;
+                                }}
+                                .markdown-preview table {{
+                                    border-collapse: collapse;
+                                    width: 100%;
+                                    margin-bottom: 0.5rem;
+                                }}
+                                .markdown-preview th, .markdown-preview td {{
+                                    border: 1px solid #ddd;
+                                    padding: 6px 8px;
+                                    text-align: left;
+                                    color: #262730 !important;
+                                    line-height: 1.2;
+                                }}
+                                .markdown-preview th {{
+                                    background-color: #f8f9fa;
+                                }}
+                                .markdown-preview code {{
+                                    background-color: #f8f9fa;
+                                    padding: 2px 4px;
+                                    border-radius: 3px;
+                                    color: #e91e63 !important;
+                                    font-family: 'Monaco', 'Consolas', monospace;
+                                    font-size: 13px;
+                                }}
+                                .markdown-preview pre {{
+                                    background-color: #f8f9fa;
+                                    padding: 8px;
+                                    border-radius: 4px;
+                                    border: 1px solid #e9ecef;
+                                    overflow-x: auto;
+                                    margin-bottom: 0.5rem;
+                                    line-height: 1.2;
+                                }}
+                                .markdown-preview pre code {{
+                                    background: none;
+                                    padding: 0;
+                                    color: #212529 !important;
+                                    font-size: 13px;
+                                }}
+                                .markdown-preview a {{
+                                    color: #1976d2 !important;
+                                    text-decoration: underline;
+                                }}
+                                .markdown-preview blockquote {{
+                                    border-left: 4px solid #1976d2;
+                                    margin: 0 0 0.5rem 0;
+                                    padding-left: 1rem;
+                                    color: #555 !important;
+                                    line-height: 1.2;
+                                }}
+                            </style>
+                            <div class="markdown-preview">
+                                {html_content}
+                            </div>
+                        </div>
+                        """, 
+                        unsafe_allow_html=True
+                    )
+                except Exception as e:
+                    st.error(f"Preview error: {str(e)}")
+                    st.info("💡 Write some markdown content to see the preview")
+            else:
+                st.info("💡 Start typing markdown content to see the live preview")
+    else:
+        # Full width editor (original behavior)
         content = st_ace(
             value=initial_content,
             language='markdown',
@@ -556,6 +697,14 @@ with tab1:
             auto_update=False,
             wrap=True
         )
+
+    # Form for document creation settings
+    with st.form("create_document_form"):
+        # Get the content from session state (since it's outside the form)
+        if editor_key in st.session_state:
+            content = st.session_state[editor_key]
+        else:
+            content = initial_content
         
         # Document status and workflow
         col_status, col_comment = st.columns([1, 2])
@@ -599,6 +748,9 @@ with tab1:
         submitted = st.form_submit_button("🚀 Create Document", type="primary")
         
         if submitted:
+            # Get name from session state (since it's outside the form)
+            name = st.session_state.get("doc_name_input", "")
+            
             # Validation
             errors = []
             
@@ -654,11 +806,14 @@ with tab2:
         if not documents:
             st.info("No documents found")
         else:
-            # Left-right panel layout
-            my_col1, my_col2 = st.columns([2, 3])
+            # NEW LAYOUT: TOP SECTION (Document List + Editor) and BOTTOM SECTION (Full Width Content Editor)
             
-            with my_col1:
-                st.markdown("### My Documents List")
+            # ========== TOP SECTION ==========
+            st.markdown("### 📋 Document Management")
+            top_col1, top_col2 = st.columns([1, 1])
+            
+            with top_col1:
+                st.markdown("**📄 My Documents List**")
                 
                 # Prepare data for st.dataframe
                 grid_data = []
@@ -704,7 +859,7 @@ with tab2:
                     hide_index=True,
                     on_select="rerun",
                     selection_mode="single-row",
-                    height=400,
+                    height=350,
                     key="my_docs_dataframe"
                 )
                 
@@ -721,8 +876,8 @@ with tab2:
                         st.session_state.mode = "author"
                         st.rerun()
             
-            with my_col2:
-                st.markdown("### Document Editor")
+            with top_col2:
+                st.markdown("**🔧 Document Editor & Actions**")
                 
                 if "selected_doc" in st.session_state and "mode" in st.session_state and st.session_state.mode == "author":
                     doc = st.session_state.selected_doc
@@ -741,113 +896,48 @@ with tab2:
                     
                     with col_refresh1:
                         # Document header
-                        st.markdown(f"**{doc['name']}** | {doc['document_type'].replace('_', ' ').title()}")
+                        st.markdown(f"**{doc['name']}**")
+                        st.caption(f"{doc['document_type'].replace('_', ' ').title()}")
                         # Handle both V1 (status) and V2 (document_state, review_state) formats
                         doc_state = doc.get('document_state', doc.get('status', 'unknown'))
                         review_state = doc.get('review_state')
                         st.markdown(f"**Status:** {format_status(doc_state, review_state)}", unsafe_allow_html=True)
                     
-                    # Comment History - handle both V1 and V2 formats
-                    st.subheader("💬 Comment History")
-                    comments = doc.get('comment_history', doc.get('review_comments', []))
-                    display_comment_history(comments)
-                    
-                    st.divider()
-                    
-                    # Document Content Editor
-                    st.subheader("📄 Document Content")
-                    content = st_ace(
-                        value=doc['content'],
-                        language='markdown',
-                        theme='github',
-                        height=300,
-                        key=f"editor_my_{doc['id']}"
-                    )
-                    
-                    # Save Draft functionality
-                    if content != doc['content']:
-                        st.info("📝 Content has been modified")
-                        save_col1, save_col2 = st.columns([3, 1])
-                        
-                        with save_col1:
-                            revision_comment = st.text_input(
-                                "Revision Comment (optional):",
-                                placeholder="Describe the changes made...",
-                                key=f"revision_comment_{doc['id']}"
-                            )
-                        
-                        with save_col2:
-                            create_revision_option = st.checkbox(
-                                "Create Revision",
-                                value=True,
-                                help="Create a new revision to track changes",
-                                key=f"create_revision_{doc['id']}"
-                            )
-                        
-                        # Save buttons
-                        save_button_col1, save_button_col2 = st.columns([1, 1])
-                        
-                        with save_button_col1:
-                            if st.button("💾 Save Draft", key=f"save_draft_{doc['id']}", type="primary"):
-                                result = update_document_content(
-                                    doc['id'], 
-                                    content, 
-                                    create_revision=create_revision_option,
-                                    comment=revision_comment
-                                )
-                                
-                                if result.get("success"):
-                                    st.success(result["message"])
-                                    # Refresh document data
-                                    fresh_docs = get_documents_for_author(project_id)
-                                    fresh_doc = next((d for d in fresh_docs if d['id'] == doc['id']), None)
-                                    if fresh_doc:
-                                        st.session_state.selected_doc = fresh_doc
-                                    st.rerun()
-                                else:
-                                    st.error(f"Failed to save: {result.get('error', 'Unknown error')}")
-                        
-                        with save_button_col2:
-                            if st.button("🔄 Revert Changes", key=f"revert_{doc['id']}"):
-                                # Force refresh to revert changes
-                                fresh_docs = get_documents_for_author(project_id)
-                                fresh_doc = next((d for d in fresh_docs if d['id'] == doc['id']), None)
-                                if fresh_doc:
-                                    st.session_state.selected_doc = fresh_doc
-                                st.rerun()
+                    # Comment History - handle both V1 and V2 formats  
+                    with st.expander("💬 Comment History", expanded=False):
+                        comments = doc.get('comment_history', doc.get('review_comments', []))
+                        display_comment_history(comments)
                     
                     # Author Actions - handle both V1 and V2 formats
                     doc_status = doc.get('document_state', doc.get('status', 'unknown'))
                     if doc_status in ['draft', 'needs_update', 'need_revision']:
-                        st.subheader("📝 Author Actions")
+                        st.markdown("**📝 Author Actions**")
                         
-                        col_a, col_b = st.columns([2, 1])
-                        with col_a:
-                            # Get project members for reviewer selection
-                            members = get_project_members(project_id)
-                            reviewer_options = [m for m in members if m['user_id'] != user_info['id']]
+                        # Get project members for reviewer selection
+                        members = get_project_members(project_id)
+                        reviewer_options = [m for m in members if m['user_id'] != user_info['id']]
+                        
+                        if reviewer_options:
+                            selected_reviewer = st.selectbox(
+                                "Select Reviewer:",
+                                options=[(m['user_id'], m['username']) for m in reviewer_options],
+                                format_func=lambda x: x[1]
+                            )
                             
-                            if reviewer_options:
-                                selected_reviewer = st.selectbox(
-                                    "Select Reviewer:",
-                                    options=[(m['user_id'], m['username']) for m in reviewer_options],
-                                    format_func=lambda x: x[1]
-                                )
-                                
-                                author_comment = st.text_area("Comment for Reviewer:", height=100)
-                                
+                            author_comment = st.text_area("Comment for Reviewer:", height=80)
+                            
+                            col_submit, col_close = st.columns([1, 1])
+                            with col_submit:
                                 if st.button("📋 Submit for Review", type="primary"):
                                     if author_comment.strip():
-                                        st.info(f"Submitting document '{doc['name']}' to reviewer ID {selected_reviewer[0]} with comment: {author_comment[:50]}...")
                                         result = submit_for_review(doc['id'], selected_reviewer[0], author_comment)
                                         if result.get("success"):
                                             st.success(result["message"])
-                                            # Refresh document data to show updated comment history
+                                            # Refresh document data
                                             fresh_docs = get_documents_for_author(project_id)
                                             fresh_doc = next((d for d in fresh_docs if d['id'] == doc['id']), None)
                                             if fresh_doc:
                                                 st.session_state.selected_doc = fresh_doc
-                                            # Clear any cached data to force refresh
                                             if "documents_cache" in st.session_state:
                                                 del st.session_state.documents_cache
                                             st.rerun()
@@ -855,64 +945,278 @@ with tab2:
                                             st.error(f"Failed to submit: {result.get('error', 'Unknown error')}")
                                     else:
                                         st.error("Please provide a comment for the reviewer")
-                            else:
-                                st.info("No other project members available as reviewers")
-                        
-                        with col_b:
-                            if st.button("❌ Close", key="close_editable_doc"):
-                                # Clear all related session state including dataframe selection
+                            
+                            with col_close:
+                                if st.button("❌ Close Document"):
+                                    # Clear session state - including bottom editor keys
+                                    keys_to_remove = []
+                                    for key in st.session_state.keys():
+                                        if (key.startswith('selected_doc') or 
+                                            key.startswith('editor_my_') or 
+                                            key.startswith('editor_bottom_') or 
+                                            key.startswith('revision_comment_') or 
+                                            key.startswith('create_revision_') or 
+                                            key.startswith('preview_toggle_bottom_') or
+                                            key == 'my_docs_dataframe' or 
+                                            key == 'selected_doc' or 
+                                            key == 'mode'):
+                                            keys_to_remove.append(key)
+                                    
+                                    for key in keys_to_remove:
+                                        del st.session_state[key]
+                                    st.rerun()
+                        else:
+                            st.info("No other project members available as reviewers")
+                            if st.button("❌ Close Document"):
+                                # Clear session state - including bottom editor keys
                                 keys_to_remove = []
                                 for key in st.session_state.keys():
                                     if (key.startswith('selected_doc') or 
                                         key.startswith('editor_my_') or 
+                                        key.startswith('editor_bottom_') or 
                                         key.startswith('revision_comment_') or 
                                         key.startswith('create_revision_') or 
-                                        key == 'my_docs_dataframe'):
+                                        key.startswith('preview_toggle_bottom_') or
+                                        key == 'my_docs_dataframe' or 
+                                        key == 'selected_doc' or 
+                                        key == 'mode'):
                                         keys_to_remove.append(key)
                                 
                                 for key in keys_to_remove:
                                     del st.session_state[key]
-                                
-                                # Clear main document session state
-                                if 'selected_doc' in st.session_state:
-                                    del st.session_state.selected_doc
-                                if 'mode' in st.session_state:
-                                    del st.session_state.mode
-                                
-                                # Clear dataframe selection explicitly
-                                if 'my_docs_dataframe' in st.session_state:
-                                    del st.session_state.my_docs_dataframe
-                                
                                 st.rerun()
                     else:
                         st.info(f"Document is currently {doc_status.replace('_', ' ')}")
-                        if st.button("❌ Close", key="close_readonly_doc"):
-                            # Clear all related session state including dataframe selection
+                        if st.button("❌ Close Document"):
+                            # Clear session state - including bottom editor keys
                             keys_to_remove = []
                             for key in st.session_state.keys():
                                 if (key.startswith('selected_doc') or 
                                     key.startswith('editor_my_') or 
+                                    key.startswith('editor_bottom_') or 
                                     key.startswith('revision_comment_') or 
                                     key.startswith('create_revision_') or 
-                                    key == 'my_docs_dataframe'):
+                                    key.startswith('preview_toggle_bottom_') or
+                                    key == 'my_docs_dataframe' or 
+                                    key == 'selected_doc' or 
+                                    key == 'mode'):
                                     keys_to_remove.append(key)
                             
                             for key in keys_to_remove:
                                 del st.session_state[key]
-                            
-                            # Clear main document session state
-                            if 'selected_doc' in st.session_state:
-                                del st.session_state.selected_doc
-                            if 'mode' in st.session_state:
-                                del st.session_state.mode
-                            
-                            # Clear dataframe selection explicitly
-                            if 'my_docs_dataframe' in st.session_state:
-                                del st.session_state.my_docs_dataframe
-                            
                             st.rerun()
                 else:
                     st.info("Select a document from the left panel to edit")
+            
+            # ========== BOTTOM SECTION ==========
+            # Full-width Document Content Editor (similar to Create Document)
+            if "selected_doc" in st.session_state and "mode" in st.session_state and st.session_state.mode == "author":
+                doc = st.session_state.selected_doc
+                
+                # Horizontal separator
+                st.markdown("---")
+                
+                # Document Content Section - Full Width
+                st.subheader("📄 Document Content")
+                
+                # Add preview toggle for full-width editing
+                preview_enabled_bottom = st.checkbox(
+                    "👁️ Enable Live Preview", 
+                    value=True, 
+                    help="Show HTML preview alongside markdown editor",
+                    key=f"preview_toggle_bottom_{doc['id']}"
+                )
+                
+                if preview_enabled_bottom:
+                    # Split view: Editor on left, Preview on right (full width)
+                    col_editor_bottom, col_preview_bottom = st.columns([1, 1])
+                    
+                    with col_editor_bottom:
+                        st.markdown("**Markdown Editor**")
+                        content = st_ace(
+                            value=doc['content'],
+                            language='markdown',
+                            theme='github',
+                            height=400,
+                            auto_update=True,  # Enable live preview
+                            wrap=True,
+                            key=f"editor_bottom_{doc['id']}"
+                        )
+                    
+                    with col_preview_bottom:
+                        col_preview_title, col_font_info = st.columns([2, 1])
+                        with col_preview_title:
+                            st.markdown("**HTML Preview**")
+                        with col_font_info:
+                            st.markdown("<div style='text-align: right;'><em>Font: Source Sans Pro, 14px, single-spacing</em></div>", unsafe_allow_html=True)
+                        if content and content.strip():
+                            try:
+                                # Convert markdown to HTML
+                                html_content_bottom = markdown.markdown(
+                                    content, 
+                                    extensions=['tables', 'fenced_code', 'codehilite', 'toc']
+                                )
+                                
+                                # Display with single line spacing and font info
+                                st.markdown(
+                                    f"""
+                                    <div style="
+                                        border: 1px solid #ddd; 
+                                        border-radius: 4px; 
+                                        padding: 16px; 
+                                        height: 400px; 
+                                        overflow-y: auto; 
+                                        background-color: #ffffff;
+                                        color: #262730;
+                                        font-family: 'Source Sans Pro', sans-serif;
+                                        font-size: 14px;
+                                        line-height: 1.2;
+                                    ">
+                                        <style>
+                                            .markdown-preview-bottom h1, .markdown-preview-bottom h2, .markdown-preview-bottom h3, 
+                                            .markdown-preview-bottom h4, .markdown-preview-bottom h5, .markdown-preview-bottom h6 {{
+                                                color: #262730 !important;
+                                                margin-top: 1rem;
+                                                margin-bottom: 0.3rem;
+                                                line-height: 1.2;
+                                            }}
+                                            .markdown-preview-bottom p {{
+                                                color: #262730 !important;
+                                                margin-bottom: 0.5rem;
+                                                line-height: 1.2;
+                                            }}
+                                            .markdown-preview-bottom ul, .markdown-preview-bottom ol {{
+                                                color: #262730 !important;
+                                                margin-bottom: 0.5rem;
+                                            }}
+                                            .markdown-preview-bottom li {{
+                                                color: #262730 !important;
+                                                line-height: 1.2;
+                                                margin-bottom: 0.2rem;
+                                            }}
+                                            .markdown-preview-bottom table {{
+                                                border-collapse: collapse;
+                                                width: 100%;
+                                                margin-bottom: 0.5rem;
+                                            }}
+                                            .markdown-preview-bottom th, .markdown-preview-bottom td {{
+                                                border: 1px solid #ddd;
+                                                padding: 6px 8px;
+                                                text-align: left;
+                                                color: #262730 !important;
+                                                line-height: 1.2;
+                                            }}
+                                            .markdown-preview-bottom th {{
+                                                background-color: #f8f9fa;
+                                            }}
+                                            .markdown-preview-bottom code {{
+                                                background-color: #f8f9fa;
+                                                padding: 2px 4px;
+                                                border-radius: 3px;
+                                                color: #e91e63 !important;
+                                                font-family: 'Monaco', 'Consolas', monospace;
+                                                font-size: 13px;
+                                            }}
+                                            .markdown-preview-bottom pre {{
+                                                background-color: #f8f9fa;
+                                                padding: 8px;
+                                                border-radius: 4px;
+                                                border: 1px solid #e9ecef;
+                                                overflow-x: auto;
+                                                margin-bottom: 0.5rem;
+                                                line-height: 1.2;
+                                            }}
+                                            .markdown-preview-bottom pre code {{
+                                                background: none;
+                                                padding: 0;
+                                                color: #212529 !important;
+                                                font-size: 13px;
+                                            }}
+                                            .markdown-preview-bottom a {{
+                                                color: #1976d2 !important;
+                                                text-decoration: underline;
+                                            }}
+                                            .markdown-preview-bottom blockquote {{
+                                                border-left: 4px solid #1976d2;
+                                                margin: 0 0 0.5rem 0;
+                                                padding-left: 1rem;
+                                                color: #555 !important;
+                                                line-height: 1.2;
+                                            }}
+                                        </style>
+                                        <div class="markdown-preview-bottom">
+                                            {html_content_bottom}
+                                        </div>
+                                    </div>
+                                    """, 
+                                    unsafe_allow_html=True
+                                )
+                            except Exception as e:
+                                st.error(f"Preview error: {str(e)}")
+                                st.info("💡 Write some markdown content to see the preview")
+                        else:
+                            st.info("💡 Content will be displayed here as you edit")
+                else:
+                    # Full width editor without preview
+                    content = st_ace(
+                        value=doc['content'],
+                        language='markdown',
+                        theme='github',
+                        height=400,
+                        key=f"editor_bottom_{doc['id']}"
+                    )
+                
+                # Save Draft functionality - moved to bottom section
+                if content != doc['content']:
+                    st.info("📝 Content has been modified")
+                    save_col1, save_col2 = st.columns([3, 1])
+                    
+                    with save_col1:
+                        revision_comment = st.text_input(
+                            "Revision Comment (optional):",
+                            placeholder="Describe the changes made...",
+                            key=f"revision_comment_{doc['id']}"
+                        )
+                    
+                    with save_col2:
+                        create_revision_option = st.checkbox(
+                            "Create Revision",
+                            value=True,
+                            help="Create a new revision to track changes",
+                            key=f"create_revision_{doc['id']}"
+                        )
+                    
+                    # Save buttons
+                    save_button_col1, save_button_col2 = st.columns([1, 1])
+                    
+                    with save_button_col1:
+                        if st.button("💾 Save Draft", key=f"save_draft_{doc['id']}", type="primary"):
+                            result = update_document_content(
+                                doc['id'], 
+                                content, 
+                                create_revision=create_revision_option,
+                                comment=revision_comment
+                            )
+                            
+                            if result.get("success"):
+                                st.success(result["message"])
+                                # Refresh document data
+                                fresh_docs = get_documents_for_author(project_id)
+                                fresh_doc = next((d for d in fresh_docs if d['id'] == doc['id']), None)
+                                if fresh_doc:
+                                    st.session_state.selected_doc = fresh_doc
+                                st.rerun()
+                            else:
+                                st.error(f"Failed to save: {result.get('error', 'Unknown error')}")
+                    
+                    with save_button_col2:
+                        if st.button("🔄 Revert Changes", key=f"revert_{doc['id']}"):
+                            # Force refresh to revert changes
+                            fresh_docs = get_documents_for_author(project_id)
+                            fresh_doc = next((d for d in fresh_docs if d['id'] == doc['id']), None)
+                            if fresh_doc:
+                                st.session_state.selected_doc = fresh_doc
+                            st.rerun()
     
     with author_tab2:
         review_docs = get_documents_for_reviewer(project_id)
@@ -1182,7 +1486,7 @@ with tab2:
                         st.rerun()
             
             with approved_col2:
-                st.markdown("### Document Editor")
+                st.markdown("### Document PDF Viewer")
                 
                 if "selected_approved_doc" in st.session_state and st.session_state.approved_mode == "view_only":
                     doc = st.session_state.selected_approved_doc
@@ -1207,29 +1511,59 @@ with tab2:
                         review_state = doc.get('review_state')
                         st.markdown(f"**Status:** {format_status(doc_state, review_state)}", unsafe_allow_html=True)
                     
-                    # Comment History - handle both V1 and V2 formats
-                    st.subheader("💬 Comment History")
-                    comments = doc.get('comment_history', doc.get('review_comments', []))
-                    display_comment_history(comments)
+                    # Generate and display PDF
+                    try:
+                        # Generate PDF from document content
+                        pdf_response = requests.post(
+                            f"{BACKEND_URL}/documents/{doc['id']}/generate-pdf",
+                            headers=get_auth_headers(),
+                            timeout=30
+                        )
+                        
+                        if pdf_response.status_code == 200:
+                            # Display PDF success message
+                            st.success("✅ PDF generated successfully!")
+                            
+                            # Download button for PDF
+                            st.download_button(
+                                label="📥 Download PDF",
+                                data=pdf_response.content,
+                                file_name=f"{doc['name'].replace(' ', '_')}.pdf",
+                                mime="application/pdf",
+                                key=f"download_pdf_{doc['id']}",
+                                use_container_width=True
+                            )
+                            
+                            # Show PDF content inline using object tag (better browser compatibility)
+                            with st.expander("📄 View PDF Content", expanded=True):
+                                pdf_base64 = base64.b64encode(pdf_response.content).decode('utf-8')
+                                pdf_display = f'''
+                                <object data="data:application/pdf;base64,{pdf_base64}" type="application/pdf" width="100%" height="600px">
+                                    <p>Your browser does not support PDFs. <a href="data:application/pdf;base64,{pdf_base64}" download="{doc['name']}.pdf">Download the PDF</a>.</p>
+                                </object>
+                                '''
+                                st.markdown(pdf_display, unsafe_allow_html=True)
+                        else:
+                            st.error(f"Failed to generate PDF: {pdf_response.status_code}")
+                            # Fallback to showing document content
+                            st.subheader("📄 Document Content")
+                            st.markdown(doc['content'])
+                            
+                    except Exception as e:
+                        st.error(f"Error generating PDF: {str(e)}")
+                        # Fallback to showing document content
+                        st.subheader("📄 Document Content")
+                        st.markdown(doc['content'])
                     
                     st.divider()
                     
-                    # Document Content (readonly for approved documents)
-                    st.subheader("📄 Document Content")
-                    st_ace(
-                        value=doc['content'],
-                        language='markdown',
-                        theme='github',
-                        height=300,
-                        key=f"editor_approved_{doc['id']}",
-                        readonly=True
-                    )
-                    
-                    # For approved documents, show readonly note
-                    st.info("📋 **Note:** Approved documents are displayed in read-only mode to maintain document integrity.")
+                    # Comment History - handle both V1 and V2 formats
+                    with st.expander("💬 View Comment History", expanded=False):
+                        comments = doc.get('comment_history', doc.get('review_comments', []))
+                        display_comment_history(comments)
                     
                     # Close button
-                    if st.button("❌ Close", key="close_approved_editor"):
+                    if st.button("❌ Close PDF Viewer", key="close_approved_pdf_viewer", type="secondary"):
                         # Clear all related session state including dataframe selection
                         keys_to_remove = []
                         for key in st.session_state.keys():
@@ -1254,7 +1588,7 @@ with tab2:
                         
                         st.rerun()
                 else:
-                    st.info("Select an approved document from the left panel to edit")
+                    st.info("Select an approved document from the left panel to view as PDF")
 
 
 with tab3:
@@ -1407,22 +1741,70 @@ with tab3:
                 
                 st.divider()
                 
-                # Document Content (readonly in All Documents view)
-                st.subheader("📄 Document Content")
-                st_ace(
-                    value=doc['content'],
-                    language='markdown',
-                    theme='github',
-                    height=300,
-                    key=f"editor_all_{doc['id']}",
-                    readonly=True
-                )
+                # Document PDF Viewer (readonly in All Documents view)
+                st.subheader("📄 Document PDF Viewer")
+                try:
+                    # Generate and display PDF
+                    pdf_response = requests.post(
+                        f"{BACKEND_URL}/documents/{doc['id']}/generate-pdf",
+                        headers=get_auth_headers(),
+                        timeout=30
+                    )
+                    
+                    if pdf_response.status_code == 200:
+                        # Display PDF content using streamlit's native PDF viewer
+                        st.success("✅ PDF generated successfully!")
+                        
+                        # Provide download link for the PDF
+                        st.download_button(
+                            label="📥 Download PDF",
+                            data=pdf_response.content,
+                            file_name=f"{doc['name']}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                        
+                        # Show PDF content inline using Streamlit's method
+                        with st.expander("📄 View PDF Content", expanded=True):
+                            # Create a temporary display using base64 encoding with object tag
+                            pdf_base64 = base64.b64encode(pdf_response.content).decode('utf-8')
+                            pdf_display = f'''
+                            <object data="data:application/pdf;base64,{pdf_base64}" type="application/pdf" width="100%" height="600px">
+                                <p>Your browser does not support PDFs. <a href="data:application/pdf;base64,{pdf_base64}" download="{doc['name']}.pdf">Download the PDF</a>.</p>
+                            </object>
+                            '''
+                            st.markdown(pdf_display, unsafe_allow_html=True)
+                    else:
+                        st.error(f"Failed to generate PDF: {pdf_response.status_code}")
+                        # Fallback to show document content
+                        st.subheader("📄 Document Content (Fallback)")
+                        st_ace(
+                            value=doc['content'],
+                            language='markdown',
+                            theme='github',
+                            height=300,
+                            key=f"editor_all_{doc['id']}",
+                            readonly=True
+                        )
+                        
+                except Exception as e:
+                    st.error(f"Error generating PDF: {str(e)}")
+                    # Fallback to show document content
+                    st.subheader("📄 Document Content (Fallback)")
+                    st_ace(
+                        value=doc['content'],
+                        language='markdown',
+                        theme='github',
+                        height=300,
+                        key=f"editor_all_{doc['id']}",
+                        readonly=True
+                    )
                 
                 # Info message about readonly mode
                 st.info("📋 **Note:** Documents in All Documents view are displayed in read-only mode. To edit, use the My Documents tab.")
                 
                 # Close button
-                if st.button("❌ Close", key="close_all_editor"):
+                if st.button("❌ Close PDF Viewer", key="close_all_editor"):
                     # Clear all related session state including dataframe selection
                     keys_to_remove = []
                     for key in st.session_state.keys():

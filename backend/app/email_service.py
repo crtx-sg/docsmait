@@ -365,6 +365,114 @@ Docsmait Team"""
         except Exception as e:
             logger.error(f"Failed to send audit schedule notification: {e}")
             return False
+    
+    def send_issue_created_notification(self, project_name: str, issue_title: str, issue_number: str, issue_type: str, priority: str, severity: str, creator_username: str, assignee_emails: List[str], creator_email: str):
+        """Send notification when a new issue is created"""
+        try:
+            all_emails = set(assignee_emails)
+            if creator_email:
+                all_emails.add(creator_email)
+            
+            if not all_emails:
+                logger.warning("No emails provided for issue creation notification")
+                return False
+            
+            subject = f"New Issue Created: {issue_number} - {issue_title}"
+            
+            body = f"""New Issue Notification
+
+Project: {project_name}
+Issue ID: {issue_number}
+Issue Title: {issue_title}
+Type: {issue_type}
+Priority: {priority}
+Severity: {severity}
+Created by: {creator_username}
+
+The issue has been created and assigned. Please login to the system to view details and take action.
+
+Best regards,
+Docsmait Team"""
+            
+            html_body = f"""
+            <html>
+            <body>
+                <h2>New Issue Created</h2>
+                <p><strong>Project:</strong> {project_name}</p>
+                <p><strong>Issue ID:</strong> <code style="background-color: #f4f4f4; padding: 2px 4px; border-radius: 3px;">{issue_number}</code></p>
+                <p><strong>Issue Title:</strong> {issue_title}</p>
+                <p><strong>Type:</strong> {issue_type}</p>
+                <p><strong>Priority:</strong> <span style="color: {'red' if priority == 'High' else 'orange' if priority == 'Medium' else 'green'};">{priority}</span></p>
+                <p><strong>Severity:</strong> {severity}</p>
+                <p><strong>Created by:</strong> {creator_username}</p>
+                
+                <p>The issue has been created and assigned. Please login to the system to view details and take action.</p>
+                
+                <p>Best regards,<br>Docsmait Team</p>
+            </body>
+            </html>
+            """
+            
+            return self._send_email(list(all_emails), subject, body, html_body)
+            
+        except Exception as e:
+            logger.error(f"Failed to send issue creation notification: {e}")
+            return False
+    
+    def send_issue_updated_notification(self, project_name: str, issue_title: str, issue_number: str, issue_type: str, priority: str, severity: str, status: str, updated_by_username: str, assignee_emails: List[str], creator_email: str):
+        """Send notification when an issue is updated"""
+        try:
+            all_emails = set(assignee_emails)
+            if creator_email:
+                all_emails.add(creator_email)
+            
+            if not all_emails:
+                logger.warning("No emails provided for issue update notification")
+                return False
+            
+            subject = f"Issue Updated: {issue_number} - {issue_title}"
+            
+            body = f"""Issue Update Notification
+
+Project: {project_name}
+Issue ID: {issue_number}
+Issue Title: {issue_title}
+Type: {issue_type}
+Priority: {priority}
+Severity: {severity}
+Status: {status}
+Updated by: {updated_by_username}
+
+The issue has been updated. Please login to the system to view the latest changes.
+
+Best regards,
+Docsmait Team"""
+            
+            html_body = f"""
+            <html>
+            <body>
+                <h2>Issue Updated</h2>
+                <p><strong>Project:</strong> {project_name}</p>
+                <p><strong>Issue ID:</strong> <code style="background-color: #f4f4f4; padding: 2px 4px; border-radius: 3px;">{issue_number}</code></p>
+                <p><strong>Issue Title:</strong> {issue_title}</p>
+                <p><strong>Type:</strong> {issue_type}</p>
+                <p><strong>Priority:</strong> <span style="color: {'red' if priority == 'High' else 'orange' if priority == 'Medium' else 'green'};">{priority}</span></p>
+                <p><strong>Severity:</strong> {severity}</p>
+                <p><strong>Status:</strong> <span style="color: {'green' if status in ['closed', 'resolved'] else 'blue'};">{status}</span></p>
+                <p><strong>Updated by:</strong> {updated_by_username}</p>
+                
+                <p>The issue has been updated. Please login to the system to view the latest changes.</p>
+                
+                <p>Best regards,<br>Docsmait Team</p>
+            </body>
+            </html>
+            """
+            
+            return self._send_email(list(all_emails), subject, body, html_body)
+            
+        except Exception as e:
+            logger.error(f"Failed to send issue update notification: {e}")
+            return False
 
 # Global email service instance
 email_service = EmailNotificationService()

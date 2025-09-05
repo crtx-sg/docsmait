@@ -24,6 +24,7 @@ Docsmait is a comprehensive AI-powered document and compliance management system
 - 📄 **Template Management** - Pre-built and custom document templates with version control
 - 📧 **Email Notifications** - SMTP integration with configurable delivery settings
 - 🔐 **Advanced Security** - Admin password reset, user management, and audit controls
+- 🐛 **Issues Management** - Complete issue tracking with human-readable IDs, multi-assignee workflows, and email notifications
 - 📈 **Export & Analytics** - CSV/Markdown exports with comprehensive reporting capabilities
 
 ## 🏗️ Architecture
@@ -199,6 +200,17 @@ QDRANT_URL=http://qdrant:6333
 - **Knowledge Base Integration**: Leverages approved documents and templates for training content
 - **Assessment Scoring**: Configurable passing scores with detailed feedback and recommendations
 - **Learning Analytics**: User performance tracking across different subject areas and time periods
+
+### 🐛 Issues Management
+- **Human-Readable Issue IDs**: Sequential project-based numbering (e.g., DOC-001, DOC-002) for easy reference
+- **Comprehensive Issue Tracking**: Title, description, type, priority, severity, version, and component management
+- **Multi-Assignee Workflow**: Support for multiple team members with project member integration
+- **Rich Metadata Support**: Labels, story points, due dates, and custom components for agile workflows
+- **Status-Based Workflow**: Open, in-progress, closed, and resolved states with automated timestamp tracking
+- **Email Notifications**: Automatic notifications for issue creation and updates with readable issue IDs
+- **Interactive Management**: st.dataframe interface with filtering by status, priority, and type
+- **Comment System**: Full conversation threads with user attribution and timestamp tracking
+- **Export Capabilities**: CSV and Markdown export with comprehensive issue reporting and filtering
 
 ### 📚 Knowledge Base
 - **AI-Powered Semantic Search**: Advanced RAG (Retrieval Augmented Generation) pipeline with vector similarity
@@ -415,7 +427,16 @@ Docsmait is developed by **[Coherentix Labs](https://www.coherentix.com)** for o
 
 **Built for**: Medical Device Companies, Automotive Manufacturers, Industrial Safety Organizations, Regulatory Affairs Teams, Quality Assurance Departments, Training Organizations, Compliance Teams
 
-### Recent Updates (v1.1)
+### Recent Updates (v1.2)
+
+**🐛 Issues Management System**
+- Complete issue tracking and management with human-readable IDs (e.g., DOC-001)
+- Multi-assignee support with project member integration
+- Priority-based workflow with status tracking (open, in_progress, closed, resolved)
+- Rich metadata including labels, components, story points, and due dates
+- Email notifications with issue ID integration for created and updated issues
+- Interactive dataframe interface with comprehensive filtering capabilities
+- CSV and Markdown export with detailed issue reporting
 
 **🎓 Training System Enhancements**
 - AI-powered learning content generation from organizational knowledge base
@@ -427,7 +448,7 @@ Docsmait is developed by **[Coherentix Labs](https://www.coherentix.com)** for o
 - Super admin and admin user management with secure password reset capabilities
 - Comprehensive user administration interface with role management
 - Enhanced audit logging with detailed security event tracking
-- SMTP email notification configuration and management
+- SMTP email notification configuration and management with connection testing
 
 **📈 Improved Export & Analytics**
 - Advanced CSV and Markdown export capabilities across all modules
@@ -436,7 +457,7 @@ Docsmait is developed by **[Coherentix Labs](https://www.coherentix.com)** for o
 - Training analytics with detailed performance and progress reporting
 
 **🛠️ System Management Tools**
-- Comprehensive backup and restore scripts for all system components
+- Comprehensive configuration management with centralized environment variables
 - Template bulk upload and management capabilities
 - System health monitoring and configuration management
 - Data cleanup and maintenance tools for production environments

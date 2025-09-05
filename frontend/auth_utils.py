@@ -112,6 +112,7 @@ def setup_authenticated_sidebar():
         st.sidebar.page_link("pages/Templates.py", label="📄 Templates")
         st.sidebar.page_link("pages/Documents.py", label="📁 Documents")
         st.sidebar.page_link("pages/Code.py", label="💻 Code")
+        st.sidebar.page_link("pages/Issues.py", label="🐛 Issues")
 # Reviews page removed - functionality available in Documents → My Reviews tab
         st.sidebar.page_link("pages/DesignRecord.py", label="🔬 Design Record")
         st.sidebar.page_link("pages/Audit.py", label="📊 Audit")

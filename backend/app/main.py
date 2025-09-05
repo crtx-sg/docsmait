@@ -15,6 +15,7 @@ from .audit_service import AuditService
 from .code_review_service import CodeReviewService
 from .project_export_service import project_export_service
 from .activity_log_service import activity_log_service
+from .issues_service_pg import issues_service
 from .records_service import records_service
 from .database_config import get_db
 from .database_service import db_service
@@ -1433,6 +1434,116 @@ def update_code_comment(comment_id: str, comment_data: models.CodeCommentUpdate,
     if not comment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Code comment not found")
     return comment
+
+# ========== Issues Management Endpoints ==========
+
+@app.post("/projects/{project_id}/issues", response_model=dict)
+def create_issue(project_id: str, issue: models.IssueCreate, user_id: int = Depends(auth.verify_token)):
+    """Create a new issue"""
+    from datetime import datetime
+    
+    # Parse due_date if provided
+    due_date = None
+    if issue.due_date:
+        try:
+            due_date = datetime.fromisoformat(issue.due_date).date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid due_date format. Use ISO format (YYYY-MM-DD)")
+    
+    result = issues_service.create_issue(
+        project_id=project_id,
+        title=issue.title,
+        description=issue.description,
+        issue_type=issue.issue_type,
+        priority=issue.priority,
+        severity=issue.severity,
+        version=issue.version,
+        labels=issue.labels,
+        component=issue.component,
+        due_date=due_date,
+        story_points=issue.story_points,
+        assignees=issue.assignees,
+        comment=issue.comment,
+        created_by=user_id
+    )
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    return result
+
+@app.get("/projects/{project_id}/issues")
+def get_project_issues(
+    project_id: str, 
+    user_id: int = Depends(auth.verify_token),
+    status: Optional[str] = Query(None),
+    priority: Optional[str] = Query(None),
+    issue_type: Optional[str] = Query(None)
+):
+    """Get all issues for a project with optional filters"""
+    issues = issues_service.get_project_issues(
+        project_id=project_id,
+        user_id=user_id,
+        status_filter=status,
+        priority_filter=priority,
+        type_filter=issue_type
+    )
+    return {"issues": issues}
+
+@app.get("/issues/{issue_id}")
+def get_issue(issue_id: str, user_id: int = Depends(auth.verify_token)):
+    """Get a specific issue by ID"""
+    issue = issues_service.get_issue(issue_id, user_id)
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    return issue
+
+@app.put("/issues/{issue_id}", response_model=dict)
+def update_issue(issue_id: str, issue_update: models.IssueUpdate, user_id: int = Depends(auth.verify_token)):
+    """Update an issue"""
+    from datetime import datetime
+    
+    update_data = issue_update.dict(exclude_unset=True)
+    
+    # Parse due_date if provided
+    if "due_date" in update_data and update_data["due_date"]:
+        try:
+            update_data["due_date"] = datetime.fromisoformat(update_data["due_date"]).date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid due_date format. Use ISO format (YYYY-MM-DD)")
+    
+    result = issues_service.update_issue(issue_id, user_id, **update_data)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    return result
+
+@app.delete("/issues/{issue_id}", response_model=dict)
+def delete_issue(issue_id: str, user_id: int = Depends(auth.verify_token)):
+    """Delete an issue"""
+    result = issues_service.delete_issue(issue_id, user_id)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    return result
+
+@app.post("/issues/{issue_id}/comments", response_model=dict)
+def add_issue_comment(issue_id: str, comment: models.IssueCommentCreate, user_id: int = Depends(auth.verify_token)):
+    """Add a comment to an issue"""
+    result = issues_service.add_comment(issue_id, user_id, comment.comment_text)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    return result
+
+@app.get("/issues/{issue_id}/comments")
+def get_issue_comments(issue_id: str, user_id: int = Depends(auth.verify_token)):
+    """Get all comments for an issue"""
+    comments = issues_service.get_issue_comments(issue_id, user_id)
+    return {"comments": comments}
 
 # ========== Admin User Management Endpoints ==========
 
@@ -3503,4 +3614,127 @@ def update_field_action(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update field action: {str(e)}"
+        )
+
+# ================================
+# DOCUMENT PDF GENERATION
+# ================================
+
+@app.post("/documents/{document_id}/generate-pdf")
+def generate_document_pdf(
+    document_id: str,
+    user_id: int = Depends(auth.verify_token),
+    db: Session = Depends(get_db)
+):
+    """Generate PDF from document content"""
+    from .db_models import Document, ProjectMember, User
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    import io
+    import markdown
+    from datetime import datetime
+    from fastapi.responses import Response
+    
+    try:
+        # Find the document
+        document = db.query(Document).filter(
+            Document.id == document_id
+        ).first()
+        
+        if not document:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Document with ID {document_id} not found"
+            )
+        
+        # Check if user has access to this document's project
+        if document.project_id:
+            is_member = db.query(ProjectMember).filter(
+                ProjectMember.project_id == document.project_id,
+                ProjectMember.user_id == user_id
+            ).first()
+            
+            user = db.query(User).filter(User.id == user_id).first()
+            if not is_member and not (user and (user.is_admin or user.is_super_admin)):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied to this document"
+                )
+        
+        # Generate PDF
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        
+        # Styles
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=30,
+        )
+        
+        # Content
+        story = []
+        
+        # Title
+        story.append(Paragraph(document.name, title_style))
+        story.append(Spacer(1, 12))
+        
+        # Get author information
+        author_user = db.query(User).filter(User.id == document.created_by).first()
+        author_name = author_user.username if author_user else 'Unknown'
+        
+        # Document metadata
+        meta_info = f"""
+        <b>Document Type:</b> {document.document_type.replace('_', ' ').title()}<br/>
+        <b>Author:</b> {author_name}<br/>
+        <b>Status:</b> {getattr(document, 'document_state', getattr(document, 'status', 'Unknown')).replace('_', ' ').title()}<br/>
+        <b>Created:</b> {document.created_at.strftime('%Y-%m-%d %H:%M:%S') if document.created_at else 'Unknown'}<br/>
+        <b>Last Updated:</b> {document.updated_at.strftime('%Y-%m-%d %H:%M:%S') if document.updated_at else 'Unknown'}<br/>
+        """
+        
+        story.append(Paragraph(meta_info, styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Document content
+        # Convert markdown to HTML for better PDF rendering
+        content_html = markdown.markdown(document.content, extensions=['tables', 'fenced_code'])
+        
+        # Split content by paragraphs and add to PDF
+        paragraphs = content_html.split('\n')
+        for para in paragraphs:
+            if para.strip():
+                try:
+                    story.append(Paragraph(para, styles['Normal']))
+                    story.append(Spacer(1, 6))
+                except Exception as e:
+                    # If paragraph fails, add as plain text
+                    story.append(Paragraph(para.replace('<', '&lt;').replace('>', '&gt;'), styles['Normal']))
+                    story.append(Spacer(1, 6))
+        
+        # Build PDF
+        doc.build(story)
+        
+        # Return PDF as response
+        buffer.seek(0)
+        pdf_content = buffer.getvalue()
+        buffer.close()
+        
+        return Response(
+            content=pdf_content,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename={document.name.replace(' ', '_')}.pdf"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate PDF: {str(e)}"
         )

@@ -653,3 +653,36 @@ class UserTrainingResults(BaseModel):
     average_score: float
     assessments: List[TrainingRecord]
 
+# Issues models
+class IssueCreate(BaseModel):
+    project_id: str
+    title: str
+    description: str
+    issue_type: str
+    priority: str
+    severity: str
+    version: Optional[str] = None
+    labels: List[str] = []
+    component: Optional[str] = None
+    due_date: Optional[str] = None  # ISO date string
+    story_points: Optional[str] = None
+    assignees: List[int] = []
+    comment: Optional[str] = ""
+
+class IssueUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    issue_type: Optional[str] = None
+    priority: Optional[str] = None
+    severity: Optional[str] = None
+    status: Optional[str] = None
+    version: Optional[str] = None
+    labels: Optional[List[str]] = None
+    component: Optional[str] = None
+    due_date: Optional[str] = None  # ISO date string
+    story_points: Optional[str] = None
+    assignees: Optional[List[int]] = None
+
+class IssueCommentCreate(BaseModel):
+    comment_text: str
+

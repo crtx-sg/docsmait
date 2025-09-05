@@ -955,6 +955,116 @@ Answer:"""
         finally:
             db.close()
 
+    def update_collection(self, collection_name: str, description: str = None, tags: List[str] = None) -> Dict[str, Any]:
+        """Update collection metadata"""
+        db = next(get_db())
+        try:
+            # Check if collection exists
+            collection = db.query(KBCollection).filter(KBCollection.name == collection_name).first()
+            if not collection:
+                return {"success": False, "error": f"Collection '{collection_name}' not found"}
+            
+            # Update fields if provided
+            if description is not None:
+                collection.description = description
+            if tags is not None:
+                collection.tags = tags
+            
+            collection.updated_date = datetime.utcnow()
+            db.commit()
+            
+            return {
+                "success": True,
+                "message": f"Collection '{collection_name}' updated successfully",
+                "collection": {
+                    "name": collection.name,
+                    "description": collection.description,
+                    "tags": collection.tags or [],
+                    "is_default": collection.is_default,
+                    "document_count": collection.document_count,
+                    "total_size_bytes": collection.total_size_bytes,
+                    "created_date": collection.created_date.isoformat(),
+                    "updated_date": collection.updated_date.isoformat(),
+                    "created_by": collection.created_by
+                }
+            }
+            
+        except Exception as e:
+            db.rollback()
+            print(f"Error updating collection: {e}")
+            return {"success": False, "error": f"Failed to update collection: {str(e)}"}
+        finally:
+            db.close()
+
+    def delete_collection(self, collection_name: str, force: bool = False) -> Dict[str, Any]:
+        """Delete a collection and optionally its documents"""
+        db = next(get_db())
+        try:
+            # Check if collection exists
+            collection = db.query(KBCollection).filter(KBCollection.name == collection_name).first()
+            if not collection:
+                return {"success": False, "error": f"Collection '{collection_name}' not found"}
+            
+            # Prevent deletion of default collection unless force is used
+            if collection.is_default and not force:
+                return {
+                    "success": False, 
+                    "error": f"Cannot delete default collection '{collection_name}'. Use force=true to override."
+                }
+            
+            # Check if collection has documents and force is not used
+            document_count = db.query(KBDocument).filter(KBDocument.collection_name == collection_name).count()
+            if document_count > 0 and not force:
+                return {
+                    "success": False,
+                    "error": f"Collection '{collection_name}' contains {document_count} documents. Use force=true to delete all documents and the collection."
+                }
+            
+            # Delete all documents in the collection
+            if document_count > 0:
+                # Delete document tags first
+                document_ids = db.query(KBDocument.id).filter(KBDocument.collection_name == collection_name).all()
+                document_ids = [doc[0] for doc in document_ids]
+                if document_ids:
+                    db.query(KBDocumentTag).filter(KBDocumentTag.document_id.in_(document_ids)).delete(synchronize_session=False)
+                
+                # Delete documents
+                db.query(KBDocument).filter(KBDocument.collection_name == collection_name).delete(synchronize_session=False)
+            
+            # Delete the collection itself
+            db.delete(collection)
+            
+            # Delete Qdrant collection
+            try:
+                self.qdrant_client.delete_collection(collection_name)
+            except Exception as e:
+                print(f"Warning: Failed to delete Qdrant collection '{collection_name}': {e}")
+            
+            # If this was the default collection, set another one as default
+            if collection.is_default:
+                remaining_collection = db.query(KBCollection).first()
+                if remaining_collection:
+                    remaining_collection.is_default = True
+                    remaining_collection.updated_date = datetime.utcnow()
+                    self.update_config("default_collection", remaining_collection.name)
+                else:
+                    # No collections left, clear default
+                    self.update_config("default_collection", "")
+            
+            db.commit()
+            
+            return {
+                "success": True,
+                "message": f"Collection '{collection_name}' and {document_count} documents deleted successfully"
+            }
+            
+        except Exception as e:
+            db.rollback()
+            print(f"Error deleting collection: {e}")
+            return {"success": False, "error": f"Failed to delete collection: {str(e)}"}
+        finally:
+            db.close()
+
     # ========== Training Methods ==========
     
     def generate_learning_content_multi_topics(self, topics: List[str]) -> Dict[str, Any]:

@@ -42,6 +42,19 @@ st.title("📚 Knowledge Base Management")
 
 setup_authenticated_sidebar()
 
+# Helper function to check if current user is admin or super admin
+def is_user_admin():
+    """Check if current user is admin or super admin"""
+    try:
+        response = requests.get(f"{BACKEND_URL}/auth/me", headers=get_auth_headers())
+        if response.status_code == 200:
+            user_data = response.json()
+            return user_data.get('is_admin', False) or user_data.get('is_super_admin', False)
+        return False
+    except Exception as e:
+        st.error(f"Error checking user permissions: {e}")
+        return False
+
 # Create tabs for different functionality
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "📤 Upload Documents", "💬 Chat with KB", "🗂️ Collections"])
 
@@ -140,71 +153,71 @@ with tab2:
     
     # File upload processing
     if upload_button and uploaded_files:
-            progress_bar = st.progress(0)
-            status_placeholder = st.empty()
-            results = []
+        progress_bar = st.progress(0)
+        status_placeholder = st.empty()
+        results = []
+        
+        for i, uploaded_file in enumerate(uploaded_files):
+            status_placeholder.write(f"Processing {uploaded_file.name}...")
             
-            for i, uploaded_file in enumerate(uploaded_files):
-                status_placeholder.write(f"Processing {uploaded_file.name}...")
+            try:
+                # Prepare file for upload
+                files = {"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
+                data = {"collection_name": collection_name}
                 
-                try:
-                    # Prepare file for upload
-                    files = {"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
-                    data = {"collection_name": collection_name}
-                    
-                    response = requests.post(
-                        f"{BACKEND_URL}/kb/upload",
-                        files=files,
-                        data=data,
-                        headers=get_auth_headers()
-                    )
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        results.append({
-                            "filename": uploaded_file.name,
-                            "status": "✅ Success",
-                            "chunks": result.get("chunks_created", 0),
-                            "time": result.get("processing_time", 0)
-                        })
-                    else:
-                        error_msg = response.json().get("detail", "Unknown error")
-                        results.append({
-                            "filename": uploaded_file.name,
-                            "status": f"❌ Failed: {error_msg}",
-                            "chunks": 0,
-                            "time": 0
-                        })
+                response = requests.post(
+                    f"{BACKEND_URL}/kb/upload",
+                    files=files,
+                    data=data,
+                    headers=get_auth_headers()
+                )
                 
-                except Exception as e:
+                if response.status_code == 200:
+                    result = response.json()
                     results.append({
                         "filename": uploaded_file.name,
-                        "status": f"❌ Error: {str(e)}",
+                        "status": "✅ Success",
+                        "chunks": result.get("chunks_created", 0),
+                        "time": result.get("processing_time", 0)
+                    })
+                else:
+                    error_msg = response.json().get("detail", "Unknown error")
+                    results.append({
+                        "filename": uploaded_file.name,
+                        "status": f"❌ Failed: {error_msg}",
                         "chunks": 0,
                         "time": 0
                     })
-                
-                progress_bar.progress((i + 1) / len(uploaded_files))
             
-            # Display results
-            status_placeholder.empty()
-            progress_bar.empty()
+            except Exception as e:
+                results.append({
+                    "filename": uploaded_file.name,
+                    "status": f"❌ Error: {str(e)}",
+                    "chunks": 0,
+                    "time": 0
+                })
             
-            st.subheader("Upload Results")
-            success_count = sum(1 for r in results if "✅" in r['status'])
-            
-            for result in results:
-                with st.expander(f"{result['filename']} - {result['status']}"):
-                    if result['chunks'] > 0:
-                        st.write(f"Chunks created: {result['chunks']}")
-                        st.write(f"Processing time: {result['time']}s")
-            
-            # Clear the file uploader if all uploads were successful
-            if success_count == len(results) and success_count > 0:
-                st.success(f"🎉 All {success_count} documents uploaded successfully! You can now upload more documents.")
-                # Add a rerun to clear the uploaded files from UI
-                if st.button("📝 Upload More Documents", type="primary"):
-                    st.rerun()
+            progress_bar.progress((i + 1) / len(uploaded_files))
+        
+        # Display results
+        status_placeholder.empty()
+        progress_bar.empty()
+        
+        st.subheader("Upload Results")
+        success_count = sum(1 for r in results if "✅" in r['status'])
+        
+        for result in results:
+            with st.expander(f"{result['filename']} - {result['status']}"):
+                if result['chunks'] > 0:
+                    st.write(f"Chunks created: {result['chunks']}")
+                    st.write(f"Processing time: {result['time']}s")
+        
+        # Clear the file uploader if all uploads were successful
+        if success_count == len(results) and success_count > 0:
+            st.success(f"🎉 All {success_count} documents uploaded successfully! You can now upload more documents.")
+            # Add a rerun to clear the uploaded files from UI
+            if st.button("📝 Upload More Documents", type="primary"):
+                st.rerun()
     
     # Website scraping processing
     if scrape_button and website_urls:
@@ -363,20 +376,23 @@ with tab4:
             selected_default = None
     
     with default_col2:
-        if available_collections and st.button("💾 Set Default", type="primary"):
-            # Update default collection via new API endpoint
-            try:
-                response = requests.post(
-                    f"{BACKEND_URL}/kb/collections/{selected_default}/set-default",
-                    headers=get_auth_headers()
-                )
-                if response.status_code == 200:
-                    st.success(f"'{selected_default}' set as default!")
-                    st.rerun()
-                else:
-                    st.error("Failed to update default collection")
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+        if available_collections and is_user_admin():
+            if st.button("💾 Set Default", type="primary"):
+                # Update default collection via new API endpoint
+                try:
+                    response = requests.post(
+                        f"{BACKEND_URL}/kb/collections/{selected_default}/set-default",
+                        headers=get_auth_headers()
+                    )
+                    if response.status_code == 200:
+                        st.success(f"'{selected_default}' set as default!")
+                        st.rerun()
+                    else:
+                        st.error("Failed to update default collection")
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+        elif available_collections:
+            st.button("💾 Set Default", disabled=True, type="primary", help="Admin access required")
     
     st.markdown("---")
     
@@ -384,96 +400,248 @@ with tab4:
     col1, col2 = st.columns([1, 2])
     
     with col1:
-        
-        with st.form("create_collection_form"):
-            new_name = st.text_input("Collection Name", placeholder="e.g., my_documents")
-            new_description = st.text_area("Description", placeholder="Brief description of this collection...")
-            new_tags_input = st.text_input("Tags (comma-separated)", placeholder="tag1, tag2, tag3")
-            new_tags = [tag.strip() for tag in new_tags_input.split(",") if tag.strip()]
-            
-            if st.form_submit_button("🔨 Create Collection", type="primary"):
-                if new_name:
-                    success, result = create_collection(new_name, new_description, new_tags)
-                    if success:
-                        st.success(f"Collection '{new_name}' created successfully!")
-                        st.rerun()
+        # Collection creation - Admin only
+        if is_user_admin():
+            st.subheader("🔨 Create New Collection")
+            with st.form("create_collection_form"):
+                new_name = st.text_input("Collection Name", placeholder="e.g., my_documents")
+                new_description = st.text_area("Description", placeholder="Brief description of this collection...")
+                new_tags_input = st.text_input("Tags (comma-separated)", placeholder="tag1, tag2, tag3")
+                new_tags = [tag.strip() for tag in new_tags_input.split(",") if tag.strip()]
+                
+                if st.form_submit_button("🔨 Create Collection", type="primary"):
+                    if new_name:
+                        success, result = create_collection(new_name, new_description, new_tags)
+                        if success:
+                            st.success(f"Collection '{new_name}' created successfully!")
+                            st.rerun()
+                        else:
+                            st.error(f"Failed to create collection: {result}")
                     else:
-                        st.error(f"Failed to create collection: {result}")
-                else:
-                    st.warning("Please enter a collection name")
+                        st.warning("Please enter a collection name")
+        else:
+            st.subheader("🔒 Admin Access Required")
+            st.info("Only Admin or Super Admin users can create new collections. Please contact your administrator if you need to create a collection.")
+            st.text_input("Collection Name", disabled=True, placeholder="Admin access required")
+            st.text_area("Description", disabled=True, placeholder="Admin access required")
+            st.text_input("Tags", disabled=True, placeholder="Admin access required")
+            st.button("🔨 Create Collection", disabled=True, type="primary", help="Admin access required")
     
     with col2:
         st.subheader("📋 Existing Collections")
         
         if collections:
+            # Convert collections to DataFrame format
+            import pandas as pd
+            
+            # Prepare data for display
+            display_data = []
             for collection in collections:
-                with st.expander(f"🗂️ **{collection['name']}**" + (" (Default)" if collection.get('is_default') else "")):
-                    col_info1, col_info2 = st.columns(2)
-                    
-                    with col_info1:
-                        st.write(f"**Description:** {collection.get('description', 'No description')}")
-                        st.write(f"**Created by:** {collection.get('created_by', 'Unknown')}")
-                        st.write(f"**Created:** {collection.get('created_date', 'Unknown')[:10] if collection.get('created_date') else 'Unknown'}")
-                    
-                    with col_info2:
-                        st.write(f"**Documents:** {collection.get('document_count', 0)}")
-                        st.write(f"**Size:** {collection.get('total_size_mb', 0)} MB")
-                        st.write(f"**Tags:** {', '.join(collection.get('tags', [])) if collection.get('tags') else 'None'}")
-                    
-                    # Action buttons
-                    action_col1, action_col2, action_col3 = st.columns(3)
-                    
-                    with action_col1:
-                        if st.button(f"📄 View Documents", key=f"view_{collection['name']}"):
-                            # Fetch and display documents in this collection
-                            try:
-                                response = requests.get(f"{BACKEND_URL}/kb/collections/{collection['name']}", headers=get_auth_headers())
-                                if response.status_code == 200:
-                                    collection_data = response.json()
-                                    documents = collection_data.get('documents', [])
-                                    
-                                    if documents:
-                                        st.write(f"**Documents in '{collection['name']}':**")
-                                        for i, doc in enumerate(documents, 1):
-                                            st.write(f"{i}. **{doc['filename']}** ({doc.get('size_bytes', 0)} bytes, {doc.get('chunk_count', 0)} chunks)")
-                                            st.write(f"   - Status: {doc.get('status', 'unknown')}")
-                                            st.write(f"   - Uploaded: {doc.get('upload_date', 'unknown')[:19] if doc.get('upload_date') else 'unknown'}")
-                                    else:
-                                        st.info(f"No documents found in collection '{collection['name']}'")
-                                else:
-                                    st.error(f"Failed to fetch documents: {response.status_code}")
-                            except Exception as e:
-                                st.error(f"Error fetching documents: {str(e)}")
-                    
-                    with action_col2:
-                        if st.button(f"🗑️ Delete", key=f"delete_{collection['name']}", type="secondary"):
-                            if st.session_state.get(f"confirm_delete_{collection['name']}", False):
-                                success, result = delete_collection(collection['name'], force=True)
-                                if success:
-                                    st.success(f"Collection '{collection['name']}' deleted!")
-                                    st.rerun()
-                                else:
-                                    st.error(f"Failed to delete: {result}")
-                            else:
-                                st.session_state[f"confirm_delete_{collection['name']}"] = True
-                                st.warning("Click again to confirm deletion!")
-                    
-                    with action_col3:
-                        if collection.get('document_count', 0) > 0:
-                            if st.button(f"🔄 Reset", key=f"reset_{collection['name']}"):
+                display_data.append({
+                    "Collection": collection['name'] + (" ⭐" if collection.get('is_default') else ""),
+                    "Description": collection.get('description', 'No description')[:50] + ("..." if len(collection.get('description', '')) > 50 else ""),
+                    "Documents": collection.get('document_count', 0),
+                    "Size (MB)": round(collection.get('total_size_mb', 0), 2),
+                    "Tags": ', '.join(collection.get('tags', [])[:2]) + (f" +{len(collection.get('tags', [])) - 2}" if len(collection.get('tags', [])) > 2 else ""),
+                    "Created By": collection.get('created_by', 'Unknown'),
+                    "Created Date": collection.get('created_date', 'Unknown')[:10] if collection.get('created_date') else 'Unknown'
+                })
+            
+            df_collections = pd.DataFrame(display_data)
+            
+            # Display dataframe with selection
+            selected_indices = st.dataframe(
+                df_collections,
+                use_container_width=True,
+                selection_mode="single-row",
+                on_select="rerun",
+                key="collections_dataframe"
+            ).selection.rows
+            
+            # Handle selection and show collection management
+            if selected_indices:
+                selected_idx = selected_indices[0]
+                selected_collection = collections[selected_idx]
+                
+                st.markdown("---")
+                st.subheader(f"🗂️ Collection Actions: {selected_collection['name']}")
+                
+                # Action buttons in four columns
+                action_col1, action_col2, action_col3, action_col4 = st.columns(4)
+                
+                with action_col1:
+                    # View Documents
+                    if st.button("📄 View", key="view_documents", use_container_width=True):
+                        st.session_state["show_documents"] = True
+                        st.session_state["selected_collection_name"] = selected_collection['name']
+                
+                with action_col2:
+                    # Edit Collection - Admin only
+                    if is_user_admin():
+                        if st.button("✏️ Edit", key="edit_collection", use_container_width=True):
+                            st.session_state["show_edit"] = True
+                            st.session_state["selected_collection_name"] = selected_collection['name']
+                    else:
+                        st.button("✏️ Edit", disabled=True, use_container_width=True, help="Admin access required")
+                
+                with action_col3:
+                    # Reset Collection with double confirmation (only if has documents) - Admin only
+                    if is_user_admin() and selected_collection.get('document_count', 0) > 0:
+                        reset_confirm_key = f"reset_confirm_{selected_collection['name']}"
+                        reset_double_confirm_key = f"reset_double_confirm_{selected_collection['name']}"
+                        
+                        if st.session_state.get(reset_double_confirm_key, False):
+                            if st.button("🔄 CONFIRM", key="final_reset", use_container_width=True):
                                 try:
                                     response = requests.post(
                                         f"{BACKEND_URL}/kb/reset",
-                                        params={"collection_name": collection['name']},
+                                        params={"collection_name": selected_collection['name']},
                                         headers=get_auth_headers()
                                     )
                                     if response.status_code == 200:
-                                        st.success(f"Collection '{collection['name']}' reset!")
+                                        st.success(f"Collection '{selected_collection['name']}' reset!")
+                                        # Clear all confirmation states
+                                        for key in [reset_confirm_key, reset_double_confirm_key]:
+                                            if key in st.session_state:
+                                                del st.session_state[key]
                                         st.rerun()
                                     else:
                                         st.error("Reset failed")
                                 except Exception as e:
                                     st.error(f"Error: {str(e)}")
+                        elif st.session_state.get(reset_confirm_key, False):
+                            if st.button("🔄 Reset?", key="reset_second", use_container_width=True):
+                                st.session_state[reset_double_confirm_key] = True
+                                st.warning("⚠️ FINAL CONFIRMATION: Click 'CONFIRM' to clear all documents!")
+                                st.rerun()
+                        else:
+                            if st.button("🔄 Reset", key="reset_first", use_container_width=True):
+                                st.session_state[reset_confirm_key] = True
+                                st.warning("⚠️ This will delete all documents! Click again to proceed.")
+                                st.rerun()
+                    elif not is_user_admin():
+                        st.button("🔄 Reset", disabled=True, use_container_width=True, help="Admin access required")
+                    else:
+                        st.button("🔄 Reset", disabled=True, use_container_width=True, help="No documents to reset")
+                
+                with action_col4:
+                    # Delete Collection with double confirmation - Admin only
+                    if is_user_admin():
+                        delete_confirm_key = f"delete_confirm_{selected_collection['name']}"
+                        delete_double_confirm_key = f"delete_double_confirm_{selected_collection['name']}"
+                        
+                        if st.session_state.get(delete_double_confirm_key, False):
+                            if st.button("🗑️ CONFIRM", key="final_delete", type="secondary", use_container_width=True):
+                                success, result = delete_collection(selected_collection['name'], force=True)
+                                if success:
+                                    st.success(f"Collection '{selected_collection['name']}' deleted!")
+                                    # Clear all confirmation states
+                                    for key in [delete_confirm_key, delete_double_confirm_key]:
+                                        if key in st.session_state:
+                                            del st.session_state[key]
+                                    st.rerun()
+                                else:
+                                    st.error(f"Failed to delete: {result}")
+                    elif st.session_state.get(delete_confirm_key, False):
+                        if st.button("🗑️ Delete?", key="delete_second", type="secondary", use_container_width=True):
+                            st.session_state[delete_double_confirm_key] = True
+                            st.warning("⚠️ FINAL CONFIRMATION: Click 'CONFIRM' to permanently delete!")
+                            st.rerun()
+                        else:
+                            if st.button("🗑️ Delete", key="delete_first", type="secondary", use_container_width=True):
+                                st.session_state[delete_confirm_key] = True
+                                st.warning("⚠️ This will permanently delete the collection! Click again to proceed.")
+                                st.rerun()
+                    else:
+                        st.button("🗑️ Delete", disabled=True, type="secondary", use_container_width=True, help="Admin access required")
+                
+                # Show documents if requested
+                if st.session_state.get("show_documents", False) and st.session_state.get("selected_collection_name") == selected_collection['name']:
+                    st.markdown("---")
+                    st.subheader(f"📄 Documents in '{selected_collection['name']}'")
+                    
+                    try:
+                        response = requests.get(f"{BACKEND_URL}/kb/collections/{selected_collection['name']}", headers=get_auth_headers())
+                        if response.status_code == 200:
+                            collection_data = response.json()
+                            documents = collection_data.get('documents', [])
+                            
+                            if documents:
+                                doc_data = []
+                                for doc in documents:
+                                    doc_data.append({
+                                        "Filename": doc['filename'],
+                                        "Size (bytes)": f"{doc.get('size_bytes', 0):,}",
+                                        "Chunks": doc.get('chunk_count', 0),
+                                        "Status": doc.get('status', 'unknown').title(),
+                                        "Uploaded": doc.get('upload_date', 'unknown')[:19] if doc.get('upload_date') else 'Unknown'
+                                    })
+                                
+                                df_documents = pd.DataFrame(doc_data)
+                                st.dataframe(df_documents, use_container_width=True)
+                                
+                                # Close button
+                                if st.button("✖️ Close Documents View", key="close_documents"):
+                                    st.session_state["show_documents"] = False
+                                    st.rerun()
+                            else:
+                                st.info(f"No documents found in collection '{selected_collection['name']}'")
+                                if st.button("✖️ Close", key="close_no_documents"):
+                                    st.session_state["show_documents"] = False
+                                    st.rerun()
+                        else:
+                            st.error(f"Failed to fetch documents: {response.status_code}")
+                            if st.button("✖️ Close", key="close_error"):
+                                st.session_state["show_documents"] = False
+                                st.rerun()
+                    except Exception as e:
+                        st.error(f"Error fetching documents: {str(e)}")
+                        if st.button("✖️ Close", key="close_exception"):
+                            st.session_state["show_documents"] = False
+                            st.rerun()
+                
+                # Show edit form if requested
+                if st.session_state.get("show_edit", False) and st.session_state.get("selected_collection_name") == selected_collection['name']:
+                    st.markdown("---")
+                    st.subheader(f"✏️ Edit Collection: '{selected_collection['name']}'")
+                    
+                    with st.form("edit_collection_form"):
+                        edit_description = st.text_area(
+                            "Description", 
+                            value=selected_collection.get('description', ''),
+                            help="Update collection description"
+                        )
+                        edit_tags_input = st.text_input(
+                            "Tags (comma-separated)", 
+                            value=', '.join(selected_collection.get('tags', [])),
+                            help="Update collection tags"
+                        )
+                        edit_tags = [tag.strip() for tag in edit_tags_input.split(",") if tag.strip()]
+                        
+                        form_col1, form_col2 = st.columns(2)
+                        
+                        with form_col1:
+                            if st.form_submit_button("💾 Update Collection", type="primary", use_container_width=True):
+                                try:
+                                    payload = {"description": edit_description, "tags": edit_tags}
+                                    response = requests.put(
+                                        f"{BACKEND_URL}/kb/collections/{selected_collection['name']}", 
+                                        json=payload, 
+                                        headers=get_auth_headers()
+                                    )
+                                    if response.status_code == 200:
+                                        st.success(f"Collection '{selected_collection['name']}' updated!")
+                                        st.session_state["show_edit"] = False
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Failed to update collection: {response.text}")
+                                except Exception as e:
+                                    st.error(f"Error updating collection: {str(e)}")
+                        
+                        with form_col2:
+                            if st.form_submit_button("✖️ Cancel", use_container_width=True):
+                                st.session_state["show_edit"] = False
+                                st.rerun()
         else:
             st.info("No collections found. Create your first collection using the form on the left.")
 

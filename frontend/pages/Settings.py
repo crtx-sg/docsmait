@@ -81,6 +81,120 @@ def update_smtp_settings(smtp_config):
     except Exception as e:
         return {"success": False, "error": f"Connection error: {e}"}
 
+# Test SMTP connection
+def test_smtp_connection(smtp_settings):
+    """Test SMTP connection and display logs"""
+    st.markdown("### 🧪 SMTP Connection Test")
+    
+    # Create a container for logs
+    log_container = st.container()
+    
+    with log_container:
+        st.write("**📝 Connection Test Log:**")
+        log_placeholder = st.empty()
+        
+        logs = []
+        
+        try:
+            # Import required modules
+            import smtplib
+            import ssl
+            from datetime import datetime
+            
+            # Log start
+            logs.append(f"🚀 {datetime.now().strftime('%H:%M:%S')} - Starting SMTP connection test")
+            logs.append(f"📧 {datetime.now().strftime('%H:%M:%S')} - Server: {smtp_settings.get('server_name', 'Not set')}")
+            logs.append(f"🚪 {datetime.now().strftime('%H:%M:%S')} - Port: {smtp_settings.get('port', 'Not set')}")
+            logs.append(f"🔒 {datetime.now().strftime('%H:%M:%S')} - Security: {smtp_settings.get('connection_security', 'Not set')}")
+            log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs")
+            
+            # Check if settings are complete
+            if not smtp_settings.get('server_name') or not smtp_settings.get('username'):
+                logs.append(f"❌ {datetime.now().strftime('%H:%M:%S')} - Error: Server name and username are required")
+                log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_error")
+                st.error("❌ SMTP configuration incomplete. Please configure server name and username.")
+                return
+            
+            logs.append(f"🔄 {datetime.now().strftime('%H:%M:%S')} - Attempting to connect...")
+            log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_connecting")
+            
+            # Create SMTP connection based on security setting
+            server = None
+            if smtp_settings.get('connection_security') == 'SSL/TLS':
+                logs.append(f"🔐 {datetime.now().strftime('%H:%M:%S')} - Using SSL/TLS connection")
+                log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_ssl")
+                
+                context = ssl.create_default_context()
+                server = smtplib.SMTP_SSL(
+                    smtp_settings.get('server_name'),
+                    int(smtp_settings.get('port', 465)),
+                    context=context
+                )
+            else:
+                logs.append(f"📡 {datetime.now().strftime('%H:%M:%S')} - Using plain SMTP connection")
+                log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_plain")
+                
+                server = smtplib.SMTP(
+                    smtp_settings.get('server_name'),
+                    int(smtp_settings.get('port', 587))
+                )
+                
+                if smtp_settings.get('connection_security') == 'STARTTLS':
+                    logs.append(f"🔒 {datetime.now().strftime('%H:%M:%S')} - Upgrading to STARTTLS")
+                    log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_starttls")
+                    server.starttls(context=ssl.create_default_context())
+            
+            logs.append(f"✅ {datetime.now().strftime('%H:%M:%S')} - Connection established successfully")
+            log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_connected")
+            
+            # Test authentication if credentials are provided
+            if smtp_settings.get('username') and smtp_settings.get('password'):
+                logs.append(f"🔑 {datetime.now().strftime('%H:%M:%S')} - Testing authentication...")
+                log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_auth")
+                
+                server.login(smtp_settings.get('username'), smtp_settings.get('password'))
+                
+                logs.append(f"✅ {datetime.now().strftime('%H:%M:%S')} - Authentication successful")
+                log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_auth_success")
+            else:
+                logs.append(f"⚠️ {datetime.now().strftime('%H:%M:%S')} - Skipping authentication test (no password provided)")
+                log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_no_auth")
+            
+            # Close connection
+            server.quit()
+            logs.append(f"🔚 {datetime.now().strftime('%H:%M:%S')} - Connection closed")
+            logs.append(f"🎉 {datetime.now().strftime('%H:%M:%S')} - SMTP test completed successfully!")
+            log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_final")
+            
+            st.success("🎉 **SMTP Connection Test Successful!** Your email configuration is working correctly.")
+            
+        except smtplib.SMTPAuthenticationError as e:
+            logs.append(f"❌ {datetime.now().strftime('%H:%M:%S')} - Authentication failed: {str(e)}")
+            log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_auth_error")
+            st.error(f"❌ **Authentication Failed**: {str(e)}")
+            
+        except smtplib.SMTPConnectError as e:
+            logs.append(f"❌ {datetime.now().strftime('%H:%M:%S')} - Connection failed: {str(e)}")
+            log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_conn_error")
+            st.error(f"❌ **Connection Failed**: {str(e)}")
+            
+        except smtplib.SMTPServerDisconnected as e:
+            logs.append(f"❌ {datetime.now().strftime('%H:%M:%S')} - Server disconnected: {str(e)}")
+            log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_disconn_error")
+            st.error(f"❌ **Server Disconnected**: {str(e)}")
+            
+        except Exception as e:
+            logs.append(f"❌ {datetime.now().strftime('%H:%M:%S')} - Unexpected error: {str(e)}")
+            log_placeholder.text_area("", value="\n".join(logs), height=150, key="smtp_logs_gen_error")
+            st.error(f"❌ **Connection Test Failed**: {str(e)}")
+            
+        finally:
+            if server:
+                try:
+                    server.quit()
+                except:
+                    pass
+
 # Get all users for admin management
 def get_all_users():
     """Get all users for admin management"""
@@ -182,6 +296,39 @@ with settings_tabs[0]:
     if "error" in smtp_settings:
         st.error(f"Error loading SMTP settings: {smtp_settings['error']}")
     else:
+        # Current SMTP Configuration Status
+        st.markdown("### 📊 Current SMTP Configuration")
+        
+        if smtp_settings.get('enabled', False):
+            st.success("✅ **SMTP is Configured and Enabled**")
+        else:
+            st.warning("⚠️ **SMTP is Not Configured or Disabled**")
+            st.info("📝 Configure the settings below to enable email notifications")
+        
+        # Display current configuration in dataframe
+        import pandas as pd
+        
+        config_data = [
+            {"Setting": "📧 Server Name", "Value": smtp_settings.get('server_name', 'Not configured')},
+            {"Setting": "🚪 Port", "Value": str(smtp_settings.get('port', 'Not configured'))},
+            {"Setting": "👤 Username", "Value": smtp_settings.get('username', 'Not configured')},
+            {"Setting": "🔐 Authentication Method", "Value": smtp_settings.get('auth_method', 'Not configured').title()},
+            {"Setting": "🔒 Security Protocol", "Value": smtp_settings.get('connection_security', 'Not configured')},
+            {"Setting": "📬 Status", "Value": "✅ Enabled" if smtp_settings.get('enabled', False) else "❌ Disabled"}
+        ]
+        
+        df_config = pd.DataFrame(config_data)
+        st.dataframe(df_config, use_container_width=True, hide_index=True)
+        
+        # Test connection button
+        test_col1, test_col2, test_col3 = st.columns(3)
+        with test_col2:
+            if st.button("🧪 Test SMTP Connection", type="secondary", use_container_width=True):
+                test_smtp_connection(smtp_settings)
+        
+        st.markdown("---")
+        st.markdown("### ⚙️ SMTP Configuration")
+        
         # SMTP configuration form
         with st.form("smtp_config_form"):
             col1, col2 = st.columns(2)
