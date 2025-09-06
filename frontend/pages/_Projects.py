@@ -775,7 +775,7 @@ with tab3:
                 book_resources = [r for r in project_details["resources"] if r["resource_type"] == "book"]
                 
                 # Display resources in tabs
-                res_tab1, res_tab2, res_tab3, res_tab4 = st.tabs(["➕ Add", "📖 Glossary", "📄 References", "📚 Books"])
+                res_tab1, res_tab2, res_tab3, res_tab4, res_tab5 = st.tabs(["➕ Add", "📖 Glossary", "📄 References", "📚 Books", "📋 Clipboard"])
                 
                 with res_tab1:
                     
@@ -1383,6 +1383,153 @@ with tab3:
                                     st.rerun()
                     else:
                         st.info("No book resources yet.")
+                
+                # Clipboard tab - readonly markdown rendering of all resources
+                with res_tab5:
+                    st.subheader("📋 Resource Clipboard")
+                    st.markdown("**Read-only markdown view of all project resources**")
+                    
+                    if glossary_resources or reference_resources or book_resources:
+                        # Create tabs for different resource types
+                        clipboard_tabs = st.tabs(["📖 Glossary", "📄 References", "📚 Books"])
+                        
+                        # Glossary clipboard
+                        with clipboard_tabs[0]:
+                            if glossary_resources:
+                                st.markdown("### 📖 Glossary Terms")
+                                
+                                # Create markdown table structure
+                                glossary_markdown = "## Glossary Terms\n\n"
+                                glossary_markdown += "| Term | Content | Added By | Date |\n"
+                                glossary_markdown += "|------|---------|----------|------|\n"
+                                
+                                for resource in glossary_resources:
+                                    term_name = resource['name'].replace('|', '\\|')  # Escape pipes in content
+                                    content = (resource.get('content', 'No content') or 'No content').replace('|', '\\|').replace('\n', ' ')[:100] + "..." if len(str(resource.get('content', ''))) > 100 else (resource.get('content', 'No content') or 'No content').replace('|', '\\|').replace('\n', ' ')
+                                    added_by = resource.get('uploaded_by_username', 'Unknown').replace('|', '\\|')
+                                    date_added = resource.get('uploaded_at', resource.get('created_at', 'Unknown'))[:10] if resource.get('uploaded_at', resource.get('created_at', '')) else 'Unknown'
+                                    
+                                    glossary_markdown += f"| {term_name} | {content} | {added_by} | {date_added} |\n"
+                                
+                                # Display in read-only text area with markdown
+                                st.text_area(
+                                    "Glossary Resources (Markdown Table)",
+                                    value=glossary_markdown,
+                                    height=400,
+                                    help="Copy this markdown table for use in documents"
+                                )
+                            else:
+                                st.info("No glossary resources to display")
+                        
+                        # References clipboard
+                        with clipboard_tabs[1]:
+                            if reference_resources:
+                                st.markdown("### 📄 Reference Materials")
+                                
+                                # Create markdown table structure
+                                references_markdown = "## Reference Materials\n\n"
+                                references_markdown += "| Reference | Content | Added By | Date |\n"
+                                references_markdown += "|-----------|---------|----------|------|\n"
+                                
+                                for resource in reference_resources:
+                                    ref_name = resource['name'].replace('|', '\\|')  # Escape pipes in content
+                                    content = (resource.get('content', 'No content') or 'No content').replace('|', '\\|').replace('\n', ' ')[:100] + "..." if len(str(resource.get('content', ''))) > 100 else (resource.get('content', 'No content') or 'No content').replace('|', '\\|').replace('\n', ' ')
+                                    added_by = resource.get('uploaded_by_username', 'Unknown').replace('|', '\\|')
+                                    date_added = resource.get('uploaded_at', resource.get('created_at', 'Unknown'))[:10] if resource.get('uploaded_at', resource.get('created_at', '')) else 'Unknown'
+                                    
+                                    references_markdown += f"| {ref_name} | {content} | {added_by} | {date_added} |\n"
+                                
+                                # Display in read-only text area with markdown
+                                st.text_area(
+                                    "Reference Resources (Markdown Table)",
+                                    value=references_markdown,
+                                    height=400,
+                                    help="Copy this markdown table for use in documents"
+                                )
+                            else:
+                                st.info("No reference resources to display")
+                        
+                        # Books clipboard
+                        with clipboard_tabs[2]:
+                            if book_resources:
+                                st.markdown("### 📚 Book References")
+                                
+                                # Create markdown table structure
+                                books_markdown = "## Book References\n\n"
+                                books_markdown += "| Book Title | Content | Added By | Date |\n"
+                                books_markdown += "|------------|---------|----------|------|\n"
+                                
+                                for resource in book_resources:
+                                    book_name = resource['name'].replace('|', '\\|')  # Escape pipes in content
+                                    content = (resource.get('content', 'No content') or 'No content').replace('|', '\\|').replace('\n', ' ')[:100] + "..." if len(str(resource.get('content', ''))) > 100 else (resource.get('content', 'No content') or 'No content').replace('|', '\\|').replace('\n', ' ')
+                                    added_by = resource.get('uploaded_by_username', 'Unknown').replace('|', '\\|')
+                                    date_added = resource.get('uploaded_at', resource.get('created_at', 'Unknown'))[:10] if resource.get('uploaded_at', resource.get('created_at', '')) else 'Unknown'
+                                    
+                                    books_markdown += f"| {book_name} | {content} | {added_by} | {date_added} |\n"
+                                
+                                # Display in read-only text area with markdown
+                                st.text_area(
+                                    "Book Resources (Markdown Table)",
+                                    value=books_markdown,
+                                    height=400,
+                                    help="Copy this markdown table for use in documents"
+                                )
+                            else:
+                                st.info("No book resources to display")
+                        
+                        # Combined clipboard option
+                        st.markdown("---")
+                        st.markdown("#### 📋 Combined Clipboard")
+                        if st.button("📄 Generate Combined Markdown Tables"):
+                            combined_markdown = "# Project Resources Clipboard\n\n"
+                            combined_markdown += f"**Project:** {project_details['name']}\n\n"
+                            combined_markdown += f"**Generated:** {project_details.get('created_at', 'Unknown')[:10]}\n\n"
+                            
+                            # Add all resources in table format
+                            if glossary_resources:
+                                combined_markdown += "## 📖 Glossary Terms\n\n"
+                                combined_markdown += "| Term | Content | Added By | Date |\n"
+                                combined_markdown += "|------|---------|----------|------|\n"
+                                for resource in glossary_resources:
+                                    term_name = resource['name'].replace('|', '\\|')
+                                    content = (resource.get('content', 'No content') or 'No content').replace('|', '\\|').replace('\n', ' ')[:150] + "..." if len(str(resource.get('content', ''))) > 150 else (resource.get('content', 'No content') or 'No content').replace('|', '\\|').replace('\n', ' ')
+                                    added_by = resource.get('uploaded_by_username', 'Unknown').replace('|', '\\|')
+                                    date_added = resource.get('uploaded_at', resource.get('created_at', 'Unknown'))[:10] if resource.get('uploaded_at', resource.get('created_at', '')) else 'Unknown'
+                                    combined_markdown += f"| {term_name} | {content} | {added_by} | {date_added} |\n"
+                                combined_markdown += "\n"
+                            
+                            if reference_resources:
+                                combined_markdown += "## 📄 Reference Materials\n\n"
+                                combined_markdown += "| Reference | Content | Added By | Date |\n"
+                                combined_markdown += "|-----------|---------|----------|------|\n"
+                                for resource in reference_resources:
+                                    ref_name = resource['name'].replace('|', '\\|')
+                                    content = (resource.get('content', 'No content') or 'No content').replace('|', '\\|').replace('\n', ' ')[:150] + "..." if len(str(resource.get('content', ''))) > 150 else (resource.get('content', 'No content') or 'No content').replace('|', '\\|').replace('\n', ' ')
+                                    added_by = resource.get('uploaded_by_username', 'Unknown').replace('|', '\\|')
+                                    date_added = resource.get('uploaded_at', resource.get('created_at', 'Unknown'))[:10] if resource.get('uploaded_at', resource.get('created_at', '')) else 'Unknown'
+                                    combined_markdown += f"| {ref_name} | {content} | {added_by} | {date_added} |\n"
+                                combined_markdown += "\n"
+                            
+                            if book_resources:
+                                combined_markdown += "## 📚 Book References\n\n"
+                                combined_markdown += "| Book Title | Content | Added By | Date |\n"
+                                combined_markdown += "|------------|---------|----------|------|\n"
+                                for resource in book_resources:
+                                    book_name = resource['name'].replace('|', '\\|')
+                                    content = (resource.get('content', 'No content') or 'No content').replace('|', '\\|').replace('\n', ' ')[:150] + "..." if len(str(resource.get('content', ''))) > 150 else (resource.get('content', 'No content') or 'No content').replace('|', '\\|').replace('\n', ' ')
+                                    added_by = resource.get('uploaded_by_username', 'Unknown').replace('|', '\\|')
+                                    date_added = resource.get('uploaded_at', resource.get('created_at', 'Unknown'))[:10] if resource.get('uploaded_at', resource.get('created_at', '')) else 'Unknown'
+                                    combined_markdown += f"| {book_name} | {content} | {added_by} | {date_added} |\n"
+                                combined_markdown += "\n"
+                            
+                            st.text_area(
+                                "Combined Resources (Markdown)",
+                                value=combined_markdown,
+                                height=400,
+                                help="Complete markdown document with all project resources"
+                            )
+                    else:
+                        st.info("📝 No resources available yet. Add some Glossary, References, or Books to see them in the clipboard.")
     else:
         st.info("No projects available. Create a project first.")
 

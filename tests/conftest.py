@@ -15,17 +15,35 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "backend"))
 
-# Test configuration
-TEST_CONFIG = {
-    "backend_url": os.getenv("TEST_BACKEND_URL", "http://localhost:8001"),
-    "frontend_url": os.getenv("TEST_FRONTEND_URL", "http://localhost:8501"),
-    "database_url": os.getenv("TEST_DATABASE_URL", "postgresql://docsmait_user:docsmait_password@localhost:5433/docsmait_test"),
-    "test_timeout": int(os.getenv("TEST_TIMEOUT", "30")),
-    "test_user_email": os.getenv("TEST_USER_EMAIL", "test@docsmait.com"),
-    "test_user_password": os.getenv("TEST_USER_PASSWORD", "TestPassword123!"),
-    "test_admin_email": os.getenv("TEST_ADMIN_EMAIL", "admin@docsmait.com"),
-    "test_admin_password": os.getenv("TEST_ADMIN_PASSWORD", "AdminPassword123!"),
-}
+# Import centralized configuration for testing
+try:
+    sys.path.append(str(project_root))
+    from config.environments import TestingConfig
+    test_config = TestingConfig()
+    
+    # Test configuration using centralized config
+    TEST_CONFIG = {
+        "backend_url": test_config.backend_url,
+        "frontend_url": test_config.frontend_url,
+        "database_url": test_config.database_url,
+        "test_timeout": getattr(test_config, 'DEFAULT_TIMEOUT', int(os.getenv("TEST_TIMEOUT", "30"))),
+        "test_user_email": os.getenv("TEST_USER_EMAIL", "test@docsmait.com"),
+        "test_user_password": os.getenv("TEST_USER_PASSWORD", "TestPassword123!"),
+        "test_admin_email": os.getenv("TEST_ADMIN_EMAIL", "admin@docsmait.com"),
+        "test_admin_password": os.getenv("TEST_ADMIN_PASSWORD", "AdminPassword123!"),
+    }
+except ImportError:
+    # Fallback configuration
+    TEST_CONFIG = {
+        "backend_url": os.getenv("TEST_BACKEND_URL", "http://localhost:8001"),
+        "frontend_url": os.getenv("TEST_FRONTEND_URL", "http://localhost:8501"),
+        "database_url": os.getenv("TEST_DATABASE_URL", "postgresql://docsmait_user:docsmait_password@localhost:5433/docsmait_test"),
+        "test_timeout": int(os.getenv("TEST_TIMEOUT", "30")),
+        "test_user_email": os.getenv("TEST_USER_EMAIL", "test@docsmait.com"),
+        "test_user_password": os.getenv("TEST_USER_PASSWORD", "TestPassword123!"),
+        "test_admin_email": os.getenv("TEST_ADMIN_EMAIL", "admin@docsmait.com"),
+        "test_admin_password": os.getenv("TEST_ADMIN_PASSWORD", "AdminPassword123!"),
+    }
 
 # Test results directory
 TEST_RESULTS_DIR = Path(__file__).parent / "test_results"

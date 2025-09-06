@@ -1,17 +1,39 @@
 # backend/app/config.py
 """
-Docsmait Configuration File
+Docsmait Backend Configuration File
 
-This file contains all configurable settings for the Docsmait application.
-Settings can be overridden using environment variables.
+This file provides backend-specific configuration by extending the centralized
+configuration system. All hardcoded values have been moved to config/environments.py
+
+DEPRECATED: This file is maintained for backward compatibility.
+New code should use config.environments instead.
 """
 import os
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# Import centralized configuration
+try:
+    # Add parent directory to path to import config module
+    parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(parent_dir)
+    from config.environments import config as env_config
+except ImportError:
+    # Fallback for development/testing when config module isn't available
+    env_config = None
+
 class Config:
     """Main configuration class for Docsmait application"""
+    
+    def __getattribute__(self, name):
+        """Delegate to centralized config when available, fallback to local definitions"""
+        # First check if centralized config is available and has the attribute
+        if env_config and hasattr(env_config, name):
+            return getattr(env_config, name)
+        # Otherwise use the local definition
+        return super().__getattribute__(name)
     
     # === Database Configuration ===
     # Individual components for flexibility
@@ -24,6 +46,8 @@ class Config:
     # Constructed URL (fallback to full URL for backward compatibility)
     @property
     def database_url(self) -> str:
+        if env_config and hasattr(env_config, 'database_url'):
+            return env_config.database_url
         return os.getenv("DATABASE_URL", f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}")
     
     # Keep old attribute for compatibility
@@ -84,6 +108,18 @@ class Config:
     TRACK_FEEDBACK: bool = os.getenv("TRACK_FEEDBACK", "true").lower() == "true"
     LOG_PROMPTS: bool = os.getenv("LOG_PROMPTS", "true").lower() == "true"
     USAGE_RETENTION_DAYS: int = int(os.getenv("USAGE_RETENTION_DAYS", "90"))
+    
+    # === Chat Response Limits ===
+    MAX_CHAT_RESPONSES_PER_SESSION: int = int(os.getenv("MAX_CHAT_RESPONSES_PER_SESSION", "20"))
+    MAX_CHAT_RESPONSE_LENGTH: int = int(os.getenv("MAX_CHAT_RESPONSE_LENGTH", "5000"))
+    
+    # === KB Service Configuration ===
+    KB_TEXT_PREVIEW_LENGTH: int = int(os.getenv("KB_TEXT_PREVIEW_LENGTH", "200"))
+    KB_ERROR_MSG_QUERY_NONE: str = os.getenv("KB_ERROR_MSG_QUERY_NONE", "Error: Query cannot be None")
+    KB_ERROR_MSG_QUERY_EMPTY: str = os.getenv("KB_ERROR_MSG_QUERY_EMPTY", "Error: Query cannot be empty")
+    KB_MAX_ASSESSMENT_QUESTIONS: int = int(os.getenv("KB_MAX_ASSESSMENT_QUESTIONS", "20"))
+    KB_AI_MAX_TOKENS: int = int(os.getenv("KB_AI_MAX_TOKENS", "2000"))
+    KB_OVERVIEW_QUERY_LIMIT: int = int(os.getenv("KB_OVERVIEW_QUERY_LIMIT", "20"))
     
     # === Activity Logging Configuration ===
     ACTIVITY_LOG_RETENTION_DAYS: int = int(os.getenv("ACTIVITY_LOG_RETENTION_DAYS", "365"))

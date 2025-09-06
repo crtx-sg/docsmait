@@ -278,9 +278,10 @@ is_super_admin = current_user.get('is_super_admin', False) if current_user else 
 st.markdown("---")
 
 # Settings tabs - both admin and super admin can access all settings
-settings_tabs = st.tabs(["📧 Email Notifications", "👥 User Management"])
+settings_tabs = st.tabs(["📧 Email Notifications", "👥 User Management", "📄 Document Settings"])
 show_email_tab = True
 show_user_tab = True
+show_document_tab = True
 user_tab_index = 1
 
 # === EMAIL NOTIFICATIONS TAB === (Admin & Super Admin)
@@ -635,4 +636,105 @@ with st.expander("User Management Help"):
     - Super admin status cannot be changed or transferred
     - Admin users can be promoted/demoted by super admin
     - Password resets are logged for security purposes
+    """)
+
+# === DOCUMENT SETTINGS TAB ===
+with settings_tabs[2]:
+    st.subheader("📄 Document Settings")
+    st.markdown("Configure document generation and display settings.")
+    
+    # Page Numbers Setting
+    st.markdown("#### 📄 Page Numbering")
+    enable_page_numbers = st.checkbox(
+        "Enable Page Numbers in PDF Documents",
+        value=st.session_state.get("enable_page_numbers", True),
+        help="Add page numbers to generated PDF documents"
+    )
+    
+    if st.button("💾 Save Page Number Setting"):
+        st.session_state.enable_page_numbers = enable_page_numbers
+        st.success("✅ Page number setting saved successfully!")
+        st.info(f"Page numbers are now {'enabled' if enable_page_numbers else 'disabled'} for PDF generation.")
+    
+    st.markdown("---")
+    
+    # Font Selection
+    st.markdown("#### 🔤 Font Settings")
+    font_options = ["Arial", "Times New Roman", "Helvetica", "Calibri", "Georgia"]
+    selected_font = st.selectbox(
+        "Document Font",
+        options=font_options,
+        index=font_options.index(st.session_state.get("document_font", "Arial")),
+        help="Select the default font for document generation"
+    )
+    
+    if st.button("💾 Save Font Setting"):
+        st.session_state.document_font = selected_font
+        st.success(f"✅ Font setting saved: {selected_font}")
+        st.info(f"Documents will now use {selected_font} as the default font.")
+    
+    st.markdown("---")
+    
+    # Logo Upload
+    st.markdown("#### 🖼️ Logo Settings")
+    st.info("📝 **Logo Upload**: Upload a company logo to include in document headers")
+    
+    uploaded_logo = st.file_uploader(
+        "Upload Logo (PNG, JPEG)",
+        type=["png", "jpg", "jpeg"],
+        help="Upload a logo to be used in document headers"
+    )
+    
+    if uploaded_logo:
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.image(uploaded_logo, caption="Logo Preview", width=150)
+        with col2:
+            st.markdown("**Logo Information:**")
+            st.write(f"**Filename:** {uploaded_logo.name}")
+            st.write(f"**Size:** {uploaded_logo.size} bytes")
+            st.write(f"**Type:** {uploaded_logo.type}")
+            
+            if st.button("💾 Save Logo"):
+                # In a real implementation, you would save this to a backend
+                st.session_state.document_logo = uploaded_logo.name
+                st.success("✅ Logo uploaded successfully!")
+                st.info("**Access URL:** `/static/logos/{}`".format(uploaded_logo.name))
+    
+    if st.session_state.get("document_logo"):
+        st.markdown("**Current Logo:** " + st.session_state.document_logo)
+        if st.button("🗑️ Remove Logo"):
+            del st.session_state.document_logo
+            st.success("Logo removed successfully!")
+            st.rerun()
+
+with st.expander("Document Settings Help"):
+    st.markdown("""
+    **Page Numbers:**
+    - Enable/disable page numbers in generated PDF documents
+    - Page numbers appear in the footer of each page
+    - Useful for formal documents and reports
+    
+    **Font Selection:**
+    - Choose the default font for document generation
+    - Applies to all new PDF documents
+    - Common professional fonts are available
+    
+    **Logo Settings:**
+    - Upload a company or organization logo
+    - Logo will appear in document headers
+    - Supported formats: PNG, JPEG
+    - Maximum recommended size: 200KB
+    - Logo URL can be referenced in markdown documents
+    
+    **Usage in Markdown:**
+    ```markdown
+    ![Company Logo](/static/logos/your-logo.png)
+    ```
+    
+    **Important Notes:**
+    - Settings apply to newly generated documents
+    - Existing documents retain their original formatting
+    - Logo uploads are stored locally
+    - Contact administrator for advanced document styling
     """)

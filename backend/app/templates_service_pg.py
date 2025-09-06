@@ -359,67 +359,71 @@ class TemplatesService:
             if not template:
                 return {"success": False, "error": "Template not found"}
             
-            # Try to generate PDF using various methods
+            # Try to generate PDF using ReportLab
             try:
-                # Method 1: Try using weasyprint (if available)
-                import weasyprint
-                from weasyprint import HTML, CSS
+                from reportlab.lib.pagesizes import letter
+                from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+                from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                from reportlab.lib.units import inch
                 from io import BytesIO
                 import base64
+                import re
                 
-                # Create HTML content
-                html_content = f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <title>{template['name']}</title>
-                    <style>
-                        body {{ font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }}
-                        h1, h2, h3 {{ color: #333; }}
-                        .metadata {{ background: #f5f5f5; padding: 15px; margin-bottom: 20px; border-radius: 5px; }}
-                        .content {{ margin-top: 20px; }}
-                        table {{ border-collapse: collapse; width: 100%; }}
-                        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-                        th {{ background-color: #f2f2f2; }}
-                        pre {{ background: #f8f8f8; padding: 10px; border-radius: 4px; }}
-                        code {{ background: #f0f0f0; padding: 2px 4px; border-radius: 3px; }}
-                    </style>
-                </head>
-                <body>
-                """
-                
-                if include_metadata:
-                    html_content += f"""
-                    <div class="metadata">
-                        <h2>Template Information</h2>
-                        <p><strong>Name:</strong> {template['name']}</p>
-                        <p><strong>Description:</strong> {template['description']}</p>
-                        <p><strong>Document Type:</strong> {template['document_type'].replace('_', ' ').title()}</p>
-                        <p><strong>Version:</strong> {template['version']}</p>
-                        <p><strong>Status:</strong> {template['status'].title()}</p>
-                        <p><strong>Created by:</strong> {template['created_by_username']}</p>
-                        <p><strong>Created on:</strong> {template['created_at'][:10]}</p>
-                        {f"<p><strong>Tags:</strong> {', '.join(template['tags'])}</p>" if template['tags'] else ""}
-                    </div>
-                    """
-                
-                # Convert markdown to HTML
-                import markdown
-                md_content = markdown.markdown(template['content'], extensions=['tables', 'fenced_code'])
-                
-                html_content += f"""
-                    <div class="content">
-                        <h1>Template Content</h1>
-                        {md_content}
-                    </div>
-                </body>
-                </html>
-                """
-                
-                # Generate PDF
                 pdf_buffer = BytesIO()
-                HTML(string=html_content).write_pdf(pdf_buffer)
+                doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
+                styles = getSampleStyleSheet()
+                story = []
+                
+                # Title
+                title_style = ParagraphStyle(
+                    'CustomTitle',
+                    parent=styles['Heading1'],
+                    fontSize=16,
+                    spaceAfter=30,
+                )
+                # Escape template name for ReportLab
+                escaped_name = template['name'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                story.append(Paragraph(escaped_name, title_style))
+                
+                # Metadata if requested
+                if include_metadata:
+                    story.append(Paragraph("Template Information", styles['Heading2']))
+                    story.append(Paragraph(f"<b>Description:</b> {template['description']}", styles['Normal']))
+                    story.append(Paragraph(f"<b>Document Type:</b> {template['document_type'].replace('_', ' ').title()}", styles['Normal']))
+                    story.append(Paragraph(f"<b>Version:</b> {template['version']}", styles['Normal']))
+                    story.append(Paragraph(f"<b>Status:</b> {template['status'].title()}", styles['Normal']))
+                    story.append(Paragraph(f"<b>Created by:</b> {template['created_by_username']}", styles['Normal']))
+                    story.append(Paragraph(f"<b>Created on:</b> {template['created_at'][:10]}", styles['Normal']))
+                    if template['tags']:
+                        story.append(Paragraph(f"<b>Tags:</b> {', '.join(template['tags'])}", styles['Normal']))
+                    story.append(Spacer(1, 20))
+                
+                # Content
+                story.append(Paragraph("Template Content", styles['Heading2']))
+                story.append(Spacer(1, 10))
+                
+                # Content - simple processing without complex markdown
+                content_lines = template['content'].split('\n')
+                for line in content_lines:
+                    if line.strip():
+                        # Basic escape for ReportLab
+                        safe_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                        # Handle basic markdown formatting
+                        safe_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', safe_line)  # Bold
+                        safe_line = re.sub(r'\*(.*?)\*', r'<i>\1</i>', safe_line)      # Italic
+                        
+                        if line.startswith('# '):
+                            story.append(Paragraph(safe_line[2:], styles['Heading1']))
+                        elif line.startswith('## '):
+                            story.append(Paragraph(safe_line[3:], styles['Heading2']))
+                        elif line.startswith('### '):
+                            story.append(Paragraph(safe_line[4:], styles['Heading3']))
+                        else:
+                            story.append(Paragraph(safe_line, styles['Normal']))
+                        story.append(Spacer(1, 6))
+                
+                # Build PDF
+                doc.build(story)
                 pdf_buffer.seek(0)
                 
                 # Encode as base64 for JSON response
@@ -433,7 +437,7 @@ class TemplatesService:
                 }
                 
             except ImportError:
-                # Method 2: Fallback to simple HTML export if weasyprint not available
+                # Method 2: Fallback to simple HTML export if ReportLab not available
                 import base64
                 
                 html_content = f"""

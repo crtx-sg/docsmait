@@ -291,6 +291,40 @@ class TestUserManagementEndpoints:
 
 
 @pytest.mark.api
+class TestKnowledgeBaseEndpoints:
+    """Test Knowledge Base related endpoints."""
+
+    def test_kb_query_with_context_endpoint_exists(self, authenticated_client, backend_url):
+        """Test that KB query with context endpoint exists."""
+        query_data = {
+            "query": "Test query for endpoint existence"
+        }
+        
+        response = authenticated_client.post(f"{backend_url}/kb/query_with_context", json=query_data)
+        
+        # Should not return 404 (endpoint exists)
+        assert response.status_code != 404
+        
+        # Should return valid status codes
+        assert response.status_code in [200, 400, 422, 500, 503]
+
+    def test_kb_settings_integration(self, api_client, backend_url, assert_docsmait):
+        """Test that settings endpoint includes KB configuration."""
+        response = api_client.get(f"{backend_url}/settings")
+        
+        assert_docsmait.assert_api_success(response)
+        data = response.json()
+        
+        # Should contain KB-related configuration
+        # This validates that the KB system is properly integrated
+        kb_related_keys = ["general_llm", "embedding_model", "vector_db"]
+        for key in kb_related_keys:
+            if key in data:
+                assert isinstance(data[key], str)
+                assert len(data[key]) > 0
+
+
+@pytest.mark.api
 @pytest.mark.slow
 class TestAPIPerformance:
     """Test API performance characteristics."""

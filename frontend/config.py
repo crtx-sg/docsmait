@@ -4,22 +4,52 @@ Frontend Configuration Constants
 
 This file contains configuration constants used by the frontend application.
 Environment variables override default values.
+
+DEPRECATED: This file is maintained for backward compatibility.
+New code should use config.environments instead.
 """
 
 import os
+import sys
 
-# Backend Configuration
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
+# Import centralized configuration
+try:
+    # Add parent directory to path to import config module
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.append(parent_dir)
+    from config.environments import config as env_config
+    # Use centralized config values when available
+    BACKEND_URL = env_config.backend_url if env_config and hasattr(env_config, 'backend_url') else os.getenv("BACKEND_URL", "http://localhost:8001")
+except ImportError:
+    # Fallback for development/testing when config module isn't available
+    env_config = None
+    # Backend Configuration
+    BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
 
-# Knowledge Base Configuration
-DEFAULT_COLLECTION_NAME = os.getenv("DEFAULT_COLLECTION_NAME", "knowledge_base")
-KB_REQUEST_TIMEOUT = int(os.getenv("KB_REQUEST_TIMEOUT", "10"))  # KB API timeout in seconds
-KB_LONG_REQUEST_TIMEOUT = int(os.getenv("KB_LONG_REQUEST_TIMEOUT", "30"))  # Long operations timeout
-
-# UI Configuration
-DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "120"))
-DEFAULT_MAX_RESPONSE_LENGTH = int(os.getenv("DEFAULT_MAX_RESPONSE_LENGTH", "2000"))
-DEFAULT_CONTEXT_WINDOW = int(os.getenv("DEFAULT_CONTEXT_WINDOW", "4000"))
+# Use centralized config when available, otherwise fallback to environment variables
+if env_config:
+    DEFAULT_COLLECTION_NAME = getattr(env_config, 'DEFAULT_COLLECTION_NAME', os.getenv("DEFAULT_COLLECTION_NAME", "knowledge_base"))
+    KB_REQUEST_TIMEOUT = getattr(env_config, 'KB_REQUEST_TIMEOUT', int(os.getenv("KB_REQUEST_TIMEOUT", "10")))
+    KB_LONG_REQUEST_TIMEOUT = getattr(env_config, 'KB_LONG_REQUEST_TIMEOUT', int(os.getenv("KB_LONG_REQUEST_TIMEOUT", "30")))
+    MAX_CHAT_RESPONSES_PER_SESSION = getattr(env_config, 'MAX_CHAT_RESPONSES_PER_SESSION', int(os.getenv("MAX_CHAT_RESPONSES_PER_SESSION", "20")))
+    MAX_CHAT_RESPONSE_LENGTH = getattr(env_config, 'MAX_CHAT_RESPONSE_LENGTH', int(os.getenv("MAX_CHAT_RESPONSE_LENGTH", "5000")))
+    KB_CHAT_REQUEST_TIMEOUT = getattr(env_config, 'KB_CHAT_REQUEST_TIMEOUT', int(os.getenv("KB_CHAT_REQUEST_TIMEOUT", "30")))
+    PDF_GENERATION_TIMEOUT = getattr(env_config, 'PDF_GENERATION_TIMEOUT', int(os.getenv("PDF_GENERATION_TIMEOUT", "30")))
+    DEFAULT_TIMEOUT = getattr(env_config, 'DEFAULT_TIMEOUT', int(os.getenv("DEFAULT_TIMEOUT", "120")))
+    DEFAULT_MAX_RESPONSE_LENGTH = getattr(env_config, 'DEFAULT_MAX_RESPONSE_LENGTH', int(os.getenv("DEFAULT_MAX_RESPONSE_LENGTH", "2000")))
+    DEFAULT_CONTEXT_WINDOW = getattr(env_config, 'DEFAULT_CONTEXT_WINDOW', int(os.getenv("DEFAULT_CONTEXT_WINDOW", "4000")))
+else:
+    # Fallback configuration
+    DEFAULT_COLLECTION_NAME = os.getenv("DEFAULT_COLLECTION_NAME", "knowledge_base")
+    KB_REQUEST_TIMEOUT = int(os.getenv("KB_REQUEST_TIMEOUT", "10"))  # KB API timeout in seconds
+    KB_LONG_REQUEST_TIMEOUT = int(os.getenv("KB_LONG_REQUEST_TIMEOUT", "30"))  # Long operations timeout
+    MAX_CHAT_RESPONSES_PER_SESSION = int(os.getenv("MAX_CHAT_RESPONSES_PER_SESSION", "20"))
+    MAX_CHAT_RESPONSE_LENGTH = int(os.getenv("MAX_CHAT_RESPONSE_LENGTH", "5000"))
+    KB_CHAT_REQUEST_TIMEOUT = int(os.getenv("KB_CHAT_REQUEST_TIMEOUT", "30"))  # KB chat API timeout
+    PDF_GENERATION_TIMEOUT = int(os.getenv("PDF_GENERATION_TIMEOUT", "30"))   # PDF generation timeout
+    DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "120"))
+    DEFAULT_MAX_RESPONSE_LENGTH = int(os.getenv("DEFAULT_MAX_RESPONSE_LENGTH", "2000"))
+    DEFAULT_CONTEXT_WINDOW = int(os.getenv("DEFAULT_CONTEXT_WINDOW", "4000"))
 
 # Interactive Table Configuration
 DATAFRAME_HEIGHT = int(os.getenv("DATAFRAME_HEIGHT", "400"))

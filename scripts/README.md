@@ -2,23 +2,31 @@
 
 This directory contains utility scripts for managing and maintaining the Docsmait system.
 
+## Script Organization
+
+Scripts are organized into subdirectories by type:
+- **`python/`** - Python-based maintenance and management scripts
+- **`shell/`** - Shell scripts for system operations and automation
+
 ## Available Scripts
 
-### 1. `cleanup_system.py` - Comprehensive System Cleanup
+### Python Scripts (`python/`)
+
+#### 1. `cleanup_system.py` - Comprehensive System Cleanup
 Provides comprehensive cleanup functionality for both database and knowledge base.
 
 ```bash
 # Dry run (safe preview)
-python cleanup_system.py --dry-run
+python python/cleanup_system.py --dry-run
 
 # Clean only database
-python cleanup_system.py --database-only --no-dry-run --confirm-all
+python python/cleanup_system.py --database-only --no-dry-run --confirm-all
 
 # Clean only knowledge base  
-python cleanup_system.py --kb-only --no-dry-run
+python python/cleanup_system.py --kb-only --no-dry-run
 
 # Full cleanup with confirmations
-python cleanup_system.py --no-dry-run
+python python/cleanup_system.py --no-dry-run
 ```
 
 **Features:**
@@ -33,16 +41,16 @@ Completely wipes all data and returns the system to initial state.
 
 ```bash
 # Reset everything (DANGEROUS!)
-python reset_system.py --confirm
+python python/reset_system.py --confirm
 
 # Keep admin users
-python reset_system.py --keep-admin --confirm
+python python/reset_system.py --keep-admin --confirm
 
 # Keep system settings
-python reset_system.py --keep-settings --confirm
+python python/reset_system.py --keep-settings --confirm
 
 # Keep both admin users and settings
-python reset_system.py --keep-admin --keep-settings --confirm
+python python/reset_system.py --keep-admin --keep-settings --confirm
 ```
 
 **⚠️ WARNING:** This permanently deletes ALL data!
@@ -52,19 +60,19 @@ Provides routine maintenance tasks for optimal system performance.
 
 ```bash
 # Show recommended maintenance schedule
-python maintenance_tasks.py --schedule
+python python/maintenance_tasks.py --schedule
 
 # Run all maintenance tasks (dry run)
-python maintenance_tasks.py --all --dry-run --verbose
+python python/maintenance_tasks.py --all --dry-run --verbose
 
 # Optimize database only
-python maintenance_tasks.py --optimize-db
+python python/maintenance_tasks.py --optimize-db
 
 # Clean temp files
-python maintenance_tasks.py --clean-temp-files
+python python/maintenance_tasks.py --clean-temp-files
 
 # Run integrity checks
-python maintenance_tasks.py --check-integrity --verbose
+python python/maintenance_tasks.py --check-integrity --verbose
 ```
 
 **Tasks Available:**
@@ -74,33 +82,53 @@ python maintenance_tasks.py --check-integrity --verbose
 - 🧹 Temporary file cleanup
 - 🔍 Data integrity checks
 
+### Shell Scripts (`shell/`)
+
+#### 1. `comprehensive_backup.sh` - Comprehensive System Backup
+Creates complete backups of database and knowledge base.
+
+#### 2. `manage_system.sh` - System Management Tool
+Provides unified interface for common system management tasks.
+
+#### 3. `reset_all_data.sh` - Complete Data Reset
+Completely resets all system data with safety confirmations.
+
+#### 4. `restore.sh` - System Restore Tool
+Restores system from backup files.
+
+#### 5. `system_health.sh` - System Health Check
+Monitors and reports system health status.
+
+#### 6. `template_manager.sh` - Template Management
+Manages document templates and template operations.
+
 ## Usage Examples
 
 ### Daily Maintenance
 ```bash
 # Quick cleanup of temp files and stats update
-python maintenance_tasks.py --clean-temp-files --update-stats
+python python/maintenance_tasks.py --clean-temp-files --update-stats
 ```
 
 ### Weekly Maintenance  
 ```bash
 # Comprehensive maintenance
-python maintenance_tasks.py --all --verbose
+python python/maintenance_tasks.py --all --verbose
 ```
 
 ### Monthly Cleanup
 ```bash
 # Safe cleanup preview
-python cleanup_system.py --dry-run
+python python/cleanup_system.py --dry-run
 
 # Actual cleanup after review
-python cleanup_system.py --no-dry-run
+python python/cleanup_system.py --no-dry-run
 ```
 
 ### Emergency Reset
 ```bash
 # When everything is broken beyond repair
-python reset_system.py --keep-admin --keep-settings --confirm
+python python/reset_system.py --keep-admin --keep-settings --confirm
 ```
 
 ## Safety Features
@@ -199,7 +227,7 @@ chmod +x scripts/*.py
 python [script_name].py --help
 
 # Show maintenance schedule
-python maintenance_tasks.py --schedule
+python python/maintenance_tasks.py --schedule
 ```
 
 ## Logs and Output

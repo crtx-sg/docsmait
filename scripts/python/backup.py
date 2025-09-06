@@ -34,14 +34,25 @@ class DocsmaitBackup:
         self.backup_name = f"docsmait_backup_{self.timestamp}"
         self.backup_path = self.backup_dir / self.backup_name
         
-        # Docker container names
-        self.postgres_container = "docsmait_postgres"
-        self.qdrant_container = "docsmait_qdrant"
-        
-        # Database credentials from environment or defaults
-        self.db_name = os.getenv("DB_NAME", "docsmait")
-        self.db_user = os.getenv("DB_USER", "docsmait_user")
-        self.db_password = os.getenv("DB_PASSWORD", "docsmait_password")
+        # Import centralized configuration
+        try:
+            parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            sys.path.append(parent_dir)
+            from config.environments import config as env_config
+            # Container names from config
+            self.postgres_container = env_config.POSTGRES_SERVICE_NAME
+            self.qdrant_container = env_config.QDRANT_SERVICE_NAME
+            # Database credentials from config
+            self.db_name = env_config.DB_NAME
+            self.db_user = env_config.DB_USER
+            self.db_password = env_config.DB_PASSWORD
+        except ImportError:
+            # Fallback for when centralized config is not available
+            self.postgres_container = os.getenv("POSTGRES_SERVICE_NAME", "docsmait_postgres")
+            self.qdrant_container = os.getenv("QDRANT_SERVICE_NAME", "docsmait_qdrant")
+            self.db_name = os.getenv("DB_NAME", "docsmait")
+            self.db_user = os.getenv("DB_USER", "docsmait_user")
+            self.db_password = os.getenv("DB_PASSWORD", "docsmait_password")
         
     def create_backup_directory(self):
         """Create backup directory structure"""
@@ -63,6 +74,7 @@ class DocsmaitBackup:
                 'users', 'projects', 'project_members', 'project_resources',
                 'templates', 'template_approvals', 'documents', 'document_revisions',
                 'document_reviewers', 'document_reviews', 'document_comments',
+                'issues', 'issue_comments',  # Issues Management tables
                 'kb_collections', 'kb_documents', 'kb_queries', 'kb_config', 'kb_document_tags',
                 'audits', 'findings', 'corrective_actions', 'repositories', 'pull_requests',
                 'pull_request_files', 'code_reviews', 'code_comments', 'review_requests',
@@ -146,6 +158,7 @@ class DocsmaitBackup:
                 'users', 'projects', 'project_members', 'project_resources',
                 'templates', 'template_approvals', 'documents', 'document_revisions',
                 'document_reviewers', 'document_reviews', 'document_comments',
+                'issues', 'issue_comments',  # Issues Management tables
                 'kb_collections', 'kb_documents', 'kb_queries', 'kb_config', 'kb_document_tags',
                 'audits', 'findings', 'corrective_actions', 'repositories', 'pull_requests',
                 'pull_request_files', 'code_reviews', 'code_comments', 'review_requests',
@@ -201,6 +214,65 @@ class DocsmaitBackup:
             logger.error(f"Qdrant backup error: {e}")
             return False
     
+    def backup_file_system_data(self):
+        """Backup file system data including uploaded documents and templates"""
+        try:
+            logger.info("Starting file system data backup...")
+            fs_backup_dir = self.backup_path / "filesystem"
+            fs_backup_dir.mkdir(exist_ok=True)
+            
+            # Directories to backup from containers
+            backup_targets = [
+                ("docsmait_backend", "/app/uploads", "backend_uploads"),
+                ("docsmait_backend", "/app/templates", "backend_templates") if self.container_path_exists("docsmait_backend", "/app/templates") else None,
+                ("docsmait_frontend", "/app/uploads", "frontend_uploads") if self.container_path_exists("docsmait_frontend", "/app/uploads") else None,
+            ]
+            
+            backed_up_directories = []
+            
+            for target_info in backup_targets:
+                if target_info is None:
+                    continue
+                    
+                container, source_path, backup_name = target_info
+                destination = fs_backup_dir / backup_name
+                
+                # Copy data from container
+                cmd = ["docker", "cp", f"{container}:{source_path}", str(destination)]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                
+                if result.returncode == 0:
+                    backed_up_directories.append(f"{container}:{source_path}")
+                    logger.info(f"Backed up: {container}:{source_path}")
+                else:
+                    logger.warning(f"Could not backup {container}:{source_path}: {result.stderr}")
+            
+            # Create file system backup manifest
+            fs_manifest = {
+                "timestamp": self.timestamp,
+                "backed_up_directories": backed_up_directories,
+                "backup_type": "filesystem"
+            }
+            
+            with open(fs_backup_dir / "filesystem_manifest.json", 'w') as f:
+                json.dump(fs_manifest, f, indent=2)
+            
+            logger.info(f"File system backup completed: {fs_backup_dir}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"File system backup error: {e}")
+            return False
+    
+    def container_path_exists(self, container, path):
+        """Check if path exists in container"""
+        try:
+            cmd = ["docker", "exec", container, "test", "-e", path]
+            result = subprocess.run(cmd, capture_output=True)
+            return result.returncode == 0
+        except:
+            return False
+
     def backup_configuration_files(self):
         """Backup configuration files and environment settings"""
         try:
@@ -281,9 +353,10 @@ class DocsmaitBackup:
                 "backup_name": self.backup_name,
                 "timestamp": self.timestamp,
                 "archive_path": str(archive_path),
-                "components": ["postgres", "qdrant", "configuration"],
+                "components": ["postgres", "qdrant", "configuration", "filesystem"],
                 "db_name": self.db_name,
-                "created_by": "Docsmait Backup Script v1.0"
+                "created_by": "Docsmait Backup Script v1.2",
+                "includes_issues_management": True
             }
             
             with open(info_file, 'w') as f:
@@ -323,6 +396,10 @@ class DocsmaitBackup:
         
         # Backup configuration files
         if not self.backup_configuration_files():
+            success = False
+        
+        # Backup file system data
+        if not self.backup_file_system_data():
             success = False
         
         if success:

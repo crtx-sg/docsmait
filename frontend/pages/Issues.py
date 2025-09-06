@@ -596,7 +596,15 @@ with tab_export:
             st.dataframe(preview_df, use_container_width=True, hide_index=True)
         
         # Export functionality
-        if st.button("🔽 Export Issues", type="primary"):
+        export_button_col1, export_button_col2 = st.columns([1, 1])
+        
+        with export_button_col1:
+            export_clicked = st.button("🔽 Export Issues", type="primary")
+        
+        with export_button_col2:
+            publish_clicked = st.button("📄 Publish as Document", type="secondary", help="Publish this issues report as a Document for review workflow")
+        
+        if export_clicked:
             if export_format == "CSV":
                 # Prepare CSV data
                 csv_data = []
@@ -698,5 +706,89 @@ with tab_export:
                     file_name=f"{selected_project_name}_issues_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
                     mime="text/markdown"
                 )
+        
+        if publish_clicked:
+            # Create markdown content for Issues report publishing
+            total_issues = len(all_issues)
+            
+            if total_issues > 0:
+                # Generate markdown content similar to the export but formatted for document publishing
+                markdown_content = f"# Issues Report - {selected_project_name}\n\n"
+                markdown_content += f"**Export Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                markdown_content += f"**Total Issues:** {total_issues}\n\n"
+                
+                markdown_content += "| ID | Title | Type | Priority | Severity | Status | Assignees | Creator | Created Date |\n"
+                markdown_content += "|---|-------|------|----------|----------|--------|-----------|---------|-------------|\n"
+                
+                for issue in all_issues:
+                    # Clean and truncate data for table format
+                    issue_id = issue.get("issue_number", issue["id"])
+                    title = issue["title"].replace("|", "\\|").replace("\n", " ")[:50]
+                    if len(title) > 47:
+                        title = title[:47] + "..."
+                    
+                    issue_type = issue.get("issue_type", "Unknown")
+                    priority = issue.get("priority", "Unknown")  
+                    severity = issue.get("severity", "Unknown")
+                    status = issue.get("status", "Unknown")
+                    
+                    # Format assignees
+                    assignee_usernames = issue.get("assignee_usernames", [])
+                    if assignee_usernames:
+                        assignees_str = ", ".join(assignee_usernames)
+                    else:
+                        assignees_str = "Unassigned"
+                    if len(assignees_str) > 30:
+                        assignees_str = assignees_str[:27] + "..."
+                    
+                    creator = issue.get("creator_username", "Unknown")
+                    created_date = datetime.fromisoformat(issue['created_at']).strftime('%Y-%m-%d')
+                    
+                    markdown_content += f"| {issue_id} | {title} | {issue_type} | {priority} | {severity} | {status} | {assignees_str} | {creator} | {created_date} |\n"
+                
+                markdown_content += "\n---\n\n"
+                markdown_content += f"*Report contains {total_issues} issues*"
+                
+                # Call the publish API
+                try:
+                    publish_data = {
+                        "project_id": selected_project_id,
+                        "project_name": selected_project_name,
+                        "markdown_content": markdown_content,
+                        "total_issues": total_issues
+                    }
+                    
+                    publish_response = requests.post(
+                        f"{BACKEND_URL}/api/publish/issues-as-document",
+                        json=publish_data,
+                        headers=get_auth_headers(),
+                        timeout=30
+                    )
+                    
+                    if publish_response.status_code == 200:
+                        result = publish_response.json()
+                        st.success(f"✅ {result['message']}")
+                        st.info(f"📄 Document created: **{result['document_name']}**")
+                        st.info(f"🔗 Document ID: `{result['document_id']}`")
+                        
+                        # Add navigation option
+                        if st.button("📂 Go to Documents", help="Navigate to Documents page to view the published document"):
+                            st.session_state.page = "Documents"
+                            st.rerun()
+                            
+                    else:
+                        error_detail = publish_response.json().get("detail", "Unknown error")
+                        st.error(f"❌ Failed to publish as document: {error_detail}")
+                        
+                except requests.exceptions.Timeout:
+                    st.error("❌ Request timed out. Please try again.")
+                except requests.exceptions.RequestException as e:
+                    st.error(f"❌ Connection error: {str(e)}")
+                except Exception as e:
+                    st.error(f"❌ Error publishing document: {str(e)}")
+                    
+            else:
+                st.warning("⚠️ No issues available for publishing.")
+                
     else:
         st.info("No issues found to export for the selected criteria")

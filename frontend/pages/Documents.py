@@ -7,7 +7,7 @@ import markdown
 from datetime import datetime
 from streamlit_ace import st_ace
 from auth_utils import get_auth_headers, get_current_user, setup_authenticated_sidebar, BACKEND_URL
-from config import DATAFRAME_HEIGHT, KB_REQUEST_TIMEOUT
+from config import DATAFRAME_HEIGHT, KB_REQUEST_TIMEOUT, MAX_CHAT_RESPONSES_PER_SESSION, MAX_CHAT_RESPONSE_LENGTH, KB_CHAT_REQUEST_TIMEOUT, PDF_GENERATION_TIMEOUT
 
 st.set_page_config(page_title="📄 Documents", page_icon="📄", layout="wide")
 
@@ -71,6 +71,33 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+def manage_chat_response_limits(chat_response_key, new_response):
+    """
+    Manage chat response storage limits to prevent excessive memory usage.
+    
+    Args:
+        chat_response_key: The session state key for storing chat responses
+        new_response: The new response entry to add
+        
+    Returns:
+        None - modifies session state in place
+    """
+    # Initialize chat responses if not exists
+    if chat_response_key not in st.session_state:
+        st.session_state[chat_response_key] = []
+    
+    # Truncate response text if too long
+    if 'response' in new_response and len(new_response['response']) > MAX_CHAT_RESPONSE_LENGTH:
+        new_response['response'] = new_response['response'][:MAX_CHAT_RESPONSE_LENGTH] + "\n\n[Response truncated due to length limit]"
+    
+    # Add new response
+    st.session_state[chat_response_key].append(new_response)
+    
+    # Enforce maximum number of responses per session
+    if len(st.session_state[chat_response_key]) > MAX_CHAT_RESPONSES_PER_SESSION:
+        # Remove oldest responses to maintain limit
+        st.session_state[chat_response_key] = st.session_state[chat_response_key][-MAX_CHAT_RESPONSES_PER_SESSION:]
 
 def get_documents_for_author(project_id):
     """Get all documents for current author using V2 API"""
@@ -149,15 +176,19 @@ def get_document_reviewers_from_data(doc_data):
 def submit_for_review(document_id, reviewer_id, comment):
     """Submit document for review using V2 API"""
     try:
-        response = requests.post(
-            f"{BACKEND_URL}/api/v2/documents/{document_id}/submit-for-review",
-            params={
-                "reviewer_id": reviewer_id,
-                "comment": comment
-            },
-            headers=get_auth_headers()
-        )
-        return response.json()
+        url = f"{BACKEND_URL}/api/v2/documents/{document_id}/submit-for-review"
+        params = {
+            "reviewer_id": reviewer_id,
+            "comment": comment
+        }
+        
+        response = requests.post(url, params=params, headers=get_auth_headers())
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"success": False, "error": f"HTTP {response.status_code}: {response.text}"}
+            
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -224,25 +255,18 @@ def update_document_content(document_id, content, create_revision=True, comment=
 def get_project_members(project_id):
     """Get project members for reviewer selection"""
     try:
-        
-        # Get project details which should include members
+        # Use the project details endpoint which includes full member data
         response = requests.get(
             f"{BACKEND_URL}/projects/{project_id}",
             headers=get_auth_headers()
         )
         
-        
         if response.status_code == 200:
             project_data = response.json()
             if "members" in project_data:
-                return project_data["members"]
-        
-        # Fallback: Get from the projects list (like in All Documents tab)
-        projects = get_user_projects()
-        selected_project = next((p for p in projects if p["id"] == project_id), None)
-        
-        if selected_project and selected_project.get("members"):
-            return selected_project["members"]
+                members = project_data["members"]
+                # Members already come in the correct format from backend
+                return members
         
         return []
     except Exception as e:
@@ -407,8 +431,9 @@ def get_document_by_id(document_id):
         return None
 
 def create_document(project_id, document_data):
-    """Create a new document using V2 API"""
+    """Create a new document using V2 API with optional review workflow"""
     try:
+        # Step 1: Create the basic document
         response = requests.post(
             f"{BACKEND_URL}/api/v2/documents",
             params={
@@ -419,7 +444,27 @@ def create_document(project_id, document_data):
             },
             headers=get_auth_headers()
         )
-        return response.json(), response.status_code
+        
+        if response.status_code != 200:
+            return response.json(), response.status_code
+            
+        result = response.json()
+        
+        # Step 2: If status is request_review, submit for review
+        if document_data.get("status") == "request_review" and document_data.get("reviewers"):
+            document_id = result.get("document_id")
+            if document_id:
+                # Submit for review to the first reviewer
+                reviewer_id = document_data["reviewers"][0]
+                comment = document_data.get("comment", "Document submitted for review")
+                
+                review_result = submit_for_review(document_id, reviewer_id, comment)
+                
+                if not review_result.get("success"):
+                    st.warning(f"Document created but review submission failed: {review_result.get('error')}")
+        
+        return result, response.status_code
+        
     except Exception as e:
         return {"error": str(e)}, 500
 
@@ -541,8 +586,50 @@ with tab1:
     
     st.subheader("📝 Document Content")
     
-    # Add preview toggle (outside form)
-    preview_enabled = st.checkbox("👁️ Enable Live Preview", value=True, help="Show HTML preview alongside markdown editor")
+    # Initialize session state for mutually exclusive options
+    if "create_preview_mode" not in st.session_state:
+        st.session_state.create_preview_mode = True
+    if "create_chat_mode" not in st.session_state:
+        st.session_state.create_chat_mode = False
+    
+    # Add mutually exclusive options for preview or chat (outside form)
+    col_option1, col_option2 = st.columns(2)
+    with col_option1:
+        preview_enabled = st.checkbox(
+            "👁️ Enable Live Preview", 
+            value=st.session_state.create_preview_mode, 
+            help="Show HTML preview alongside markdown editor", 
+            key="enable_preview_create"
+        )
+    with col_option2:
+        chat_enabled = st.checkbox(
+            "💬 Chat with Knowledge Base", 
+            value=st.session_state.create_chat_mode, 
+            help="Chat with AI using Knowledge Base context", 
+            key="enable_chat_create"
+        )
+    
+    # Update session state and handle mutual exclusivity
+    if preview_enabled != st.session_state.create_preview_mode:
+        st.session_state.create_preview_mode = preview_enabled
+        if preview_enabled:
+            st.session_state.create_chat_mode = False
+            st.rerun()
+    
+    if chat_enabled != st.session_state.create_chat_mode:
+        st.session_state.create_chat_mode = chat_enabled
+        if chat_enabled:
+            st.session_state.create_preview_mode = False
+            st.rerun()
+    
+    # Ensure at least one option is always enabled
+    if not st.session_state.create_preview_mode and not st.session_state.create_chat_mode:
+        st.session_state.create_preview_mode = True
+        st.rerun()
+    
+    # Use session state values for consistency
+    preview_enabled = st.session_state.create_preview_mode
+    chat_enabled = st.session_state.create_chat_mode
     
     # Content editor and preview (outside form for live updates)
     initial_content = ""
@@ -552,6 +639,7 @@ with tab1:
         initial_content = st.session_state.template_content_create
         if st.session_state.get("selected_template_id"):
             editor_key = f"create_document_content_{st.session_state.selected_template_id}"
+    
     
     # Preserve existing content when toggling preview
     if editor_key in st.session_state and st.session_state[editor_key]:
@@ -686,6 +774,138 @@ with tab1:
                     st.info("💡 Write some markdown content to see the preview")
             else:
                 st.info("💡 Start typing markdown content to see the live preview")
+    elif chat_enabled:
+        # Split view: Editor on left, Chat on right
+        col_editor, col_chat = st.columns([1, 1])
+        
+        with col_editor:
+            st.markdown("**Markdown Editor**")
+            content = st_ace(
+                value=initial_content,
+                language='markdown',
+                theme='github',
+                key=editor_key,
+                height=400,
+                auto_update=False,  # Disable auto update for chat mode
+                wrap=True
+            )
+        
+        with col_chat:
+            st.markdown("**💬 Knowledge Base Chat**")
+            
+            # Chat Response Box (3/4 of editor height = 300px)
+            chat_response_key = "create_doc_chat_responses"
+            if chat_response_key not in st.session_state:
+                st.session_state[chat_response_key] = []
+            
+            # Display chat responses in reverse chronological order (newest first)
+            chat_responses = st.session_state[chat_response_key]
+            chat_display = ""
+            
+            for i, response in enumerate(reversed(chat_responses)):
+                timestamp = response.get('timestamp', 'Unknown time')
+                query = response.get('query', 'No query')
+                answer = response.get('response', 'No response')
+                sources = response.get('sources', [])
+                
+                chat_display += f"""**Q ({timestamp}):** {query}
+
+**A:** {answer}
+"""
+                if sources:
+                    chat_display += f"\n**Sources:** {', '.join([s.get('filename', 'Unknown') for s in sources])}\n"
+                
+                chat_display += "\n" + "="*50 + "\n\n"
+            
+            # Add footer with usage and limits info
+            if chat_display:
+                current_count = len(chat_responses)
+                chat_display += f"📊 **Chat Session:** {current_count}/{MAX_CHAT_RESPONSES_PER_SESSION} responses | Max response length: {MAX_CHAT_RESPONSE_LENGTH:,} chars"
+            
+            # Chat response display area
+            st.text_area(
+                "Chat History",
+                value=chat_display if chat_display else "💡 Ask the Knowledge Base about your document...",
+                height=300,
+                disabled=True,
+                key="create_chat_display",
+                label_visibility="collapsed"
+            )
+            
+            # Chat input area
+            col_query, col_submit = st.columns([3, 1])
+            with col_query:
+                user_query = st.text_area(
+                    "Ask the Knowledge Base",
+                    height=80,
+                    placeholder="Ask the Knowledge Base about your document...",
+                    key="create_chat_query"
+                )
+            
+            with col_submit:
+                st.markdown("<br>", unsafe_allow_html=True)  # Add spacing
+                if st.button("🚀 Submit", key="submit_kb_query", type="primary"):
+                    if user_query and user_query.strip():
+                        # Get current document content for context (snapshot at query time)
+                        document_context = st.session_state.get(editor_key, "")
+                        
+                        # Show loading spinner
+                        with st.spinner("🤖 Querying Knowledge Base..."):
+                            try:
+                                # Create payload for the API
+                                payload = {
+                                    "query": user_query.strip(),
+                                    "document_context": document_context if (document_context and document_context.strip()) else None,
+                                    "collection_name": None,  # Use default
+                                    "max_results": 5
+                                }
+                                
+                                # Make API call to KB query with context endpoint
+                                response = requests.post(
+                                    f"{BACKEND_URL}/kb/query_with_context",
+                                    json=payload,
+                                    headers=get_auth_headers(),
+                                    timeout=KB_CHAT_REQUEST_TIMEOUT
+                                )
+                                
+                                if response.status_code == 200:
+                                    result = response.json()
+                                    
+                                    # Add response to chat history
+                                    chat_entry = {
+                                        'timestamp': datetime.now().strftime('%H:%M:%S'),
+                                        'query': user_query.strip(),
+                                        'response': result.get('response', 'No response received'),
+                                        'sources': result.get('sources', []),
+                                        'context_provided': result.get('document_context_provided', False),
+                                        'kb_results': result.get('knowledge_base_results', 0)
+                                    }
+                                    
+                                    manage_chat_response_limits(chat_response_key, chat_entry)
+                                    
+                                    # Clear the query input
+                                    st.session_state.create_chat_query = ""
+                                    
+                                    # Success message
+                                    st.success("✅ Response received!")
+                                    st.rerun()
+                                    
+                                else:
+                                    error_msg = response.json().get('detail', 'Failed to query Knowledge Base')
+                                    st.error(f"❌ Error: {error_msg}")
+                                    
+                            except requests.exceptions.Timeout:
+                                st.error("❌ Request timed out. Knowledge Base may be busy.")
+                            except Exception as e:
+                                st.error(f"❌ Failed to query Knowledge Base: {str(e)}")
+                    else:
+                        st.warning("⚠️ Please enter a query")
+            
+            # Clear chat history button
+            if st.session_state[chat_response_key]:
+                if st.button("🗑️ Clear Chat", key="clear_create_chat"):
+                    st.session_state[chat_response_key] = []
+                    st.rerun()
     else:
         # Full width editor (original behavior)
         content = st_ace(
@@ -693,17 +913,29 @@ with tab1:
             language='markdown',
             theme='github',
             key=editor_key,
-            height=300,
+            height=400,
             auto_update=False,
             wrap=True
         )
 
     # Form for document creation settings
     with st.form("create_document_form"):
-        # Get the content from session state (since it's outside the form)
-        if editor_key in st.session_state:
-            content = st.session_state[editor_key]
-        else:
+        # Find content from any create_document_content key in session state
+        content = None
+        
+        # Try all possible editor keys for create document
+        possible_keys = ["create_document_content"]
+        if st.session_state.get("selected_template_id"):
+            possible_keys.append(f"create_document_content_{st.session_state.selected_template_id}")
+        
+        # Look for content in any of these keys
+        for key in possible_keys:
+            if key in st.session_state and st.session_state[key]:
+                content = st.session_state[key]
+                break
+        
+        # If still no content, use initial_content
+        if not content:
             content = initial_content
         
         # Document status and workflow
@@ -745,11 +977,41 @@ with tab1:
             else:
                 st.error("⚠️ No project members available for review (excluding yourself).")
         
-        submitted = st.form_submit_button("🚀 Create Document", type="primary")
-        
-        if submitted:
+        # Form submit button - disable during processing
+        creating_document = st.session_state.get("creating_document", False)
+        submitted = st.form_submit_button(
+            "🚀 Create Document" if not creating_document else "⏳ Creating...", 
+            type="primary",
+            disabled=creating_document
+        )
+    
+    # Note: Close Document button removed as per user request
+    
+    if submitted:
+            # Set processing state to disable button
+            st.session_state.creating_document = True
+            
             # Get name from session state (since it's outside the form)
             name = st.session_state.get("doc_name_input", "")
+            
+            # Find content from any create_document_content key in session state (same logic as above)
+            content = None
+            
+            # Try all possible editor keys for create document
+            possible_keys = ["create_document_content"]
+            if st.session_state.get("selected_template_id"):
+                possible_keys.append(f"create_document_content_{st.session_state.selected_template_id}")
+            
+            # Look for content in any of these keys
+            for key in possible_keys:
+                if key in st.session_state and st.session_state[key]:
+                    content = st.session_state[key]
+                    break
+            
+            # If still no content, use initial_content
+            if not content:
+                content = initial_content
+            
             
             # Validation
             errors = []
@@ -767,6 +1029,8 @@ with tab1:
                 errors.append("Comment is required for non-draft documents")
             
             if errors:
+                # Reset processing state on validation error
+                st.session_state.creating_document = False
                 for error in errors:
                     st.error(error)
             else:
@@ -781,6 +1045,9 @@ with tab1:
                 }
                 
                 result, status_code = create_document(project_id, document_data)
+                
+                # Reset processing state after completion
+                st.session_state.creating_document = False
                 
                 if status_code == 200:
                     st.success(f"Document '{name}' created successfully!")
@@ -915,7 +1182,7 @@ with tab2:
                         
                         # Get project members for reviewer selection
                         members = get_project_members(project_id)
-                        reviewer_options = [m for m in members if m['user_id'] != user_info['id']]
+                        reviewer_options = [m for m in members if m.get('user_id') != user_info['id']]
                         
                         if reviewer_options:
                             selected_reviewer = st.selectbox(
@@ -923,6 +1190,7 @@ with tab2:
                                 options=[(m['user_id'], m['username']) for m in reviewer_options],
                                 format_func=lambda x: x[1]
                             )
+                            
                             
                             author_comment = st.text_area("Comment for Reviewer:", height=80)
                             
@@ -957,6 +1225,9 @@ with tab2:
                                             key.startswith('revision_comment_') or 
                                             key.startswith('create_revision_') or 
                                             key.startswith('preview_toggle_bottom_') or
+                                            key.startswith('chat_toggle_bottom_') or
+                                            key.startswith('edit_doc_chat_responses_') or
+                                            key.startswith('edit_chat_query_') or
                                             key == 'my_docs_dataframe' or 
                                             key == 'selected_doc' or 
                                             key == 'mode'):
@@ -997,6 +1268,9 @@ with tab2:
                                     key.startswith('revision_comment_') or 
                                     key.startswith('create_revision_') or 
                                     key.startswith('preview_toggle_bottom_') or
+                                    key.startswith('chat_toggle_bottom_') or
+                                    key.startswith('edit_doc_chat_responses_') or
+                                    key.startswith('edit_chat_query_') or
                                     key == 'my_docs_dataframe' or 
                                     key == 'selected_doc' or 
                                     key == 'mode'):
@@ -1019,13 +1293,46 @@ with tab2:
                 # Document Content Section - Full Width
                 st.subheader("📄 Document Content")
                 
-                # Add preview toggle for full-width editing
-                preview_enabled_bottom = st.checkbox(
-                    "👁️ Enable Live Preview", 
-                    value=True, 
-                    help="Show HTML preview alongside markdown editor",
-                    key=f"preview_toggle_bottom_{doc['id']}"
-                )
+                # Add mutually exclusive options for preview or chat (full-width editing)
+                preview_key_bottom = f"preview_toggle_bottom_{doc['id']}"
+                chat_key_bottom = f"chat_toggle_bottom_{doc['id']}"
+                
+                # Get current values or use defaults
+                current_preview_bottom = st.session_state.get(preview_key_bottom, True)
+                current_chat_bottom = st.session_state.get(chat_key_bottom, False)
+                
+                col_option1_bottom, col_option2_bottom = st.columns(2)
+                with col_option1_bottom:
+                    preview_enabled_bottom = st.checkbox(
+                        "👁️ Enable Live Preview", 
+                        value=current_preview_bottom, 
+                        help="Show HTML preview alongside markdown editor",
+                        key=preview_key_bottom
+                    )
+                with col_option2_bottom:
+                    chat_enabled_bottom = st.checkbox(
+                        "💬 Chat with Knowledge Base", 
+                        value=current_chat_bottom, 
+                        help="Chat with AI using Knowledge Base context",
+                        key=chat_key_bottom
+                    )
+                
+                # Handle state changes after widget creation
+                if preview_enabled_bottom != current_preview_bottom or chat_enabled_bottom != current_chat_bottom:
+                    # User changed something, enforce mutual exclusion
+                    if preview_enabled_bottom and chat_enabled_bottom:
+                        # Both got enabled, disable the other based on what changed
+                        if preview_enabled_bottom != current_preview_bottom:
+                            # Preview was just enabled, disable chat
+                            st.session_state[chat_key_bottom] = False
+                        else:
+                            # Chat was just enabled, disable preview  
+                            st.session_state[preview_key_bottom] = False
+                        st.rerun()
+                    elif not preview_enabled_bottom and not chat_enabled_bottom:
+                        # Both got disabled, enable preview by default
+                        st.session_state[preview_key_bottom] = True
+                        st.rerun()
                 
                 if preview_enabled_bottom:
                     # Split view: Editor on left, Preview on right (full width)
@@ -1156,6 +1463,137 @@ with tab2:
                                 st.info("💡 Write some markdown content to see the preview")
                         else:
                             st.info("💡 Content will be displayed here as you edit")
+                elif chat_enabled_bottom:
+                    # Split view: Editor on left, Chat on right
+                    col_editor_bottom, col_chat_bottom = st.columns([1, 1])
+                    
+                    with col_editor_bottom:
+                        st.markdown("**Markdown Editor**")
+                        content = st_ace(
+                            value=doc['content'],
+                            language='markdown',
+                            theme='github',
+                            height=400,
+                            auto_update=False,  # Disable auto update for chat mode
+                            key=f"editor_bottom_{doc['id']}"
+                        )
+                    
+                    with col_chat_bottom:
+                        st.markdown("**💬 Knowledge Base Chat**")
+                        
+                        # Chat Response Box for this document
+                        chat_response_key = f"edit_doc_chat_responses_{doc['id']}"
+                        if chat_response_key not in st.session_state:
+                            st.session_state[chat_response_key] = []
+                        
+                        # Display chat responses in reverse chronological order (newest first)
+                        chat_responses = st.session_state[chat_response_key]
+                        chat_display = ""
+                        
+                        for i, response in enumerate(reversed(chat_responses)):
+                            timestamp = response.get('timestamp', 'Unknown time')
+                            query = response.get('query', 'No query')
+                            answer = response.get('response', 'No response')
+                            sources = response.get('sources', [])
+                            
+                            chat_display += f"""**Q ({timestamp}):** {query}
+
+**A:** {answer}
+"""
+                            if sources:
+                                chat_display += f"\n**Sources:** {', '.join([s.get('filename', 'Unknown') for s in sources])}\n"
+                            
+                            chat_display += "\n" + "="*50 + "\n\n"
+                        
+                        # Add footer with usage and limits info
+                        if chat_display:
+                            current_count = len(chat_responses)
+                            chat_display += f"📊 **Chat Session:** {current_count}/{MAX_CHAT_RESPONSES_PER_SESSION} responses | Max response length: {MAX_CHAT_RESPONSE_LENGTH:,} chars"
+                        
+                        # Chat response display area
+                        st.text_area(
+                            "Chat History",
+                            value=chat_display if chat_display else "💡 Ask the Knowledge Base about your document...",
+                            height=300,
+                            disabled=True,
+                            key=f"edit_chat_display_{doc['id']}",
+                            label_visibility="collapsed"
+                        )
+                        
+                        # Chat input area
+                        col_query_edit, col_submit_edit = st.columns([3, 1])
+                        with col_query_edit:
+                            user_query_edit = st.text_area(
+                                "Ask the Knowledge Base",
+                                height=80,
+                                placeholder="Ask the Knowledge Base about your document...",
+                                key=f"edit_chat_query_{doc['id']}"
+                            )
+                        
+                        with col_submit_edit:
+                            st.markdown("<br>", unsafe_allow_html=True)  # Add spacing
+                            if st.button("🚀 Submit", key=f"submit_kb_query_edit_{doc['id']}", type="primary"):
+                                if user_query_edit and user_query_edit.strip():
+                                    # Get current document content for context (snapshot at query time)
+                                    document_context = st.session_state.get(f"editor_bottom_{doc['id']}", doc['content'])
+                                    
+                                    # Show loading spinner
+                                    with st.spinner("🤖 Querying Knowledge Base..."):
+                                        try:
+                                            # Create payload for the API
+                                            payload = {
+                                                "query": user_query_edit.strip(),
+                                                "document_context": document_context if (document_context and document_context.strip()) else None,
+                                                "collection_name": None,  # Use default
+                                                "max_results": 5
+                                            }
+                                            
+                                            # Make API call to KB query with context endpoint
+                                            response = requests.post(
+                                                f"{BACKEND_URL}/kb/query_with_context",
+                                                json=payload,
+                                                headers=get_auth_headers(),
+                                                timeout=KB_CHAT_REQUEST_TIMEOUT
+                                            )
+                                            
+                                            if response.status_code == 200:
+                                                result = response.json()
+                                                
+                                                # Add response to chat history
+                                                chat_entry = {
+                                                    'timestamp': datetime.now().strftime('%H:%M:%S'),
+                                                    'query': user_query_edit.strip(),
+                                                    'response': result.get('response', 'No response received'),
+                                                    'sources': result.get('sources', []),
+                                                    'context_provided': result.get('document_context_provided', False),
+                                                    'kb_results': result.get('knowledge_base_results', 0)
+                                                }
+                                                
+                                                manage_chat_response_limits(chat_response_key, chat_entry)
+                                                
+                                                # Clear the query input
+                                                st.session_state[f"edit_chat_query_{doc['id']}"] = ""
+                                                
+                                                # Success message
+                                                st.success("✅ Response received!")
+                                                st.rerun()
+                                                
+                                            else:
+                                                error_msg = response.json().get('detail', 'Failed to query Knowledge Base')
+                                                st.error(f"❌ Error: {error_msg}")
+                                                
+                                        except requests.exceptions.Timeout:
+                                            st.error("❌ Request timed out. Knowledge Base may be busy.")
+                                        except Exception as e:
+                                            st.error(f"❌ Failed to query Knowledge Base: {str(e)}")
+                                else:
+                                    st.warning("⚠️ Please enter a query")
+                        
+                        # Clear chat history button
+                        if st.session_state[chat_response_key]:
+                            if st.button("🗑️ Clear Chat", key=f"clear_edit_chat_{doc['id']}"):
+                                st.session_state[chat_response_key] = []
+                                st.rerun()
                 else:
                     # Full width editor without preview
                     content = st_ace(
@@ -1217,6 +1655,30 @@ with tab2:
                             if fresh_doc:
                                 st.session_state.selected_doc = fresh_doc
                             st.rerun()
+                
+                # Close Document Content button
+                st.divider()
+                if st.button("❌ Close Document Content", key=f"close_content_{doc['id']}", help="Close the document content editor and return to document list"):
+                    # Clear session state - including bottom editor keys
+                    keys_to_remove = []
+                    for key in st.session_state.keys():
+                        if (key.startswith('selected_doc') or 
+                            key.startswith('editor_my_') or 
+                            key.startswith('editor_bottom_') or 
+                            key.startswith('revision_comment_') or 
+                            key.startswith('create_revision_') or 
+                            key.startswith('preview_toggle_bottom_') or
+                            key.startswith('chat_toggle_bottom_') or
+                            key.startswith('edit_doc_chat_responses_') or
+                            key.startswith('edit_chat_query_') or
+                            key == 'my_docs_dataframe' or 
+                            key == 'selected_doc' or 
+                            key == 'mode'):
+                            keys_to_remove.append(key)
+                    
+                    for key in keys_to_remove:
+                        del st.session_state[key]
+                    st.rerun()
     
     with author_tab2:
         review_docs = get_documents_for_reviewer(project_id)
@@ -1224,7 +1686,8 @@ with tab2:
         if not review_docs:
             st.info("No documents to review")
         else:
-            # Left-right panel layout for reviews
+            # ========== TOP SECTION ==========
+            # Left-right panel layout for reviews (similar to My Documents)
             review_col1, review_col2 = st.columns([2, 3])
             
             with review_col1:
@@ -1293,29 +1756,24 @@ with tab2:
                         st.rerun()
             
             with review_col2:
-                st.markdown("### Review Editor")
+                st.markdown("### Document Information")
                 
                 if "selected_review_doc" in st.session_state and st.session_state.mode == "reviewer":
                     doc = st.session_state.selected_review_doc
                     
                     # Document header
-                    st.markdown(f"**{doc['name']}** | {doc['document_type'].replace('_', ' ').title()}")
+                    st.markdown(f"**{doc['name']}**")
+                    st.caption(f"{doc['document_type'].replace('_', ' ').title()}")
                     doc_state = doc.get('document_state', doc.get('status', 'unknown'))
                     review_state = doc.get('review_state')
                     st.markdown(f"**Author:** {doc['author']} | **Status:** {format_status(doc_state, review_state)}", unsafe_allow_html=True)
                     
                     # Comment History
-                    st.subheader("💬 Comment History")
-                    display_comment_history(doc.get('comment_history', []))
-                    
-                    st.divider()
-                    
-                    # Document Content (read-only for reviewers)
-                    st.subheader("📄 Document Content")
-                    st.markdown(doc['content'])
+                    with st.expander("💬 Comment History", expanded=False):
+                        display_comment_history(doc.get('comment_history', []))
                     
                     # Review Controls
-                    st.subheader("👨‍⚖️ Review Decision")
+                    st.markdown("**👨‍⚖️ Review Decision**")
                     
                     reviewer_comment = st.text_area("Your Review Comment:", height=100, placeholder="Provide your review feedback...")
                     
@@ -1398,6 +1856,8 @@ with tab2:
                             for key in st.session_state.keys():
                                 if (key.startswith('selected_review_doc') or 
                                     key.startswith('editor_review_') or 
+                                    key.startswith('editor_review_bottom_') or
+                                    key.startswith('preview_toggle_review_') or
                                     key == 'review_docs_dataframe'):
                                     keys_to_remove.append(key)
                             
@@ -1417,6 +1877,312 @@ with tab2:
                             st.rerun()
                 else:
                     st.info("Select a document from the review queue to start reviewing")
+                    
+            # ========== BOTTOM SECTION ==========
+            # Full-width Document Content Viewer (similar to My Documents editor but read-only)
+            if "selected_review_doc" in st.session_state and "mode" in st.session_state and st.session_state.mode == "reviewer":
+                doc = st.session_state.selected_review_doc
+                
+                # Horizontal separator
+                st.markdown("---")
+                
+                # Document Content Section - Full Width
+                st.subheader("📄 Document Content")
+                
+                # Add mutually exclusive options for preview or chat (full-width viewing)
+                preview_key_review = f"preview_toggle_review_{doc['id']}"
+                chat_key_review = f"chat_toggle_review_{doc['id']}"
+                
+                # Get current values or use defaults
+                current_preview_review = st.session_state.get(preview_key_review, True)
+                current_chat_review = st.session_state.get(chat_key_review, False)
+                
+                col_option1_review, col_option2_review = st.columns(2)
+                with col_option1_review:
+                    preview_enabled_review = st.checkbox(
+                        "👁️ Enable Live Preview", 
+                        value=current_preview_review, 
+                        help="Show HTML preview alongside markdown content",
+                        key=preview_key_review
+                    )
+                with col_option2_review:
+                    chat_enabled_review = st.checkbox(
+                        "💬 Chat with Knowledge Base", 
+                        value=current_chat_review, 
+                        help="Chat with AI using Knowledge Base context",
+                        key=chat_key_review
+                    )
+                
+                # Handle state changes after widget creation
+                if preview_enabled_review != current_preview_review or chat_enabled_review != current_chat_review:
+                    # User changed something, enforce mutual exclusion
+                    if preview_enabled_review and chat_enabled_review:
+                        # Both got enabled, disable the other based on what changed
+                        if preview_enabled_review != current_preview_review:
+                            # Preview was just enabled, disable chat
+                            st.session_state[chat_key_review] = False
+                        else:
+                            # Chat was just enabled, disable preview  
+                            st.session_state[preview_key_review] = False
+                        st.rerun()
+                    elif not preview_enabled_review and not chat_enabled_review:
+                        # Both got disabled, enable preview by default
+                        st.session_state[preview_key_review] = True
+                        st.rerun()
+                
+                if preview_enabled_review:
+                    # Split view: Markdown source on left, HTML Preview on right (full width)
+                    col_source_review, col_preview_review = st.columns([1, 1])
+                    
+                    with col_source_review:
+                        st.markdown("**Markdown Source**")
+                        # Read-only text area showing markdown source
+                        st.text_area(
+                            "Markdown Source",
+                            value=doc['content'],
+                            height=400,
+                            disabled=True,  # Read-only for reviewers
+                            key=f"editor_review_bottom_{doc['id']}",
+                            label_visibility="collapsed"
+                        )
+                    
+                    with col_preview_review:
+                        col_preview_title, col_font_info = st.columns([2, 1])
+                        with col_preview_title:
+                            st.markdown("**HTML Preview**")
+                        with col_font_info:
+                            st.markdown("<div style='text-align: right;'><em>Font: Source Sans Pro, 14px, single-spacing</em></div>", unsafe_allow_html=True)
+                        if doc['content'] and doc['content'].strip():
+                            try:
+                                # Convert markdown to HTML
+                                html_content_review = markdown.markdown(
+                                    doc['content'], 
+                                    extensions=['tables', 'fenced_code', 'codehilite', 'toc']
+                                )
+                                
+                                # Display with single line spacing and font info (same styling as My Documents)
+                                st.markdown(
+                                    f"""
+                                    <div style="
+                                        border: 1px solid #ddd; 
+                                        border-radius: 4px; 
+                                        padding: 16px; 
+                                        height: 400px; 
+                                        overflow-y: auto; 
+                                        background-color: #ffffff;
+                                        color: #262730;
+                                        font-family: 'Source Sans Pro', sans-serif;
+                                        font-size: 14px;
+                                        line-height: 1.2;
+                                    ">
+                                        <style>
+                                            .markdown-preview-review h1, .markdown-preview-review h2, .markdown-preview-review h3, 
+                                            .markdown-preview-review h4, .markdown-preview-review h5, .markdown-preview-review h6 {{
+                                                color: #262730 !important;
+                                                margin-top: 1rem;
+                                                margin-bottom: 0.3rem;
+                                                line-height: 1.2;
+                                            }}
+                                            .markdown-preview-review p {{
+                                                color: #262730 !important;
+                                                margin-bottom: 0.5rem;
+                                                line-height: 1.2;
+                                            }}
+                                            .markdown-preview-review ul, .markdown-preview-review ol {{
+                                                color: #262730 !important;
+                                                margin-bottom: 0.5rem;
+                                            }}
+                                            .markdown-preview-review li {{
+                                                color: #262730 !important;
+                                                line-height: 1.2;
+                                                margin-bottom: 0.2rem;
+                                            }}
+                                            .markdown-preview-review table {{
+                                                border-collapse: collapse;
+                                                width: 100%;
+                                                margin-bottom: 1rem;
+                                            }}
+                                            .markdown-preview-review th, .markdown-preview-review td {{
+                                                border: 1px solid #ddd;
+                                                padding: 8px;
+                                                text-align: left;
+                                            }}
+                                            .markdown-preview-review th {{
+                                                background-color: #f2f2f2;
+                                                font-weight: bold;
+                                            }}
+                                        </style>
+                                        <div class="markdown-preview-review">
+                                            {html_content_review}
+                                        </div>
+                                    </div>
+                                    """, 
+                                    unsafe_allow_html=True
+                                )
+                            except Exception as e:
+                                st.error(f"Preview error: {str(e)}")
+                                st.info("💡 Document content will be displayed here")
+                        else:
+                            st.info("💡 Document content will be displayed here")
+                elif chat_enabled_review:
+                    # Split view: Markdown source on left, Chat on right
+                    col_source_review, col_chat_review = st.columns([1, 1])
+                    
+                    with col_source_review:
+                        st.markdown("**Markdown Source**")
+                        # Read-only text area showing markdown source
+                        st.text_area(
+                            "Markdown Source",
+                            value=doc['content'],
+                            height=400,
+                            disabled=True,  # Read-only for reviewers
+                            key=f"editor_review_bottom_{doc['id']}",
+                            label_visibility="collapsed"
+                        )
+                    
+                    with col_chat_review:
+                        st.markdown("**💬 Knowledge Base Chat**")
+                        
+                        # Chat Response Box for this review document
+                        chat_response_key = f"review_doc_chat_responses_{doc['id']}"
+                        if chat_response_key not in st.session_state:
+                            st.session_state[chat_response_key] = []
+                        
+                        # Display chat responses in reverse chronological order (newest first)
+                        chat_responses = st.session_state[chat_response_key]
+                        chat_display = ""
+                        
+                        for i, response in enumerate(reversed(chat_responses)):
+                            timestamp = response.get('timestamp', 'Unknown time')
+                            query = response.get('query', 'No query')
+                            answer = response.get('response', 'No response')
+                            sources = response.get('sources', [])
+                            
+                            chat_display += f"""**Q ({timestamp}):** {query}
+
+**A:** {answer}
+"""
+                            if sources:
+                                chat_display += f"\n**Sources:** {', '.join([s.get('filename', 'Unknown') for s in sources])}\n"
+                            
+                            chat_display += "\n" + "="*50 + "\n\n"
+                        
+                        # Add footer with usage and limits info
+                        if chat_display:
+                            current_count = len(chat_responses)
+                            chat_display += f"📊 **Chat Session:** {current_count}/{MAX_CHAT_RESPONSES_PER_SESSION} responses | Max response length: {MAX_CHAT_RESPONSE_LENGTH:,} chars"
+                        
+                        # Chat response display area
+                        st.text_area(
+                            "Chat History",
+                            value=chat_display if chat_display else "💡 Ask the Knowledge Base about this document...",
+                            height=300,
+                            disabled=True,
+                            key=f"review_chat_display_{doc['id']}",
+                            label_visibility="collapsed"
+                        )
+                        
+                        # Chat input area
+                        col_query_review, col_submit_review = st.columns([3, 1])
+                        with col_query_review:
+                            user_query_review = st.text_area(
+                                "Ask the Knowledge Base",
+                                height=80,
+                                placeholder="Ask the Knowledge Base about this document...",
+                                key=f"review_chat_query_{doc['id']}"
+                            )
+                        
+                        with col_submit_review:
+                            st.markdown("<br>", unsafe_allow_html=True)  # Add spacing
+                            if st.button("🚀 Submit", key=f"submit_kb_query_review_{doc['id']}", type="primary"):
+                                if user_query_review and user_query_review.strip():
+                                    # Get document content for context (read-only for reviewers)
+                                    document_context = doc['content']
+                                    
+                                    # Show loading spinner
+                                    with st.spinner("🤖 Querying Knowledge Base..."):
+                                        try:
+                                            # Create payload for the API
+                                            payload = {
+                                                "query": user_query_review.strip(),
+                                                "document_context": document_context if (document_context and document_context.strip()) else None,
+                                                "collection_name": None,  # Use default
+                                                "max_results": 5
+                                            }
+                                            
+                                            # Make API call to KB query with context endpoint
+                                            response = requests.post(
+                                                f"{BACKEND_URL}/kb/query_with_context",
+                                                json=payload,
+                                                headers=get_auth_headers(),
+                                                timeout=KB_CHAT_REQUEST_TIMEOUT
+                                            )
+                                            
+                                            if response.status_code == 200:
+                                                result = response.json()
+                                                
+                                                # Add response to chat history
+                                                chat_entry = {
+                                                    'timestamp': datetime.now().strftime('%H:%M:%S'),
+                                                    'query': user_query_review.strip(),
+                                                    'response': result.get('response', 'No response received'),
+                                                    'sources': result.get('sources', []),
+                                                    'context_provided': result.get('document_context_provided', False),
+                                                    'kb_results': result.get('knowledge_base_results', 0)
+                                                }
+                                                
+                                                manage_chat_response_limits(chat_response_key, chat_entry)
+                                                
+                                                # Clear the query input
+                                                st.session_state[f"review_chat_query_{doc['id']}"] = ""
+                                                
+                                                # Success message
+                                                st.success("✅ Response received!")
+                                                st.rerun()
+                                                
+                                            else:
+                                                error_msg = response.json().get('detail', 'Failed to query Knowledge Base')
+                                                st.error(f"❌ Error: {error_msg}")
+                                                
+                                        except requests.exceptions.Timeout:
+                                            st.error("❌ Request timed out. Knowledge Base may be busy.")
+                                        except Exception as e:
+                                            st.error(f"❌ Failed to query Knowledge Base: {str(e)}")
+                                else:
+                                    st.warning("⚠️ Please enter a query")
+                        
+                        # Clear chat history button
+                        if st.session_state[chat_response_key]:
+                            if st.button("🗑️ Clear Chat", key=f"clear_review_chat_{doc['id']}"):
+                                st.session_state[chat_response_key] = []
+                                st.rerun()
+                else:
+                    # Full width content display without preview
+                    st.text_area(
+                        "Document Content",
+                        value=doc['content'],
+                        height=400,
+                        disabled=True,  # Read-only for reviewers
+                        key=f"editor_review_full_{doc['id']}",
+                        label_visibility="collapsed"
+                    )
+                
+                # Close Document Content button
+                st.divider()
+                if st.button("❌ Close Document Content", key=f"close_review_content_{doc['id']}", help="Close the document content viewer and return to review list"):
+                    # Clear session state - including review editor keys
+                    keys_to_remove = []
+                    for key in st.session_state.keys():
+                        if (key.startswith('selected_review_doc') or 
+                            key.startswith('editor_review_') or 
+                            key.startswith('preview_toggle_review_') or
+                            key == 'review_docs_dataframe' or 
+                            key == 'mode'):
+                            keys_to_remove.append(key)
+                    
+                    for key in keys_to_remove:
+                        del st.session_state[key]
+                    st.rerun()
     
     with author_tab3:
         approved_docs = get_approved_documents(project_id)
@@ -1517,7 +2283,7 @@ with tab2:
                         pdf_response = requests.post(
                             f"{BACKEND_URL}/documents/{doc['id']}/generate-pdf",
                             headers=get_auth_headers(),
-                            timeout=30
+                            timeout=PDF_GENERATION_TIMEOUT
                         )
                         
                         if pdf_response.status_code == 200:
@@ -1748,7 +2514,7 @@ with tab3:
                     pdf_response = requests.post(
                         f"{BACKEND_URL}/documents/{doc['id']}/generate-pdf",
                         headers=get_auth_headers(),
-                        timeout=30
+                        timeout=PDF_GENERATION_TIMEOUT
                     )
                     
                     if pdf_response.status_code == 200:

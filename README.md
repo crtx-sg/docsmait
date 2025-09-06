@@ -64,6 +64,18 @@ cd docsmait
 # Copy and configure environment
 cp .env.example .env
 # Edit .env with your settings
+
+# For development (host system access):
+export DOCSMAIT_ENV=development
+export DB_HOST=localhost
+export DB_PORT=5433
+export BACKEND_URL=http://localhost:8001
+
+# For Docker (container networking):
+export DOCSMAIT_ENV=docker
+export DB_HOST=docsmait_postgres
+export DB_PORT=5432
+export BACKEND_URL=http://backend:8000
 ```
 
 ### 3. Deploy with Docker
@@ -97,6 +109,7 @@ docker-compose ps
 | [REQUIREMENTS.md](REQUIREMENTS.md) | Detailed functional requirements |
 | [TEST_CASES.md](TEST_CASES.md) | Test cases and scenarios |
 | [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | Complete user manual |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Configuration and environment setup |
 
 ## 🔧 Configuration
 

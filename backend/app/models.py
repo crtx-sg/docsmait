@@ -11,6 +11,12 @@ class Project(BaseModel):
 class KnowledgeBaseQuery(BaseModel):
     query: str
 
+class KnowledgeBaseQueryWithContext(BaseModel):
+    query: str
+    document_context: Optional[str] = None
+    collection_name: Optional[str] = None
+    max_results: int = 5
+
 class KBDocumentUpload(BaseModel):
     content: str
     collection_name: str = Field(default_factory=lambda: config.DEFAULT_COLLECTION_NAME)
@@ -685,4 +691,28 @@ class IssueUpdate(BaseModel):
 
 class IssueCommentCreate(BaseModel):
     comment_text: str
+
+# ========== Publish Document Models ==========
+
+class PublishDesignRecordRequest(BaseModel):
+    project_id: str
+    project_name: str
+    report_type: str
+    compliance_standard: str
+    markdown_content: str
+
+class PublishIssuesRequest(BaseModel):
+    project_id: str
+    project_name: str
+    markdown_content: str
+    total_issues: int = 0
+
+class PublishAuditRequest(BaseModel):
+    project_id: str
+    project_name: str
+    audit_id: str
+    audit_title: str
+    markdown_content: str
+    findings_count: int = 0
+    actions_count: int = 0
 

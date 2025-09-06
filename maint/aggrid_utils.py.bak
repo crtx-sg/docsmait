@@ -1,0 +1,469 @@
+# frontend/components/aggrid_utils.py
+"""
+Reusable AgGrid components for consistent data display across the application
+"""
+
+import streamlit as st
+import pandas as pd
+from st_aggrid import AgGrid, GridOptionsBuilder, DataReturnMode, GridUpdateMode, JsCode
+from typing import List, Dict, Optional, Any
+from config import DATAFRAME_HEIGHT, TABLE_PAGE_SIZE
+
+# Custom CSS for AgGrid styling - much lighter highlighting
+AGGRID_CSS = {
+    ".ag-header-cell-text": {
+        "font-weight": "bold",
+        "color": "#1f77b4"
+    },
+    ".ag-row-hover": {
+        "background-color": "#fcfdfe"
+    },
+    ".ag-row-selected": {
+        "background-color": "#f0f8ff"
+    }
+}
+
+# Custom cell renderers
+STATUS_BADGE_RENDERER = JsCode("""
+class StatusBadgeRenderer {
+    init(params) {
+        this.eGui = document.createElement('span');
+        
+        const status = params.value || 'unknown';
+        const statusMap = {
+            'draft': { color: '#6c757d', bg: '#f8f9fa', text: '📝 Draft' },
+            'review_request': { color: '#fd7e14', bg: '#fff3cd', text: '📋 Review Request' },
+            'under_review': { color: '#0d6efd', bg: '#cff4fc', text: '👁️ Under Review' },
+            'needs_update': { color: '#dc3545', bg: '#f8d7da', text: '⚠️ Needs Update' },
+            'approved': { color: '#198754', bg: '#d1e7dd', text: '✅ Approved' },
+            'completed': { color: '#198754', bg: '#d1e7dd', text: '✅ Completed' },
+            'in_progress': { color: '#0d6efd', bg: '#cff4fc', text: '🔄 In Progress' },
+            'failed': { color: '#dc3545', bg: '#f8d7da', text: '❌ Failed' },
+            'blocked': { color: '#6f42c1', bg: '#e2d9f3', text: '🚫 Blocked' }
+        };
+        
+        const style = statusMap[status] || statusMap['draft'];
+        
+        this.eGui.innerHTML = `
+            <span style="
+                background-color: ${style.bg};
+                color: ${style.color};
+                padding: 4px 8px;
+                border-radius: 12px;
+                font-size: 12px;
+                font-weight: 500;
+                display: inline-block;
+                border: 1px solid ${style.color}40;
+            ">${style.text}</span>
+        `;
+    }
+    
+    getGui() {
+        return this.eGui;
+    }
+    
+    destroy() {
+        // cleanup
+    }
+}
+""")
+
+ACTION_BUTTON_RENDERER = JsCode("""
+class ActionButtonRenderer {
+    init(params) {
+        this.eGui = document.createElement('div');
+        this.eGui.style.display = 'flex';
+        this.eGui.style.gap = '4px';
+        this.eGui.style.alignItems = 'center';
+        
+        const buttons = params.buttons || ['view', 'edit'];
+        const buttonConfig = {
+            'view': { icon: '👁️', color: '#0d6efd', title: 'View' },
+            'edit': { icon: '📝', color: '#fd7e14', title: 'Edit' },
+            'delete': { icon: '🗑️', color: '#dc3545', title: 'Delete' },
+            'download': { icon: '⬇️', color: '#198754', title: 'Download' },
+            'clone': { icon: '📋', color: '#6f42c1', title: 'Clone' }
+        };
+        
+        buttons.forEach(buttonType => {
+            if (buttonConfig[buttonType]) {
+                const button = document.createElement('button');
+                const config = buttonConfig[buttonType];
+                
+                button.innerHTML = config.icon;
+                button.title = config.title;
+                button.style.cssText = `
+                    background: ${config.color}20;
+                    border: 1px solid ${config.color}40;
+                    color: ${config.color};
+                    padding: 4px 6px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 12px;
+                    transition: all 0.2s;
+                `;
+                
+                button.addEventListener('mouseover', () => {
+                    button.style.background = config.color;
+                    button.style.color = 'white';
+                });
+                
+                button.addEventListener('mouseout', () => {
+                    button.style.background = config.color + '20';
+                    button.style.color = config.color;
+                });
+                
+                button.addEventListener('click', () => {
+                    params.clicked(buttonType, params.data);
+                });
+                
+                this.eGui.appendChild(button);
+            }
+        });
+    }
+    
+    getGui() {
+        return this.eGui;
+    }
+    
+    destroy() {
+        // cleanup
+    }
+}
+""")
+
+def get_standard_grid_options(
+    enable_pagination: bool = True,
+    page_size: int = 20,
+    enable_sorting: bool = True,
+    enable_filtering: bool = True,
+    enable_selection: bool = True,
+    selection_mode: str = "single"  # "single" or "multiple"
+) -> Dict:
+    """Get standard grid options for consistent behavior"""
+    
+    options = {
+        "enableRangeSelection": True,
+        "enableRangeHandle": True,
+        "enableFillHandle": True,
+        "suppressRowTransform": False,
+        "defaultColDef": {
+            "editable": False,
+            "sortable": enable_sorting,
+            "filter": enable_filtering,
+            "resizable": True,
+            "minWidth": 100,
+        },
+        "rowSelection": selection_mode if enable_selection else None,
+        "suppressRowClickSelection": not enable_selection,
+        "suppressCellSelection": True,
+        "animateRows": True,
+        "rowHeight": 50,
+    }
+    
+    if enable_pagination:
+        options.update({
+            "pagination": True,
+            "paginationAutoPageSize": False,
+            "paginationPageSize": page_size
+        })
+    
+    return options
+
+def create_documents_grid(
+    documents: List[Dict],
+    show_actions: bool = True,
+    action_buttons: List[str] = None,
+    height: int = DATAFRAME_HEIGHT,
+    columns_to_show: List[str] = None
+) -> Any:
+    """Create a standardized documents grid"""
+    
+    if not documents:
+        st.info("No documents found")
+        return None
+    
+    # Convert to DataFrame
+    df = pd.DataFrame(documents)
+    
+    # If specific columns are requested, filter the DataFrame
+    if columns_to_show:
+        # Ensure action column and full_doc_data are preserved for functionality
+        required_cols = ['full_doc_data']
+        if show_actions:
+            required_cols.append('actions')
+        
+        available_columns = [col for col in columns_to_show if col in df.columns]
+        df = df[available_columns + [col for col in required_cols if col in df.columns]]
+    
+    # Build grid options
+    gb = GridOptionsBuilder.from_dataframe(df)
+    
+    # Configure columns based on what's available
+    if 'name' in df.columns:
+        gb.configure_column("name", headerName="Document Name", pinned="left", width=250, tooltipField="name")
+    
+    if 'document_type' in df.columns:
+        gb.configure_column("document_type", headerName="Type", width=130, 
+                           valueFormatter="value ? value.replace(/_/g, ' ').replace(/\\b\\w/g, l => l.toUpperCase()) : ''")
+    
+    if 'status' in df.columns or 'document_state' in df.columns:
+        status_field = 'status' if 'status' in df.columns else 'document_state'
+        gb.configure_column(status_field, headerName="Status", width=140, 
+                           cellRenderer=STATUS_BADGE_RENDERER)
+    
+    if 'author' in df.columns or 'created_by' in df.columns:
+        author_field = 'author' if 'author' in df.columns else 'created_by'
+        gb.configure_column(author_field, headerName="Author", width=120)
+    
+    if 'reviewers' in df.columns:
+        gb.configure_column("reviewers", headerName="Reviewers", width=150)
+    
+    if 'updated_at' in df.columns:
+        gb.configure_column("updated_at", headerName="Updated", width=120, 
+                           valueFormatter="value ? value.substring(0, 10) : ''")
+    
+    if 'created_at' in df.columns:
+        gb.configure_column("created_at", headerName="Created", width=120,
+                           valueFormatter="value ? value.substring(0, 10) : ''")
+    
+    # Hide columns that shouldn't be displayed
+    hidden_columns = ['full_doc_data', 'id', 'document_type'] if columns_to_show else ['full_doc_data']
+    for col in hidden_columns:
+        if col in df.columns:
+            gb.configure_column(col, hide=True)
+    
+    # Add action buttons if requested
+    if show_actions:
+        if action_buttons is None:
+            action_buttons = ['view', 'edit']
+        
+        df['actions'] = ''  # Add empty actions column
+        gb.configure_column("actions", headerName="Actions", width=120, 
+                           cellRenderer=ACTION_BUTTON_RENDERER,
+                           cellRendererParams={
+                               "buttons": action_buttons
+                           })
+    
+    # Apply standard grid options
+    gb.configure_grid_options(**get_standard_grid_options())
+    
+    # Build and return grid
+    grid_options = gb.build()
+    
+    return AgGrid(
+        df,
+        gridOptions=grid_options,
+        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        fit_columns_on_grid_load=False,
+        theme='streamlit',
+        enable_enterprise_modules=False,
+        height=height,
+        width='100%',
+        custom_css=AGGRID_CSS,
+        allow_unsafe_jscode=True
+    )
+
+def create_design_records_grid(
+    records: List[Dict],
+    record_type: str,
+    show_actions: bool = True,
+    height: int = DATAFRAME_HEIGHT
+) -> Any:
+    """Create grid for design records (requirements, hazards, tests, etc.)"""
+    
+    if not records:
+        st.info(f"No {record_type} found")
+        return None
+    
+    df = pd.DataFrame(records)
+    gb = GridOptionsBuilder.from_dataframe(df)
+    
+    # Configure columns based on record type
+    id_fields = {
+        'requirements': ('req_id', 'req_title'),
+        'hazards': ('hazard_id', 'hazard_title'), 
+        'fmea': ('fmea_id', 'element_function'),
+        'designs': ('design_id', 'design_title'),
+        'tests': ('test_id', 'test_title')
+    }
+    
+    if record_type in id_fields:
+        id_field, title_field = id_fields[record_type]
+        if id_field in df.columns:
+            gb.configure_column(id_field, headerName="ID", pinned="left", width=100)
+        if title_field in df.columns:
+            gb.configure_column(title_field, headerName="Title", width=300, tooltipField=title_field)
+    
+    # Common status fields
+    status_fields = ['req_status', 'risk_rating', 'review_status', 'execution_status']
+    for field in status_fields:
+        if field in df.columns:
+            gb.configure_column(field, headerName="Status", width=120, 
+                               cellRenderer=STATUS_BADGE_RENDERER)
+    
+    # Priority/Severity fields
+    priority_fields = ['req_priority', 'severity_level', 'req_type']
+    for field in priority_fields:
+        if field in df.columns:
+            gb.configure_column(field, headerName=field.replace('_', ' ').title(), width=120)
+    
+    # Date fields
+    date_fields = ['created_at', 'updated_at', 'analysis_date', 'execution_date']
+    for field in date_fields:
+        if field in df.columns:
+            gb.configure_column(field, headerName=field.replace('_', ' ').title(), width=120,
+                               valueFormatter="value ? value.substring(0, 10) : ''")
+    
+    # Creator field
+    if 'created_by' in df.columns:
+        gb.configure_column("created_by", headerName="Creator", width=120)
+    
+    # Add actions column
+    if show_actions:
+        df['actions'] = ''
+        gb.configure_column("actions", headerName="Actions", width=120,
+                           cellRenderer=ACTION_BUTTON_RENDERER,
+                           cellRendererParams={
+                               "buttons": ['view', 'edit', 'delete']
+                           })
+    
+    # Apply grid options
+    gb.configure_grid_options(**get_standard_grid_options())
+    grid_options = gb.build()
+    
+    return AgGrid(
+        df,
+        gridOptions=grid_options,
+        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        fit_columns_on_grid_load=False,
+        theme='streamlit',
+        enable_enterprise_modules=False,
+        height=height,
+        width='100%',
+        custom_css=AGGRID_CSS,
+        allow_unsafe_jscode=True
+    )
+
+def create_simple_grid(
+    data: List[Dict],
+    columns_config: Dict[str, Dict] = None,
+    show_actions: bool = False,
+    height: int = 300
+) -> Any:
+    """Create a simple grid with basic configuration"""
+    
+    if not data:
+        st.info("No data found")
+        return None
+    
+    df = pd.DataFrame(data)
+    gb = GridOptionsBuilder.from_dataframe(df)
+    
+    # Apply custom column configuration if provided
+    if columns_config:
+        for field, config in columns_config.items():
+            if field in df.columns:
+                gb.configure_column(field, **config)
+    
+    if show_actions:
+        df['actions'] = ''
+        gb.configure_column("actions", headerName="Actions", width=100,
+                           cellRenderer=ACTION_BUTTON_RENDERER)
+    
+    gb.configure_grid_options(**get_standard_grid_options(enable_pagination=False))
+    grid_options = gb.build()
+    
+    return AgGrid(
+        df,
+        gridOptions=grid_options,
+        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        fit_columns_on_grid_load=True,
+        theme='streamlit',
+        enable_enterprise_modules=False,
+        height=height,
+        width='100%',
+        custom_css=AGGRID_CSS,
+        allow_unsafe_jscode=True
+    )
+
+def handle_grid_actions(grid_response: Any, action_handlers: Dict[str, callable]) -> None:
+    """Handle grid action button clicks"""
+    
+    if not grid_response or not grid_response.get('selected_rows'):
+        return
+    
+    selected_row = grid_response['selected_rows'][0]
+    
+    # Check for action button clicks (this would need to be enhanced based on actual implementation)
+    for action, handler in action_handlers.items():
+        if st.session_state.get(f'grid_action_{action}'):
+            handler(selected_row)
+            st.session_state[f'grid_action_{action}'] = False
+
+def get_grid_selection(grid_response: Any) -> Optional[Dict]:
+    """Get the selected row from grid response"""
+    if grid_response and hasattr(grid_response, 'selected_rows') and grid_response.selected_rows is not None and len(grid_response.selected_rows) > 0:
+        return grid_response.selected_rows[0]
+    return None
+
+def create_templates_grid(
+    templates: List[Dict],
+    show_actions: bool = False,
+    height: int = DATAFRAME_HEIGHT
+) -> Any:
+    """Create specialized grid for Templates page with File, Desc, Status columns"""
+    
+    if not templates:
+        st.info("No templates found")
+        return None
+    
+    # Convert to DataFrame and prepare data
+    df = pd.DataFrame(templates)
+    
+    # Ensure required columns exist or create defaults
+    if 'name' not in df.columns:
+        df['name'] = 'Unknown'
+    if 'description' not in df.columns:
+        df['description'] = ''
+    if 'status' not in df.columns:
+        df['status'] = 'active'
+    
+    # Keep only required columns plus hidden data columns
+    display_columns = ['name', 'description', 'status']
+    hidden_columns = [col for col in df.columns if col not in display_columns]
+    
+    # Build grid options
+    gb = GridOptionsBuilder.from_dataframe(df)
+    
+    # Configure display columns
+    gb.configure_column("name", headerName="File", pinned="left", width=200, tooltipField="name")
+    gb.configure_column("description", headerName="Description", width=300, tooltipField="description")
+    gb.configure_column("status", headerName="Status", width=120, cellRenderer=STATUS_BADGE_RENDERER)
+    
+    # Hide all other columns
+    for col in hidden_columns:
+        gb.configure_column(col, hide=True)
+    
+    # Apply standard grid options
+    gb.configure_grid_options(**get_standard_grid_options())
+    
+    # Build and return grid
+    grid_options = gb.build()
+    
+    return AgGrid(
+        df,
+        gridOptions=grid_options,
+        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        fit_columns_on_grid_load=False,
+        theme='streamlit',
+        enable_enterprise_modules=False,
+        height=height,
+        width='100%',
+        custom_css=AGGRID_CSS,
+        allow_unsafe_jscode=True
+    )

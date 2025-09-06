@@ -234,9 +234,16 @@ class KnowledgeBaseService:
             # Process text into chunks and create embeddings (Qdrant operations)
             chunks = self._chunk_text(text_content, chunk_size)
             vectors = []
+            total_chunks = len(chunks)
+            
+            print(f"Processing {file.filename}: {total_chunks} chunks to process")
             
             for i, chunk in enumerate(chunks):
                 try:
+                    # Log progress for every 10th chunk or for small files every chunk
+                    if total_chunks <= 10 or (i + 1) % 10 == 0 or i == total_chunks - 1:
+                        print(f"Processing {file.filename}: chunk {i+1}/{total_chunks} ({((i+1)/total_chunks*100):.1f}%)")
+                    
                     # Generate embedding using Ollama
                     embedding = self._generate_embedding(chunk)
                     
@@ -254,15 +261,17 @@ class KnowledgeBaseService:
                     vectors.append(point)
                     
                 except Exception as e:
-                    print(f"Error processing chunk {i}: {e}")
+                    print(f"Error processing chunk {i+1}/{total_chunks} for {file.filename}: {e}")
                     continue
             
             # Store vectors in Qdrant
             if vectors:
+                print(f"Storing {len(vectors)} vectors in Qdrant for {file.filename}")
                 self.qdrant_client.upsert(
                     collection_name=actual_collection_name,
                     points=vectors
                 )
+                print(f"Successfully stored vectors for {file.filename}")
             
             # Update document record
             kb_document.chunk_count = len(vectors)
@@ -276,6 +285,7 @@ class KnowledgeBaseService:
             db.commit()
             
             processing_time = time.time() - start_time
+            print(f"Completed processing {file.filename}: {len(vectors)} chunks in {processing_time:.2f}s")
             
             return {
                 "success": True,
@@ -624,7 +634,7 @@ class KnowledgeBaseService:
                 sources.append({
                     "filename": result.payload.get("filename", "Unknown"),
                     "score": round(result.score, 3),
-                    "text_preview": result.payload.get("text", "")[:200] + "..." if len(result.payload.get("text", "")) > 200 else result.payload.get("text", "")
+                    "text_preview": result.payload.get("text", "")[:config.KB_TEXT_PREVIEW_LENGTH] + "..." if len(result.payload.get("text", "")) > config.KB_TEXT_PREVIEW_LENGTH else result.payload.get("text", "")
                 })
             
             # Step 4: Generate response using Ollama LLM
@@ -706,6 +716,175 @@ Answer:"""
                 "retrieval_time": 0,
                 "llm_response_time": 0,
                 "total_time": 0
+            }
+        finally:
+            db.close()
+
+    def query_knowledge_base_with_context(self, query: str, document_context: str = None, collection_name: str = None, max_results: int = 5) -> Dict[str, Any]:
+        """Query knowledge base with additional document context for AI-assisted document creation"""
+        db = next(get_db())
+        
+        # Safety checks for query parameter
+        if query is None:
+            return {
+                "response": config.KB_ERROR_MSG_QUERY_NONE,
+                "sources": [],
+                "query": str(query),
+                "collection_name": collection_name or config.DEFAULT_COLLECTION_NAME,
+                "document_context_provided": document_context is not None and bool(str(document_context).strip()) if document_context is not None else False,
+                "knowledge_base_results": 0,
+                "response_time_ms": 0,
+                "timing": {
+                    "embedding_ms": 0,
+                    "retrieval_ms": 0,
+                    "llm_ms": 0,
+                    "total_ms": 0
+                }
+            }
+        
+        # Check if query is empty or just whitespace
+        if not query.strip():
+            return {
+                "response": config.KB_ERROR_MSG_QUERY_EMPTY,
+                "sources": [],
+                "query": query,
+                "collection_name": collection_name or config.DEFAULT_COLLECTION_NAME,
+                "document_context_provided": document_context is not None and bool(str(document_context).strip()) if document_context is not None else False,
+                "knowledge_base_results": 0,
+                "response_time_ms": 0,
+                "timing": {
+                    "embedding_ms": 0,
+                    "retrieval_ms": 0,
+                    "llm_ms": 0,
+                    "total_ms": 0
+                }
+            }
+        
+        if collection_name is None:
+            collection_name = config.DEFAULT_COLLECTION_NAME
+        
+        # Check if collection exists, fallback to default if not
+        actual_collection_name = self._ensure_collection_exists_or_get_default(collection_name)
+        
+        start_time = time.time()
+        
+        try:
+            # Step 1: Generate embedding for the query
+            embedding_start = time.time()
+            query_embedding = self._generate_embedding(query)
+            embedding_time = int((time.time() - embedding_start) * 1000)
+            
+            # Step 2: Search for relevant documents
+            retrieval_start = time.time()
+            search_limit = min(max_results, config.RAG_SIMILARITY_SEARCH_LIMIT)
+            search_results = self.qdrant_client.search(
+                collection_name=actual_collection_name,
+                query_vector=query_embedding,
+                limit=search_limit,
+                with_payload=True
+            )
+            retrieval_time = int((time.time() - retrieval_start) * 1000)
+            
+            # Step 3: Format context from search results
+            kb_context = ""
+            sources = []
+            
+            for i, result in enumerate(search_results):
+                kb_context += f"Knowledge Base Source {i+1}: {result.payload.get('text', '')}\n\n"
+                sources.append({
+                    "filename": result.payload.get("filename", "Unknown"),
+                    "score": round(result.score, 3),
+                    "text_preview": result.payload.get("text", "")[:config.KB_TEXT_PREVIEW_LENGTH] + "..." if len(result.payload.get("text", "")) > config.KB_TEXT_PREVIEW_LENGTH else result.payload.get("text", "")
+                })
+            
+            # Step 4: Create enhanced prompt with document context
+            llm_start = time.time()
+            
+            # Build the prompt with both document context and knowledge base context
+            prompt_parts = ["You are a helpful AI assistant helping with document creation."]
+            
+            if document_context and document_context.strip():
+                prompt_parts.append(f"\nCurrent Document Content:\n{document_context}")
+            
+            if kb_context:
+                prompt_parts.append(f"\nRelevant Knowledge Base Information:\n{kb_context}")
+            else:
+                prompt_parts.append("\nNo relevant information found in the Knowledge Base.")
+            
+            prompt_parts.extend([
+                f"\nUser Question: {query}",
+                "\nInstructions:",
+                "- Help the user with their question about the document they are creating",
+                "- Use information from both the current document content and the knowledge base",
+                "- If the document context is relevant, reference it in your response",
+                "- If knowledge base information is relevant, incorporate it naturally",
+                "- Be practical and actionable in your advice",
+                "- If you cannot answer based on available information, say so clearly",
+                "\nResponse:"
+            ])
+            
+            prompt = "\n".join(prompt_parts)
+            
+            # Log prompt if configured
+            if hasattr(config, 'SHOW_PROMPT') and config.SHOW_PROMPT:
+                print(f"KB Query with Context Prompt:\n{prompt}\n")
+            
+            try:
+                response = self.ollama_client.generate(
+                    model=config.GENERAL_PURPOSE_LLM,
+                    prompt=prompt,
+                    stream=False
+                )
+                
+                llm_response_time = int((time.time() - llm_start) * 1000)
+                total_time = int((time.time() - start_time) * 1000)
+                
+                # Log query to database
+                query_log = KBQuery(
+                    query_text=query,
+                    collection_name=actual_collection_name,
+                    response_text=response['response'][:1000],  # Truncate for storage
+                    response_time_ms=total_time,
+                    result_count=len(search_results)
+                )
+                db.add(query_log)
+                db.commit()
+                
+                return {
+                    "response": response['response'],
+                    "sources": sources,
+                    "query_embedding_time": embedding_time,
+                    "retrieval_time": retrieval_time,
+                    "llm_response_time": llm_response_time,
+                    "total_time": total_time,
+                    "document_context_provided": bool(document_context and document_context.strip()),
+                    "knowledge_base_results": len(search_results),
+                    "collection_used": actual_collection_name,
+                    "prompt": prompt if hasattr(config, 'SHOW_PROMPT') and config.SHOW_PROMPT else None
+                }
+                
+            except Exception as llm_error:
+                print(f"LLM Error: {llm_error}")
+                return {
+                    "response": "I apologize, but I encountered an error while generating a response. The AI service may be temporarily unavailable.",
+                    "sources": sources,
+                    "query_embedding_time": embedding_time,
+                    "retrieval_time": retrieval_time,
+                    "llm_response_time": 0,
+                    "total_time": int((time.time() - start_time) * 1000),
+                    "error": "LLM service error"
+                }
+                
+        except Exception as e:
+            print(f"Error in query_knowledge_base_with_context: {e}")
+            return {
+                "response": "I apologize, but I encountered an error while processing your question. Please try again later.",
+                "sources": [],
+                "query_embedding_time": 0,
+                "retrieval_time": 0,
+                "llm_response_time": 0,
+                "total_time": 0,
+                "error": str(e)
             }
         finally:
             db.close()

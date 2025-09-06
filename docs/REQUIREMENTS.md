@@ -185,6 +185,29 @@ This document outlines the functional and non-functional requirements for the Do
   - Subject area organization
   - Integration across all system modules
 
+#### REQ-018.1: AI-Powered Document Creation with Knowledge Base Chat
+- **Description**: System shall provide AI-powered document creation with contextual Knowledge Base chat functionality
+- **Priority**: High
+- **Acceptance Criteria**:
+  - Integration across three document workflows: Create Document, Document Editing, and Document Review
+  - Mutually exclusive modes: Live Preview OR Knowledge Base Chat
+  - Context-aware chat combining current document content with KB search results
+  - Independent chat sessions per document with persistent history
+  - Concurrent document editing during chat processing (content snapshot approach)
+  - Configurable response limits for memory management (default: 20 responses, 5000 characters per response)
+  - Real-time error handling for null/empty queries with user-friendly messages
+  - Session state management with automatic cleanup on document close operations
+
+#### REQ-018.2: Knowledge Base Query API Enhancement  
+- **Description**: System shall provide enhanced KB query API with document context integration
+- **Priority**: High
+- **Acceptance Criteria**:
+  - New `/kb/query_with_context` API endpoint supporting document context parameter
+  - Enhanced prompt generation combining user query, document context, and KB search results
+  - Configurable timeout settings for KB chat requests (default: 30 seconds)
+  - Structured response format including sources, context usage, and timing information
+  - Error handling for service unavailability with graceful degradation
+
 ### 1.9 Email Notifications
 
 #### REQ-019: SMTP Configuration Management

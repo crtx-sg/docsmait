@@ -422,3 +422,228 @@ class TestErrorHandling:
             json={"description": "Missing name field"}
         )
         assert response.status_code in [400, 422]
+
+
+@pytest.mark.integration
+class TestKnowledgeBaseChatWorkflow:
+    """Test complete Knowledge Base chat integration workflow."""
+
+    def test_complete_kb_chat_document_creation_flow(self, authenticated_client, backend_url, assert_docsmait):
+        """Test complete document creation with KB chat workflow."""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # This simulates the frontend document creation workflow with KB chat
+        # Step 1: Prepare document context
+        document_context = f"Integration test document created at {timestamp}. This document contains requirements for testing the KB chat functionality."
+        
+        # Step 2: Query KB for document improvement suggestions
+        kb_query_data = {
+            "query": "How can I improve the structure and content of this document?",
+            "document_context": document_context,
+            "collection_name": "knowledge_base",
+            "max_results": 5
+        }
+        
+        kb_response = authenticated_client.post(f"{backend_url}/kb/query_with_context", json=kb_query_data)
+        
+        # KB service might not be available in test environment
+        if kb_response.status_code == 500:
+            pytest.skip("KB service not available for integration test")
+        
+        # Should handle KB query appropriately
+        assert kb_response.status_code in [200, 400, 404, 503]
+        
+        if kb_response.status_code == 200:
+            kb_data = kb_response.json()
+            assert "response" in kb_data
+            assert isinstance(kb_data["response"], str)
+            assert len(kb_data["response"]) > 0
+        
+        # Step 3: Create document (simulating frontend workflow)
+        document_data = {
+            "name": f"KB Chat Test Document {timestamp}",
+            "content": document_context,
+            "document_type": "Technical Documentation"
+        }
+        
+        # Try to create document
+        create_response = authenticated_client.post(f"{backend_url}/documents", json=document_data)
+        
+        # Document creation might require additional parameters
+        if create_response.status_code not in [200, 201]:
+            pytest.skip("Document creation requires project association or other parameters")
+        
+        # If document creation succeeded, verify the workflow
+        if create_response.status_code in [200, 201]:
+            created_doc = create_response.json()
+            assert "id" in created_doc
+            assert created_doc["name"] == document_data["name"]
+
+    def test_kb_chat_session_workflow(self, authenticated_client, backend_url):
+        """Test KB chat session simulation workflow."""
+        # Simulate a multi-query chat session
+        chat_session = [
+            {
+                "query": "What are the best practices for technical documentation?",
+                "document_context": "Technical specification document in progress"
+            },
+            {
+                "query": "How should I structure requirements sections?",
+                "document_context": "Technical specification with initial requirements draft"
+            },
+            {
+                "query": "What testing approaches should be documented?",
+                "document_context": "Technical specification with requirements and design sections"
+            }
+        ]
+        
+        session_responses = []
+        
+        for i, query_data in enumerate(chat_session):
+            response = authenticated_client.post(f"{backend_url}/kb/query_with_context", json=query_data)
+            
+            # Skip if KB service is not available
+            if response.status_code == 500:
+                pytest.skip("KB service not available for chat session workflow")
+            
+            session_responses.append({
+                "query_num": i + 1,
+                "status_code": response.status_code,
+                "query": query_data["query"]
+            })
+            
+            # Should handle each query appropriately
+            assert response.status_code in [200, 400, 404, 503]
+            
+            # Add small delay between queries to be respectful to the service
+            time.sleep(0.5)
+        
+        # All queries should be processed
+        assert len(session_responses) == len(chat_session)
+        
+        # Should have consistent behavior across the session
+        status_codes = [r["status_code"] for r in session_responses]
+        unique_statuses = set(status_codes)
+        
+        # If service is available, should consistently work
+        if 200 in unique_statuses:
+            # At least some queries succeeded
+            successful_queries = sum(1 for code in status_codes if code == 200)
+            assert successful_queries >= 1
+
+    def test_kb_chat_document_review_integration(self, authenticated_client, backend_url):
+        """Test KB chat integration with document review workflow."""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # Simulate document review with KB assistance
+        review_document_context = f"""
+        Document Review Test {timestamp}
+        
+        This is a technical document that needs review.
+        It contains specifications, requirements, and implementation details.
+        The document should be checked for completeness, accuracy, and compliance.
+        """
+        
+        # KB queries for review assistance
+        review_queries = [
+            {
+                "query": "What should I look for when reviewing a technical document?",
+                "document_context": review_document_context
+            },
+            {
+                "query": "Are there any missing sections in this document?",
+                "document_context": review_document_context
+            },
+            {
+                "query": "What compliance standards should this document meet?",
+                "document_context": review_document_context
+            }
+        ]
+        
+        review_results = []
+        
+        for query_data in review_queries:
+            response = authenticated_client.post(f"{backend_url}/kb/query_with_context", json=query_data)
+            
+            # Skip if KB service is not available
+            if response.status_code == 500:
+                pytest.skip("KB service not available for review integration test")
+            
+            review_results.append(response.status_code)
+            
+            # Should handle review queries
+            assert response.status_code in [200, 400, 404, 503]
+        
+        # All review queries should be processed
+        assert len(review_results) == len(review_queries)
+
+    @pytest.mark.slow
+    def test_kb_chat_performance_integration(self, authenticated_client, backend_url):
+        """Test KB chat performance in integration context."""
+        import time
+        
+        # Test performance with realistic document content
+        large_document_context = """
+        Performance Test Document
+        
+        This is a large document context for performance testing of the KB chat functionality.
+        """ + "Additional content for testing performance. " * 100
+        
+        query_data = {
+            "query": "Summarize the key points of this document and suggest improvements",
+            "document_context": large_document_context,
+            "max_results": 5
+        }
+        
+        start_time = time.time()
+        response = authenticated_client.post(f"{backend_url}/kb/query_with_context", json=query_data)
+        end_time = time.time()
+        
+        response_time = end_time - start_time
+        
+        # Skip if KB service is not available
+        if response.status_code == 500:
+            pytest.skip("KB service not available for performance integration test")
+        
+        # Should complete within reasonable time
+        assert response_time < 45.0, f"KB chat integration too slow: {response_time:.2f}s"
+        
+        # Should handle the query appropriately
+        assert response.status_code in [200, 400, 404, 503]
+        
+        if response.status_code == 200:
+            data = response.json()
+            assert "response" in data
+            assert len(data["response"]) > 0
+
+    def test_kb_chat_error_handling_integration(self, authenticated_client, backend_url):
+        """Test KB chat error handling in integration context."""
+        
+        # Test various error conditions
+        error_test_cases = [
+            {
+                "name": "empty_query",
+                "data": {"query": ""},
+                "expected_codes": [400, 422]
+            },
+            {
+                "name": "none_query",
+                "data": {"query": None},
+                "expected_codes": [400, 422]
+            },
+            {
+                "name": "invalid_max_results",
+                "data": {"query": "Test", "max_results": -1},
+                "expected_codes": [400, 422]
+            },
+            {
+                "name": "very_long_query",
+                "data": {"query": "Very long query " * 1000},
+                "expected_codes": [200, 400, 413, 500, 503]
+            }
+        ]
+        
+        for test_case in error_test_cases:
+            response = authenticated_client.post(f"{backend_url}/kb/query_with_context", json=test_case["data"])
+            
+            assert response.status_code in test_case["expected_codes"], f"Error handling failed for {test_case['name']}: got {response.status_code}"

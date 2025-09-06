@@ -158,18 +158,23 @@ with tab2:
         results = []
         
         for i, uploaded_file in enumerate(uploaded_files):
-            status_placeholder.write(f"Processing {uploaded_file.name}...")
+            file_size_kb = uploaded_file.size / 1024 if uploaded_file.size else 0
+            status_placeholder.write(f"Processing {uploaded_file.name} ({file_size_kb:.1f} KB)...")
             
             try:
                 # Prepare file for upload
                 files = {"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
                 data = {"collection_name": collection_name}
                 
+                # Use longer timeout for large files (5 minutes base + 1 minute per MB)
+                timeout_seconds = 300 + (file_size_kb / 1024 * 60)  # 5 min + 1 min/MB
+                
                 response = requests.post(
                     f"{BACKEND_URL}/kb/upload",
                     files=files,
                     data=data,
-                    headers=get_auth_headers()
+                    headers=get_auth_headers(),
+                    timeout=timeout_seconds
                 )
                 
                 if response.status_code == 200:
@@ -189,10 +194,20 @@ with tab2:
                         "time": 0
                     })
             
-            except Exception as e:
+            except requests.exceptions.Timeout:
                 results.append({
                     "filename": uploaded_file.name,
-                    "status": f"❌ Error: {str(e)}",
+                    "status": f"⏱️ Timeout: File processing took longer than {timeout_seconds/60:.1f} minutes",
+                    "chunks": 0,
+                    "time": 0
+                })
+            except Exception as e:
+                error_msg = str(e)
+                if "timeout" in error_msg.lower():
+                    error_msg = f"Processing timeout - file may be too large or system busy"
+                results.append({
+                    "filename": uploaded_file.name,
+                    "status": f"❌ Error: {error_msg}",
                     "chunks": 0,
                     "time": 0
                 })

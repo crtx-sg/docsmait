@@ -23,14 +23,25 @@ class DocsmaitRestore:
         self.temp_dir = Path("/tmp/docsmait_restore")
         self.backup_dir = None
         
-        # Docker container names
-        self.postgres_container = "docsmait_postgres"
-        self.qdrant_container = "docsmait_qdrant"
-        
-        # Database credentials from environment or defaults
-        self.db_name = os.getenv("DB_NAME", "docsmait")
-        self.db_user = os.getenv("DB_USER", "docsmait_user")
-        self.db_password = os.getenv("DB_PASSWORD", "docsmait_password")
+        # Import centralized configuration
+        try:
+            parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            sys.path.append(parent_dir)
+            from config.environments import config as env_config
+            # Container names from config
+            self.postgres_container = env_config.POSTGRES_SERVICE_NAME
+            self.qdrant_container = env_config.QDRANT_SERVICE_NAME
+            # Database credentials from config
+            self.db_name = env_config.DB_NAME
+            self.db_user = env_config.DB_USER
+            self.db_password = env_config.DB_PASSWORD
+        except ImportError:
+            # Fallback for when centralized config is not available
+            self.postgres_container = os.getenv("POSTGRES_SERVICE_NAME", "docsmait_postgres")
+            self.qdrant_container = os.getenv("QDRANT_SERVICE_NAME", "docsmait_qdrant")
+            self.db_name = os.getenv("DB_NAME", "docsmait")
+            self.db_user = os.getenv("DB_USER", "docsmait_user")
+            self.db_password = os.getenv("DB_PASSWORD", "docsmait_password")
         
     def extract_backup_archive(self):
         """Extract backup archive to temporary directory"""
@@ -72,7 +83,8 @@ class DocsmaitRestore:
             required_components = [
                 ("postgres_backup.sql", "PostgreSQL backup"),
                 ("qdrant_data", "Qdrant data"),
-                ("configuration", "Configuration files")
+                ("configuration", "Configuration files"),
+                ("filesystem", "File system data")
             ]
             
             for component, description in required_components:
@@ -102,6 +114,7 @@ class DocsmaitRestore:
                 'users', 'projects', 'project_members', 'project_resources',
                 'templates', 'template_approvals', 'documents', 'document_revisions',
                 'document_reviewers', 'document_reviews', 'document_comments',
+                'issues', 'issue_comments',  # Issues Management tables
                 'kb_collections', 'kb_documents', 'kb_queries', 'kb_config', 'kb_document_tags',
                 'audits', 'findings', 'corrective_actions', 'repositories', 'pull_requests',
                 'pull_request_files', 'code_reviews', 'code_comments', 'review_requests',
@@ -205,6 +218,7 @@ class DocsmaitRestore:
                 'users', 'projects', 'project_members', 'project_resources',
                 'templates', 'template_approvals', 'documents', 'document_revisions',
                 'document_reviewers', 'document_reviews', 'document_comments',
+                'issues', 'issue_comments',  # Issues Management tables
                 'kb_collections', 'kb_documents', 'kb_queries', 'kb_config', 'kb_document_tags',
                 'audits', 'findings', 'corrective_actions', 'repositories', 'pull_requests',
                 'pull_request_files', 'code_reviews', 'code_comments', 'review_requests',
@@ -294,6 +308,61 @@ class DocsmaitRestore:
                          capture_output=True)
             return False
     
+    def restore_file_system_data(self):
+        """Restore file system data including uploaded documents and templates"""
+        try:
+            logger.info("Starting file system data restore...")
+            fs_backup_dir = self.backup_dir / "filesystem"
+            
+            if not fs_backup_dir.exists():
+                logger.warning("No file system backup found, skipping...")
+                return True
+            
+            # Read filesystem manifest if it exists
+            manifest_file = fs_backup_dir / "filesystem_manifest.json"
+            if manifest_file.exists():
+                with open(manifest_file, 'r') as f:
+                    manifest = json.load(f)
+                    backed_up_dirs = manifest.get("backed_up_directories", [])
+                    logger.info(f"Restoring {len(backed_up_dirs)} backed up directories")
+            
+            # Restore targets
+            restore_targets = [
+                ("backend_uploads", "docsmait_backend", "/app/uploads"),
+                ("backend_templates", "docsmait_backend", "/app/templates"),
+                ("frontend_uploads", "docsmait_frontend", "/app/uploads")
+            ]
+            
+            restored_directories = []
+            
+            for backup_name, container, container_path in restore_targets:
+                backup_source = fs_backup_dir / backup_name
+                
+                if backup_source.exists():
+                    # Create directory in container if it doesn't exist
+                    mkdir_cmd = ["docker", "exec", container, "mkdir", "-p", container_path]
+                    subprocess.run(mkdir_cmd, capture_output=True)
+                    
+                    # Copy data to container
+                    # Use docker cp to copy contents
+                    copy_cmd = ["docker", "cp", str(backup_source / "."), f"{container}:{container_path}"]
+                    result = subprocess.run(copy_cmd, capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        restored_directories.append(f"{container}:{container_path}")
+                        logger.info(f"Restored: {container}:{container_path}")
+                    else:
+                        logger.warning(f"Could not restore to {container}:{container_path}: {result.stderr}")
+                else:
+                    logger.warning(f"Backup source not found: {backup_name}")
+            
+            logger.info(f"File system restore completed: {len(restored_directories)} directories restored")
+            return True
+            
+        except Exception as e:
+            logger.error(f"File system restore error: {e}")
+            return False
+
     def restore_configuration_files(self):
         """Restore configuration files"""
         try:
@@ -384,6 +453,10 @@ class DocsmaitRestore:
             
             # Restore configuration files
             if not self.restore_configuration_files():
+                success = False
+            
+            # Restore file system data
+            if not self.restore_file_system_data():
                 success = False
             
             if success:

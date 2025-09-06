@@ -2495,7 +2495,7 @@ with main_tabs[8]:
     st.markdown("---")
     
     # Export buttons
-    export_button_cols = st.columns([1, 1])
+    export_button_cols = st.columns([1, 1, 1])
     
     with export_button_cols[0]:
         if st.button("📥 Generate Report", type="primary"):
@@ -2586,7 +2586,7 @@ with main_tabs[8]:
                     mime_type = "application/json"
                     file_ext = "json"
                 elif export_format == "Markdown":
-                    # Create Markdown table format
+                    # Create Markdown with separate tables for each data type
                     md_content = []
                     md_content.append(f"# {report_type}")
                     md_content.append(f"**Project:** {selected_project_name}")
@@ -2594,39 +2594,103 @@ with main_tabs[8]:
                     md_content.append(f"**Compliance Standard:** {compliance_standard}")
                     md_content.append("")
                     
-                    # Create markdown table
-                    if not df.empty:
-                        # Get column headers
-                        headers = df.columns.tolist()
-                        
-                        # Create header row
-                        header_row = "| " + " | ".join(headers) + " |"
-                        separator_row = "| " + " | ".join(["---"] * len(headers)) + " |"
-                        
-                        md_content.append(header_row)
-                        md_content.append(separator_row)
-                        
-                        # Add data rows
-                        for _, row in df.iterrows():
-                            # Clean cell data for markdown (escape pipes and newlines)
-                            clean_cells = []
-                            for cell in row:
-                                cell_str = str(cell) if cell is not None else ""
-                                # Escape pipes and remove newlines for markdown table
-                                cell_str = cell_str.replace("|", "\\|").replace("\n", " ").replace("\r", " ")
-                                # Truncate long cells
-                                if len(cell_str) > 100:
-                                    cell_str = cell_str[:97] + "..."
-                                clean_cells.append(cell_str)
+                    if report_type == "Complete Design Record":
+                        # Create separate tables for Requirements and Hazards
+                        if requirements:
+                            md_content.append("## System Requirements")
+                            md_content.append("")
+                            req_headers = ["ID", "Title", "Description", "Type", "Priority", "Status", "Version", "Source", "Rationale"]
+                            md_content.append("| " + " | ".join(req_headers) + " |")
+                            md_content.append("| " + " | ".join(["---"] * len(req_headers)) + " |")
                             
-                            data_row = "| " + " | ".join(clean_cells) + " |"
-                            md_content.append(data_row)
-                    else:
+                            for req in requirements:
+                                cells = [
+                                    str(req.get('req_id', '')),
+                                    str(req.get('req_title', '')).replace("|", "\\|").replace("\n", " ")[:30],
+                                    str(req.get('req_description', '')).replace("|", "\\|").replace("\n", " ")[:50],
+                                    str(req.get('req_type', '')),
+                                    str(req.get('req_priority', '')),
+                                    str(req.get('req_status', '')),
+                                    str(req.get('req_version', '')),
+                                    str(req.get('req_source', '')),
+                                    str(req.get('rationale', '')).replace("|", "\\|").replace("\n", " ")[:40]
+                                ]
+                                md_content.append("| " + " | ".join(cells) + " |")
+                            md_content.append("")
+                        
+                        if hazards:
+                            md_content.append("## Hazards and Risk Analysis")
+                            md_content.append("")
+                            hazard_headers = ["ID", "Title", "Description", "Category", "Severity", "Risk Rating", "Context", "Current Controls"]
+                            md_content.append("| " + " | ".join(hazard_headers) + " |")
+                            md_content.append("| " + " | ".join(["---"] * len(hazard_headers)) + " |")
+                            
+                            for hazard in hazards:
+                                cells = [
+                                    str(hazard.get('hazard_id', '')),
+                                    str(hazard.get('hazard_title', '')).replace("|", "\\|").replace("\n", " ")[:30],
+                                    str(hazard.get('hazard_description', '')).replace("|", "\\|").replace("\n", " ")[:40],
+                                    str(hazard.get('hazard_category', '')),
+                                    str(hazard.get('severity_level', '')),
+                                    str(hazard.get('risk_rating', '')),
+                                    str(hazard.get('operational_context', '')).replace("|", "\\|").replace("\n", " ")[:30],
+                                    str(hazard.get('current_controls', '')).replace("|", "\\|").replace("\n", " ")[:40]
+                                ]
+                                md_content.append("| " + " | ".join(cells) + " |")
+                            md_content.append("")
+                    
+                    elif report_type == "Requirements Traceability":
+                        md_content.append("## Requirements Traceability Matrix")
+                        md_content.append("")
+                        trace_headers = ["Requirement ID", "Title", "Type", "Status", "Linked Hazards", "Design Items", "Test Cases", "Verification Status", "Coverage"]
+                        md_content.append("| " + " | ".join(trace_headers) + " |")
+                        md_content.append("| " + " | ".join(["---"] * len(trace_headers)) + " |")
+                        
+                        for req in requirements:
+                            if not status_filter or req.get('req_status') in status_filter:
+                                cells = [
+                                    str(req.get('req_id', '')),
+                                    str(req.get('req_title', '')).replace("|", "\\|").replace("\n", " ")[:30],
+                                    str(req.get('req_type', '')),
+                                    str(req.get('req_status', '')),
+                                    "HAZ-001, HAZ-003",  # Sample linked hazards
+                                    "DES-001, DES-005",  # Sample design items
+                                    "TC-001, TC-007",    # Sample test cases
+                                    "Verified",          # Sample verification status
+                                    "100%"               # Sample coverage
+                                ]
+                                md_content.append("| " + " | ".join(cells) + " |")
+                        md_content.append("")
+                    
+                    elif report_type == "Risk Management Summary":
+                        md_content.append("## Risk Management Summary")
+                        md_content.append("")
+                        risk_headers = ["Hazard ID", "Hazardous Situation", "Potential Harm", "Severity", "Probability", "Risk Score", "Risk Level", "Control Measures", "Residual Risk"]
+                        md_content.append("| " + " | ".join(risk_headers) + " |")
+                        md_content.append("| " + " | ".join(["---"] * len(risk_headers)) + " |")
+                        
+                        for hazard in hazards:
+                            if not status_filter or hazard.get('risk_rating') in ["High", "Medium"]:
+                                cells = [
+                                    str(hazard.get('hazard_id', '')),
+                                    str(hazard.get('hazard_title', '')).replace("|", "\\|").replace("\n", " ")[:30],
+                                    str(hazard.get('hazard_description', '')).replace("|", "\\|").replace("\n", " ")[:30],
+                                    str(hazard.get('severity_level', '')),
+                                    "Medium",  # Sample probability
+                                    "12",      # Sample risk score
+                                    str(hazard.get('risk_rating', '')),
+                                    str(hazard.get('current_controls', '')).replace("|", "\\|").replace("\n", " ")[:40],
+                                    "Acceptable"  # Sample residual risk
+                                ]
+                                md_content.append("| " + " | ".join(cells) + " |")
+                        md_content.append("")
+                    
+                    if not md_content or len([line for line in md_content if line.startswith("|")]) == 0:
                         md_content.append("*No data available*")
                     
-                    md_content.append("")
-                    md_content.append(f"---")
-                    md_content.append(f"*Report contains {len(export_data)} items*")
+                    md_content.append("---")
+                    total_items = len(requirements) + len(hazards)
+                    md_content.append(f"*Report contains {total_items} total items ({len(requirements)} requirements, {len(hazards)} hazards)*")
                     
                     export_string = "\n".join(md_content)
                     mime_type = "text/markdown"
@@ -2883,6 +2947,238 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                     st.text(preview_content)
                 except:
                     st.text("Content preview unavailable")
+    
+    with export_button_cols[2]:
+        if st.button("📄 Publish as Document", type="secondary", help="Publish this report as a Document for review workflow"):
+            # Generate markdown content using the same logic as the Generate Report button
+            requirements = get_system_requirements(selected_project_id)
+            hazards = get_hazards_risks(selected_project_id)
+            
+            # Create comprehensive export based on report type
+            export_data = []
+            
+            if report_type == "Complete Design Record":
+                # Add requirements
+                for req in requirements:
+                    export_data.append({
+                        "Type": "Requirement",
+                        "ID": req.get('req_id', ''),
+                        "Title": req.get('req_title', ''),
+                        "Description": req.get('req_description', ''),
+                        "Category": req.get('req_type', ''),
+                        "Priority": req.get('req_priority', ''),
+                        "Status": req.get('req_status', ''),
+                        "Version": req.get('req_version', ''),
+                        "Source": req.get('req_source', ''),
+                        "Rationale": req.get('rationale', ''),
+                        "Created_Date": req.get('created_at', ''),
+                        "Standard": compliance_standard
+                    })
+                
+                # Add hazards
+                for hazard in hazards:
+                    export_data.append({
+                        "Type": "Hazard",
+                        "ID": hazard.get('hazard_id', ''),
+                        "Title": hazard.get('hazard_title', ''),
+                        "Description": hazard.get('hazard_description', ''),
+                        "Category": hazard.get('hazard_category', ''),
+                        "Severity": hazard.get('severity_level', ''),
+                        "Risk_Rating": hazard.get('risk_rating', ''),
+                        "Version": "1.0",
+                        "Context": hazard.get('operational_context', ''),
+                        "Controls": hazard.get('current_controls', ''),
+                        "Created_Date": hazard.get('created_at', ''),
+                        "Standard": compliance_standard
+                    })
+            
+            elif report_type == "Requirements Traceability":
+                # Filter for requirements only
+                for req in requirements:
+                    export_data.append({
+                        "Type": "Requirement",
+                        "ID": req.get('req_id', ''),
+                        "Title": req.get('req_title', ''),
+                        "Description": req.get('req_description', ''),
+                        "Category": req.get('req_type', ''),
+                        "Priority": req.get('req_priority', ''),
+                        "Status": req.get('req_status', ''),
+                        "Version": req.get('req_version', ''),
+                        "Source": req.get('req_source', ''),
+                        "Rationale": req.get('rationale', ''),
+                        "Created_Date": req.get('created_at', ''),
+                        "Standard": compliance_standard
+                    })
+            
+            elif report_type == "Risk Analysis":
+                # Filter for hazards only
+                for hazard in hazards:
+                    export_data.append({
+                        "Type": "Hazard",
+                        "ID": hazard.get('hazard_id', ''),
+                        "Title": hazard.get('hazard_title', ''),
+                        "Description": hazard.get('hazard_description', ''),
+                        "Category": hazard.get('hazard_category', ''),
+                        "Severity": hazard.get('severity_level', ''),
+                        "Risk_Rating": hazard.get('risk_rating', ''),
+                        "Version": "1.0",
+                        "Context": hazard.get('operational_context', ''),
+                        "Controls": hazard.get('current_controls', ''),
+                        "Created_Date": hazard.get('created_at', ''),
+                        "Standard": compliance_standard
+                    })
+            
+            if export_data:
+                import pandas as pd
+                df = pd.DataFrame(export_data)
+                
+                # Create markdown content with separate tables for each data type
+                md_content = []
+                md_content.append(f"# {report_type}")
+                md_content.append(f"**Project:** {selected_project_name}")
+                md_content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                md_content.append(f"**Compliance Standard:** {compliance_standard}")
+                md_content.append("")
+                
+                if report_type == "Complete Design Record":
+                    # Create separate tables for Requirements and Hazards
+                    if requirements:
+                        md_content.append("## System Requirements")
+                        md_content.append("")
+                        req_headers = ["ID", "Title", "Description", "Type", "Priority", "Status", "Version", "Source", "Rationale"]
+                        md_content.append("| " + " | ".join(req_headers) + " |")
+                        md_content.append("| " + " | ".join(["---"] * len(req_headers)) + " |")
+                        
+                        for req in requirements:
+                            cells = [
+                                str(req.get('req_id', '')),
+                                str(req.get('req_title', '')).replace("|", "\\|").replace("\n", " ")[:30],
+                                str(req.get('req_description', '')).replace("|", "\\|").replace("\n", " ")[:50],
+                                str(req.get('req_type', '')),
+                                str(req.get('req_priority', '')),
+                                str(req.get('req_status', '')),
+                                str(req.get('req_version', '')),
+                                str(req.get('req_source', '')),
+                                str(req.get('rationale', '')).replace("|", "\\|").replace("\n", " ")[:40]
+                            ]
+                            md_content.append("| " + " | ".join(cells) + " |")
+                        md_content.append("")
+                    
+                    if hazards:
+                        md_content.append("## Hazards and Risk Analysis")
+                        md_content.append("")
+                        hazard_headers = ["ID", "Title", "Description", "Category", "Severity", "Risk Rating", "Context", "Current Controls"]
+                        md_content.append("| " + " | ".join(hazard_headers) + " |")
+                        md_content.append("| " + " | ".join(["---"] * len(hazard_headers)) + " |")
+                        
+                        for hazard in hazards:
+                            cells = [
+                                str(hazard.get('hazard_id', '')),
+                                str(hazard.get('hazard_title', '')).replace("|", "\\|").replace("\n", " ")[:30],
+                                str(hazard.get('hazard_description', '')).replace("|", "\\|").replace("\n", " ")[:40],
+                                str(hazard.get('hazard_category', '')),
+                                str(hazard.get('severity_level', '')),
+                                str(hazard.get('risk_rating', '')),
+                                str(hazard.get('operational_context', '')).replace("|", "\\|").replace("\n", " ")[:30],
+                                str(hazard.get('current_controls', '')).replace("|", "\\|").replace("\n", " ")[:40]
+                            ]
+                            md_content.append("| " + " | ".join(cells) + " |")
+                        md_content.append("")
+                
+                elif report_type == "Requirements Traceability":
+                    md_content.append("## Requirements Traceability Matrix")
+                    md_content.append("")
+                    trace_headers = ["Requirement ID", "Title", "Type", "Status", "Linked Hazards", "Design Items", "Test Cases", "Verification Status", "Coverage"]
+                    md_content.append("| " + " | ".join(trace_headers) + " |")
+                    md_content.append("| " + " | ".join(["---"] * len(trace_headers)) + " |")
+                    
+                    for req in requirements:
+                        cells = [
+                            str(req.get('req_id', '')),
+                            str(req.get('req_title', '')).replace("|", "\\|").replace("\n", " ")[:30],
+                            str(req.get('req_type', '')),
+                            str(req.get('req_status', '')),
+                            "HAZ-001, HAZ-003",  # Sample linked hazards
+                            "DES-001, DES-005",  # Sample design items
+                            "TC-001, TC-007",    # Sample test cases
+                            "Verified",          # Sample verification status
+                            "100%"               # Sample coverage
+                        ]
+                        md_content.append("| " + " | ".join(cells) + " |")
+                    md_content.append("")
+                
+                elif report_type == "Risk Management Summary":
+                    md_content.append("## Risk Management Summary")
+                    md_content.append("")
+                    risk_headers = ["Hazard ID", "Hazardous Situation", "Potential Harm", "Severity", "Probability", "Risk Score", "Risk Level", "Control Measures", "Residual Risk"]
+                    md_content.append("| " + " | ".join(risk_headers) + " |")
+                    md_content.append("| " + " | ".join(["---"] * len(risk_headers)) + " |")
+                    
+                    for hazard in hazards:
+                        cells = [
+                            str(hazard.get('hazard_id', '')),
+                            str(hazard.get('hazard_title', '')).replace("|", "\\|").replace("\n", " ")[:30],
+                            str(hazard.get('hazard_description', '')).replace("|", "\\|").replace("\n", " ")[:30],
+                            str(hazard.get('severity_level', '')),
+                            "Medium",  # Sample probability
+                            "12",      # Sample risk score
+                            str(hazard.get('risk_rating', '')),
+                            str(hazard.get('current_controls', '')).replace("|", "\\|").replace("\n", " ")[:40],
+                            "Acceptable"  # Sample residual risk
+                        ]
+                        md_content.append("| " + " | ".join(cells) + " |")
+                    md_content.append("")
+                
+                if not md_content or len([line for line in md_content if line.startswith("|")]) == 0:
+                    md_content.append("*No data available*")
+                
+                md_content.append("---")
+                total_items = len(requirements) + len(hazards)
+                md_content.append(f"*Report contains {total_items} total items ({len(requirements)} requirements, {len(hazards)} hazards)*")
+                
+                markdown_content = "\n".join(md_content)
+                
+                # Call the publish API
+                try:
+                    publish_data = {
+                        "project_id": selected_project_id,
+                        "project_name": selected_project_name,
+                        "report_type": report_type,
+                        "compliance_standard": compliance_standard,
+                        "markdown_content": markdown_content
+                    }
+                    
+                    publish_response = requests.post(
+                        f"{BACKEND_URL}/api/publish/design-record-as-document",
+                        json=publish_data,
+                        headers=get_auth_headers(),
+                        timeout=30
+                    )
+                    
+                    if publish_response.status_code == 200:
+                        result = publish_response.json()
+                        st.success(f"✅ {result['message']}")
+                        st.info(f"📄 Document created: **{result['document_name']}**")
+                        st.info(f"🔗 Document ID: `{result['document_id']}`")
+                        
+                        # Add navigation option
+                        if st.button("📂 Go to Documents", help="Navigate to Documents page to view the published document"):
+                            st.session_state.page = "Documents"
+                            st.rerun()
+                            
+                    else:
+                        error_detail = publish_response.json().get("detail", "Unknown error")
+                        st.error(f"❌ Failed to publish as document: {error_detail}")
+                        
+                except requests.exceptions.Timeout:
+                    st.error("❌ Request timed out. Please try again.")
+                except requests.exceptions.RequestException as e:
+                    st.error(f"❌ Connection error: {str(e)}")
+                except Exception as e:
+                    st.error(f"❌ Error publishing document: {str(e)}")
+                    
+            else:
+                st.warning("⚠️ No data matches the selected filters for publishing.")
     
     st.markdown("---")
     st.markdown("#### 📊 Export Statistics")

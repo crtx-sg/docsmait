@@ -6,9 +6,13 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_
 from .database_config import get_db
 from .db_models import Document, DocumentComment, DocumentRevision, User, Project, ProjectMember
+from .email_service import EmailNotificationService
 
 class DocumentsServiceV2:
     """Simplified Document and Review Workflow Service"""
+    
+    def __init__(self):
+        self.email_service = EmailNotificationService()
     
     def create_document(self, name: str, document_type: str, content: str, 
                        project_id: str, user_id: int) -> Dict[str, Any]:
@@ -77,6 +81,18 @@ class DocumentsServiceV2:
             db.refresh(document)  # Refresh document to ensure relationships are loaded  
             db.refresh(doc_comment)  # Refresh comment to ensure user relationship is loaded
             
+            # Send email notification to reviewer
+            try:
+                self.email_service.send_review_notification(
+                    document_name=document.name,
+                    reviewer_user_id=reviewer_id,
+                    status="request_review",
+                    comments=comment
+                )
+            except Exception as e:
+                print(f"Failed to send review notification email: {e}")
+                # Don't fail the review submission if email fails
+            
             return {
                 "success": True,
                 "message": "Document submitted for review successfully"
@@ -128,6 +144,19 @@ class DocumentsServiceV2:
             
             db.add(doc_comment)
             db.commit()
+            
+            # Send email notification to document author about review decision
+            try:
+                self.email_service.send_review_notification(
+                    document_name=document.name,
+                    reviewer_user_id=document.created_by,  # Send to document author
+                    status=review_decision,
+                    comments=reviewer_comment,
+                    next_status=review_decision.replace('_', ' ').title()
+                )
+            except Exception as e:
+                print(f"Failed to send review decision notification email: {e}")
+                # Don't fail the review submission if email fails
             
             return {
                 "success": True,

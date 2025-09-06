@@ -170,6 +170,49 @@ graph LR
 - **RAG Implementation**: Retrieval-Augmented Generation for accurate responses
 - **Model Management**: Configurable AI model selection and parameters
 
+#### 2.4.3 Knowledge Base Chat Architecture
+
+The system now includes AI-powered document creation with Knowledge Base chat functionality integrated across multiple document workflows:
+
+```mermaid
+graph TB
+    subgraph "Document Creation Flow"
+        DC[Document Create] --> ChatToggle{Chat Mode?}
+        ChatToggle -->|Yes| ChatInterface[KB Chat Interface]
+        ChatToggle -->|No| PreviewMode[Live Preview Mode]
+    end
+    
+    subgraph "Document Editing Flow"
+        DE[Document Edit] --> EditChat[KB Chat with Context]
+        EditChat --> DocContext[Current Document Content]
+    end
+    
+    subgraph "Document Review Flow"  
+        DR[Document Review] --> ReviewChat[KB Chat for Review]
+        ReviewChat --> ReviewContext[Document Under Review]
+    end
+    
+    subgraph "KB Chat Processing"
+        ChatInterface --> QueryAPI[/kb/query_with_context API]
+        EditChat --> QueryAPI
+        ReviewChat --> QueryAPI
+        QueryAPI --> ContextEngine[Context Combination Engine]
+        ContextEngine --> VectorSearch[Qdrant Vector Search]
+        ContextEngine --> DocContext
+        ContextEngine --> ReviewContext
+        VectorSearch --> LLMPrompt[Enhanced LLM Prompt]
+        LLMPrompt --> OllamaLLM[Ollama LLM Processing]
+        OllamaLLM --> ChatResponse[Contextual Response]
+    end
+```
+
+**Key Features:**
+- **Context-Aware Chat**: Combines current document content with Knowledge Base search results
+- **Concurrent Editing**: Document content snapshot at query time allows continued editing during chat processing
+- **Session Management**: Independent chat histories per document with configurable limits
+- **Mutually Exclusive Modes**: Toggle between Live Preview and Chat modes for optimal UX
+- **Response Limits**: Configurable limits for chat history (default: 20 responses, 5000 chars per response)
+
 ## 3. Data Flow Architecture
 
 ### 3.1 Request Processing Flow

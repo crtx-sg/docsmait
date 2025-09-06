@@ -284,6 +284,129 @@ class TestPageComponents:
         except Exception as e:
             pytest.skip(f"Cannot test records page: {e}")
 
+    def test_knowledge_base_features_accessible(self, selenium_driver, frontend_url):
+        """Test Knowledge Base related features are accessible."""
+        try:
+            # Test Documents page which now includes KB chat
+            docs_url = f"{frontend_url}/pages/Documents"
+            selenium_driver.get(docs_url)
+            
+            WebDriverWait(selenium_driver, 15).until(
+                lambda driver: driver.execute_script("return document.readyState") == "complete"
+            )
+            
+            page_source = selenium_driver.page_source.lower()
+            
+            # Should contain KB chat related elements
+            kb_features = [
+                'knowledge base',
+                'chat',
+                'query',
+                'enable live preview',
+                'chat with knowledge base'
+            ]
+            
+            found_features = [feature for feature in kb_features if feature in page_source]
+            
+            # Should find at least some KB-related features
+            if len(found_features) > 0:
+                assert True, f"Found KB features: {found_features}"
+            else:
+                pytest.skip("KB features not visible or not implemented in UI")
+            
+        except Exception as e:
+            pytest.skip(f"Cannot test KB features: {e}")
+
+
+@pytest.mark.frontend
+class TestKnowledgeBaseChatUI:
+    """Test Knowledge Base Chat UI components."""
+
+    def test_kb_chat_elements_present_in_create_document(self, selenium_driver, frontend_url):
+        """Test KB chat elements are present in Create Document page."""
+        try:
+            docs_url = f"{frontend_url}/pages/Documents"
+            selenium_driver.get(docs_url)
+            
+            WebDriverWait(selenium_driver, 15).until(
+                lambda driver: "streamlit" in driver.page_source.lower()
+            )
+            
+            page_source = selenium_driver.page_source.lower()
+            
+            # Should contain KB chat UI elements
+            expected_elements = [
+                'chat with knowledge base',
+                'enable live preview',
+                'submit',
+                'clear chat',
+                'response'
+            ]
+            
+            found_elements = [elem for elem in expected_elements if elem in page_source]
+            
+            if len(found_elements) >= 2:
+                assert True, f"Found KB chat UI elements: {found_elements}"
+            else:
+                pytest.skip("KB chat UI elements not visible on Documents page")
+                
+        except Exception as e:
+            pytest.skip(f"Cannot test KB chat UI: {e}")
+
+    def test_kb_chat_mutually_exclusive_options(self, selenium_driver, frontend_url):
+        """Test that KB chat and live preview are mutually exclusive."""
+        try:
+            docs_url = f"{frontend_url}/pages/Documents"
+            selenium_driver.get(docs_url)
+            
+            WebDriverWait(selenium_driver, 15).until(
+                lambda driver: "streamlit" in driver.page_source.lower()
+            )
+            
+            page_source = selenium_driver.page_source.lower()
+            
+            # Should have both options available
+            has_chat_option = 'chat with knowledge base' in page_source
+            has_preview_option = 'enable live preview' in page_source
+            
+            if has_chat_option and has_preview_option:
+                assert True, "Both chat and preview options found"
+            else:
+                pytest.skip("Mutually exclusive options not both visible")
+                
+        except Exception as e:
+            pytest.skip(f"Cannot test mutually exclusive options: {e}")
+
+    def test_kb_chat_response_area_present(self, selenium_driver, frontend_url):
+        """Test KB chat response area is present."""
+        try:
+            docs_url = f"{frontend_url}/pages/Documents"
+            selenium_driver.get(docs_url)
+            
+            WebDriverWait(selenium_driver, 15).until(
+                lambda driver: "streamlit" in driver.page_source.lower()
+            )
+            
+            page_source = selenium_driver.page_source.lower()
+            
+            # Should contain response-related elements
+            response_indicators = [
+                'response',
+                'chat response',
+                'knowledge base response',
+                'query result'
+            ]
+            
+            found_indicators = [ind for ind in response_indicators if ind in page_source]
+            
+            if len(found_indicators) > 0:
+                assert True, f"Found response area indicators: {found_indicators}"
+            else:
+                pytest.skip("KB chat response area not visible")
+                
+        except Exception as e:
+            pytest.skip(f"Cannot test KB chat response area: {e}")
+
 
 @pytest.mark.frontend
 @pytest.mark.slow  

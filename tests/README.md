@@ -14,7 +14,7 @@ This test suite provides comprehensive automated testing for all Docsmait functi
 - **Authentication Testing**: Login, signup, token validation
 - **Database Operations**: CRUD operations, data integrity
 - **Frontend Integration**: UI components and workflows
-- **Knowledge Base**: AI/RAG functionality
+- **Knowledge Base**: AI/RAG functionality and KB chat integration
 - **Export Functions**: PDF generation and document export
 - **Performance Testing**: Load testing and response times
 - **Security Testing**: Access controls and data validation
@@ -83,6 +83,10 @@ tests/
 - Request/response validation
 - Error handling
 - Rate limiting
+- **NEW**: Knowledge Base chat endpoints (`/kb/query_with_context`)
+  - Document context integration
+  - AI/LLM query processing
+  - Response validation and error handling
 
 ### 2. Authentication Tests (`/auth/`)
 - User registration/login
@@ -101,6 +105,10 @@ tests/
 - User workflow testing
 - Browser compatibility
 - Responsive design
+- **NEW**: Knowledge Base chat UI components
+  - Chat interface availability and functionality
+  - Mutually exclusive Live Preview vs KB Chat modes
+  - Response area and interaction elements
 
 ### 5. Performance Tests (`/performance/`)
 - Load testing
@@ -118,6 +126,11 @@ tests/
 - End-to-end user workflows
 - Multi-service interactions
 - Data flow validation
+- **NEW**: Knowledge Base chat integration workflows
+  - Document creation with KB chat assistance
+  - Document review with KB guidance
+  - Multi-query chat sessions and error handling
+  - Performance testing of KB chat features
 
 ---
 

@@ -38,11 +38,21 @@ except ImportError as e:
 # Create database connection for host system
 def get_host_db_connection():
     """Create database connection that works from host system"""
-    # Use localhost with external port for host access
-    host_db_url = os.getenv(
-        "HOST_DATABASE_URL",
-        "postgresql://docsmait_user:docsmait_password@localhost:5433/docsmait"
-    )
+    # Import centralized configuration
+    try:
+        parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        sys.path.append(parent_dir)
+        from config.environments import DevelopmentConfig, DockerConfig
+        
+        # Try development config first (host system)
+        dev_config = DevelopmentConfig()
+        host_db_url = dev_config.database_url
+    except ImportError:
+        # Fallback for when centralized config is not available
+        host_db_url = os.getenv(
+            "HOST_DATABASE_URL",
+            "postgresql://docsmait_user:docsmait_password@localhost:5433/docsmait"
+        )
     
     try:
         engine = create_engine(host_db_url, echo=False)
@@ -50,7 +60,13 @@ def get_host_db_connection():
         return SessionLocal(), engine
     except Exception as e:
         # Fallback: try to connect via Docker network (if script runs inside container)
-        docker_db_url = "postgresql://docsmait_user:docsmait_password@docsmait_postgres:5432/docsmait"
+        try:
+            from config.environments import DockerConfig
+            docker_config = DockerConfig()
+            docker_db_url = docker_config.database_url
+        except ImportError:
+            docker_db_url = "postgresql://docsmait_user:docsmait_password@docsmait_postgres:5432/docsmait"
+        
         try:
             engine = create_engine(docker_db_url, echo=False)
             SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

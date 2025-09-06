@@ -4,7 +4,7 @@ import requests
 from datetime import datetime, date
 import pandas as pd
 from typing import List, Dict, Any
-from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers
+from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers, is_logged_in
 from config import BACKEND_URL, DATAFRAME_HEIGHT, EXPORT_FILENAME_FORMAT, MARKDOWN_TRUNCATE_LENGTH, KB_REQUEST_TIMEOUT
 
 require_auth()
@@ -493,9 +493,12 @@ This audit has been completed successfully. The audit covered the scope defined 
                         
                         if response.status_code == 200:
                             audit_result = response.json()
-                            st.success(f"✅ Audit created successfully! Audit Number: {audit_result['audit_number']}")
+                            st.success(f"✅ Audit created successfully! Audit Number: **{audit_result['audit_number']}**")
+                            st.info("📋 Your audit has been recorded and is now available in the 'View/Edit Existing' tab.")
                             st.balloons()
-                            # Clear form by rerunning the page
+                            # Clear form by rerunning the page after a brief delay
+                            import time
+                            time.sleep(2)
                             st.rerun()
                         else:
                             error_msg = response.text
@@ -794,7 +797,16 @@ with tab4:
         with col2:
             st.write("")  # Add spacing
         
-        if st.button(f"📥 Download Audit Report ({report_format})", type="primary", help=f"Download comprehensive audit report as {report_format}"):
+        # Create button columns for Download and Publish actions
+        button_col1, button_col2 = st.columns([1, 1])
+        
+        with button_col1:
+            download_clicked = st.button(f"📥 Download Audit Report ({report_format})", type="primary", help=f"Download comprehensive audit report as {report_format}")
+        
+        with button_col2:
+            publish_clicked = st.button("📄 Publish as Document", type="secondary", help="Publish this audit report as a Document for review workflow")
+        
+        if download_clicked:
             # Get findings and corrective actions for the selected audit
             findings = get_findings(selected_audit["id"])
             
@@ -1011,5 +1023,151 @@ with tab4:
                 st.success(f"✅ {report_format} audit report ready! Contains {findings_count} findings and {actions_count} corrective actions.")
             else:
                 st.error("❌ No audit data available for download.")
+        
+        if publish_clicked:
+            # Get findings and corrective actions for the selected audit
+            findings = get_findings(selected_audit["id"])
+            
+            # Get project information
+            project_id = selected_audit.get("project_id", "")
+            project_name = "Unknown Project"
+            
+            # Try to get the project name
+            try:
+                import requests
+                if is_logged_in():
+                    project_response = requests.get(
+                        f"{BACKEND_URL}/projects/{project_id}",
+                        headers=get_auth_headers(),
+                        timeout=10
+                    )
+                    if project_response.status_code == 200:
+                        project_data = project_response.json()
+                        project_name = project_data.get("name", "Unknown Project")
+            except:
+                pass  # Use default project name
+            
+            if findings:
+                # Create markdown content for audit report
+                md_content = []
+                md_content.append(f"# Audit Report - {selected_audit['title']}")
+                md_content.append("")
+                md_content.append(f"**Audit Number:** {selected_audit['audit_number']}")
+                md_content.append(f"**Audit Type:** {selected_audit['audit_type'].title()}")
+                md_content.append(f"**Compliance Standard:** {selected_audit['compliance_standard']}")
+                md_content.append(f"**Status:** {selected_audit.get('status', 'Unknown')}")
+                md_content.append(f"**Scheduled Date:** {selected_audit.get('scheduled_date', 'Not set')}")
+                md_content.append(f"**Lead Auditor:** {selected_audit.get('lead_auditor', 'Not assigned')}")
+                md_content.append("")
+                
+                # Add findings section
+                md_content.append("## Audit Findings")
+                md_content.append("")
+                md_content.append("| Finding ID | Type | Severity | Description | Evidence | Status |")
+                md_content.append("|------------|------|----------|-------------|----------|--------|")
+                
+                for finding in findings:
+                    finding_id = finding.get('finding_number', 'N/A')
+                    finding_type = finding.get('finding_type', 'N/A')
+                    severity = finding.get('severity_level', 'N/A')
+                    description = (finding.get('description') or 'No description').replace("|", "\\|").replace("\n", " ")[:100]
+                    evidence = (finding.get('evidence') or 'No evidence').replace("|", "\\|").replace("\n", " ")[:50]
+                    status = finding.get('status', 'N/A')
+                    
+                    if len(description) > 97:
+                        description = description[:97] + "..."
+                    if len(evidence) > 47:
+                        evidence = evidence[:47] + "..."
+                    
+                    md_content.append(f"| {finding_id} | {finding_type} | {severity} | {description} | {evidence} | {status} |")
+                
+                md_content.append("")
+                
+                # Get corrective actions
+                actions = []
+                try:
+                    actions_response = requests.get(
+                        f"{BACKEND_URL}/corrective_actions/audit/{selected_audit['id']}",
+                        headers=get_auth_headers(),
+                        timeout=10
+                    )
+                    if actions_response.status_code == 200:
+                        actions = actions_response.json()
+                except:
+                    pass  # Continue without actions
+                
+                # Add corrective actions section
+                md_content.append("## Corrective Actions")
+                md_content.append("")
+                
+                if actions:
+                    md_content.append("| Action ID | Finding | Description | Assigned To | Due Date | Status |")
+                    md_content.append("|-----------|---------|-------------|-------------|----------|--------|")
+                    
+                    for action in actions:
+                        action_id = action.get('action_number', 'N/A')
+                        finding_ref = action.get('finding_id', 'N/A')
+                        description = action.get('description', 'No description').replace("|", "\\|").replace("\n", " ")[:100]
+                        assigned_to = action.get('assigned_to', 'Unassigned')
+                        due_date = action.get('due_date', 'Not set')
+                        status = action.get('status', 'N/A')
+                        
+                        if len(description) > 97:
+                            description = description[:97] + "..."
+                        
+                        md_content.append(f"| {action_id} | {finding_ref} | {description} | {assigned_to} | {due_date} | {status} |")
+                else:
+                    md_content.append("*No corrective actions defined for this audit.*")
+                
+                md_content.append("")
+                md_content.append("---")
+                md_content.append(f"*Report contains {len(findings)} findings and {len(actions)} corrective actions*")
+                
+                markdown_content = "\n".join(md_content)
+                
+                # Call the publish API
+                try:
+                    publish_data = {
+                        "project_id": project_id,
+                        "project_name": project_name,
+                        "audit_id": selected_audit["id"],
+                        "audit_title": selected_audit["title"],
+                        "markdown_content": markdown_content,
+                        "findings_count": len(findings),
+                        "actions_count": len(actions)
+                    }
+                    
+                    publish_response = requests.post(
+                        f"{BACKEND_URL}/api/publish/audit-as-document",
+                        json=publish_data,
+                        headers=get_auth_headers(),
+                        timeout=30
+                    )
+                    
+                    if publish_response.status_code == 200:
+                        result = publish_response.json()
+                        st.success(f"✅ {result['message']}")
+                        st.info(f"📄 Document created: **{result['document_name']}**")
+                        st.info(f"🔗 Document ID: `{result['document_id']}`")
+                        
+                        # Add navigation option
+                        if st.button("📂 Go to Documents", help="Navigate to Documents page to view the published document"):
+                            st.session_state.page = "Documents"
+                            st.rerun()
+                            
+                    else:
+                        error_detail = publish_response.json().get("detail", "Unknown error")
+                        st.error(f"❌ Failed to publish as document: {error_detail}")
+                        
+                except requests.exceptions.Timeout:
+                    st.error("❌ Request timed out. Please try again.")
+                except requests.exceptions.RequestException as e:
+                    st.error(f"❌ Connection error: {str(e)}")
+                except Exception as e:
+                    st.error(f"❌ Error publishing document: {str(e)}")
+                    
+            else:
+                st.warning("⚠️ No audit findings available for publishing.")
+                
     else:
         st.info("No audits available for reporting.")

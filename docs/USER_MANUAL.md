@@ -726,6 +726,7 @@ For organizations with existing template libraries:
 Documents are created from templates and managed through their entire lifecycle.
 
 #### Document Creation
+
 1. **From Templates**:
    - Select approved template
    - Fill in template variables
@@ -736,6 +737,89 @@ Documents are created from templates and managed through their entire lifecycle.
    - Create documents without templates
    - Use rich markdown editor
    - Add custom metadata
+
+#### AI-Powered Document Creation with Knowledge Base Chat
+
+The system now includes AI-powered document creation with contextual Knowledge Base chat functionality across three key document workflows:
+
+##### Create Document with AI Chat
+
+When creating new documents, you can choose between two modes:
+
+**Live Preview Mode** (Default):
+- Real-time HTML preview alongside markdown editor
+- Traditional document editing experience
+- Immediate visual feedback of formatting
+
+**Knowledge Base Chat Mode**:
+- AI-powered chat interface for document assistance
+- Query the Knowledge Base about your document content
+- Get contextual suggestions and information
+- Chat history preserved during document creation session
+
+**How to Use KB Chat in Document Creation:**
+1. Navigate to **Documents → Create Document**
+2. Select **💬 Chat with Knowledge Base** checkbox (mutually exclusive with Live Preview)
+3. Use the chat interface at the bottom:
+   - Enter queries in the text area
+   - Click **🚀 Submit** to get AI responses
+   - View chat history with timestamp and sources
+   - Clear chat history with **🗑️ Clear Chat** button
+4. Continue editing your document while referencing chat responses
+5. Submit the document when complete using **🚀 Create Document**
+
+##### Document Editing with AI Chat
+
+When editing existing documents, the AI chat provides contextual assistance:
+
+**Features:**
+- **Context-Aware Chat**: AI considers your current document content when responding
+- **Concurrent Editing**: Continue editing while AI processes your queries
+- **Independent Chat Sessions**: Each document has its own chat history
+- **Content Snapshot**: AI references document content at the time of query
+
+**How to Use:**
+1. Navigate to **Documents → My Documents**
+2. Select a document to edit
+3. Toggle **💬 Chat with Knowledge Base** (alternative to **👁️ Enable Live Preview**)
+4. Use the chat interface while editing your document
+5. AI responses include both Knowledge Base information and context from your current document
+
+##### Document Review with AI Chat
+
+During document review process, reviewers can use AI chat for assistance:
+
+**Features:**
+- **Review-Specific Chat**: AI helps reviewers understand document context
+- **Read-Only Document Context**: AI references the document under review
+- **Independent Review Sessions**: Each review session has separate chat history
+
+**How to Use:**
+1. Navigate to **Documents → My Reviews**
+2. Select a document for review
+3. Enable **💬 Chat with Knowledge Base** mode
+4. Ask questions about the document content, compliance requirements, or related information
+5. Use AI insights to provide more informed review feedback
+
+##### Chat Features and Limitations
+
+**Response Management:**
+- **Session Limits**: Maximum 20 chat responses per document session (configurable)
+- **Response Length**: Individual responses limited to 5,000 characters (configurable)
+- **Memory Management**: Oldest responses automatically removed when limits exceeded
+- **Usage Indicator**: Current usage displayed as "📊 Chat Session: X/20 responses"
+
+**Error Handling:**
+- **Empty Query Protection**: Warning displayed for empty queries
+- **Timeout Handling**: 30-second timeout with clear error messages
+- **Service Recovery**: Graceful handling of Knowledge Base service issues
+
+**Best Practices:**
+- **Specific Queries**: Ask specific questions for better AI responses
+- **Context Building**: Reference specific sections of your document in queries  
+- **Review Sources**: Check the sources provided with AI responses
+- **Iterate**: Use follow-up questions to refine information
+- **Save Important Information**: Copy important AI responses to your document as the chat history has limits
 
 #### Document Workflow
 1. **Draft State**: Initial document creation

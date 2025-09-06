@@ -9,6 +9,7 @@ from .projects_service_pg import projects_service
 from .templates_service_pg import templates_service
 from .documents_service import documents_service
 from .documents_service_v2 import documents_service_v2
+from .publish_document_service import PublishDocumentService
 from .ai_service import ai_service
 from .ai_config import ai_config
 from .audit_service import AuditService
@@ -29,6 +30,7 @@ app = FastAPI(title="Docsmait API")
 # projects_service imported from projects_service_pg module
 # templates_service imported from templates_service_pg module
 # documents_service imported from documents_service module
+publish_document_service = PublishDocumentService()
 
 @app.on_event("startup")
 async def startup_event():
@@ -202,6 +204,17 @@ def chat_with_kb(message: models.ChatMessage, user_id: int = Depends(auth.verify
     result = kb_service.query_knowledge_base(message.message, message.collection_name)
     return result
 
+@app.post("/kb/query_with_context")
+def query_kb_with_context(query_data: models.KnowledgeBaseQueryWithContext, user_id: int = Depends(auth.verify_token)):
+    """Query Knowledge Base with document context for AI-assisted document creation"""
+    result = kb_service.query_knowledge_base_with_context(
+        query=query_data.query,
+        document_context=query_data.document_context,
+        collection_name=query_data.collection_name,
+        max_results=query_data.max_results
+    )
+    return result
+
 @app.get("/kb/stats", response_model=models.KBStats)
 def get_kb_statistics(user_id: int = Depends(auth.verify_token)):
     """Get Knowledge Base statistics"""
@@ -214,7 +227,7 @@ def reset_knowledge_base(
 ):
     """Reset Knowledge Base (admin only)"""
     user = user_service.get_user_by_id(user_id)
-    if not user or not user.is_admin:
+    if not user or not (user.is_admin or user.is_super_admin):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin privileges required"
@@ -275,7 +288,7 @@ def delete_collection(
 ):
     """Delete a collection"""
     user = user_service.get_user_by_id(user_id)
-    if not user or not user.is_admin:
+    if not user or not (user.is_admin or user.is_super_admin):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin privileges required to delete collections"
@@ -3628,14 +3641,11 @@ def generate_document_pdf(
 ):
     """Generate PDF from document content"""
     from .db_models import Document, ProjectMember, User
-    from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
     import io
     import markdown
     from datetime import datetime
     from fastapi.responses import Response
+    import base64
     
     try:
         # Find the document
@@ -3663,73 +3673,114 @@ def generate_document_pdf(
                     detail="Access denied to this document"
                 )
         
-        # Generate PDF
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4)
-        
-        # Styles
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=18,
-            spaceAfter=30,
-        )
-        
-        # Content
-        story = []
-        
-        # Title
-        story.append(Paragraph(document.name, title_style))
-        story.append(Spacer(1, 12))
-        
-        # Get author information
+        # Get author information first
         author_user = db.query(User).filter(User.id == document.created_by).first()
         author_name = author_user.username if author_user else 'Unknown'
         
-        # Document metadata
-        meta_info = f"""
-        <b>Document Type:</b> {document.document_type.replace('_', ' ').title()}<br/>
-        <b>Author:</b> {author_name}<br/>
-        <b>Status:</b> {getattr(document, 'document_state', getattr(document, 'status', 'Unknown')).replace('_', ' ').title()}<br/>
-        <b>Created:</b> {document.created_at.strftime('%Y-%m-%d %H:%M:%S') if document.created_at else 'Unknown'}<br/>
-        <b>Last Updated:</b> {document.updated_at.strftime('%Y-%m-%d %H:%M:%S') if document.updated_at else 'Unknown'}<br/>
-        """
-        
-        story.append(Paragraph(meta_info, styles['Normal']))
-        story.append(Spacer(1, 20))
-        
-        # Document content
-        # Convert markdown to HTML for better PDF rendering
-        content_html = markdown.markdown(document.content, extensions=['tables', 'fenced_code'])
-        
-        # Split content by paragraphs and add to PDF
-        paragraphs = content_html.split('\n')
-        for para in paragraphs:
-            if para.strip():
-                try:
-                    story.append(Paragraph(para, styles['Normal']))
+        # Try ReportLab for PDF generation
+        try:
+            from reportlab.lib.pagesizes import letter
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            import re
+            
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=letter)
+            styles = getSampleStyleSheet()
+            story = []
+            
+            # Title
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=16,
+                spaceAfter=30,
+            )
+            # Escape document name for ReportLab
+            escaped_name = document.name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            story.append(Paragraph(escaped_name, title_style))
+            
+            # Metadata
+            doc_type = document.document_type.replace('_', ' ').title()
+            doc_state = getattr(document, 'document_state', getattr(document, 'status', 'Unknown')).replace('_', ' ').title()
+            created_str = document.created_at.strftime('%Y-%m-%d %H:%M:%S') if document.created_at else 'Unknown'
+            updated_str = document.updated_at.strftime('%Y-%m-%d %H:%M:%S') if document.updated_at else 'Unknown'
+            
+            story.append(Paragraph(f"<b>Document Type:</b> {doc_type}", styles['Normal']))
+            story.append(Paragraph(f"<b>Author:</b> {author_name}", styles['Normal']))
+            story.append(Paragraph(f"<b>Status:</b> {doc_state}", styles['Normal']))
+            story.append(Paragraph(f"<b>Created:</b> {created_str}", styles['Normal']))
+            story.append(Paragraph(f"<b>Last Updated:</b> {updated_str}", styles['Normal']))
+            story.append(Spacer(1, 20))
+            
+            # Content - simple processing without markdown for now
+            content_lines = document.content.split('\n')
+            for line in content_lines:
+                if line.strip():
+                    # Basic escape for ReportLab
+                    safe_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    # Handle basic markdown formatting
+                    safe_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', safe_line)  # Bold
+                    safe_line = re.sub(r'\*(.*?)\*', r'<i>\1</i>', safe_line)      # Italic
+                    
+                    if line.startswith('# '):
+                        story.append(Paragraph(safe_line[2:], styles['Heading1']))
+                    elif line.startswith('## '):
+                        story.append(Paragraph(safe_line[3:], styles['Heading2']))
+                    elif line.startswith('### '):
+                        story.append(Paragraph(safe_line[4:], styles['Heading3']))
+                    else:
+                        story.append(Paragraph(safe_line, styles['Normal']))
                     story.append(Spacer(1, 6))
-                except Exception as e:
-                    # If paragraph fails, add as plain text
-                    story.append(Paragraph(para.replace('<', '&lt;').replace('>', '&gt;'), styles['Normal']))
-                    story.append(Spacer(1, 6))
-        
-        # Build PDF
-        doc.build(story)
-        
-        # Return PDF as response
-        buffer.seek(0)
-        pdf_content = buffer.getvalue()
-        buffer.close()
-        
-        return Response(
-            content=pdf_content,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"inline; filename={document.name.replace(' ', '_')}.pdf"
-            }
-        )
+            
+            # Build PDF
+            doc.build(story)
+            buffer.seek(0)
+            pdf_content = buffer.getvalue()
+            buffer.close()
+            
+            return Response(
+                content=pdf_content,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"inline; filename={document.name.replace(' ', '_')}.pdf"
+                }
+            )
+            
+        except ImportError:
+            # Fallback to HTML if ReportLab not available
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>{document.name}</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }}
+                    table {{ border-collapse: collapse; width: 100%; }}
+                    th, td {{ border: 1px solid #333; padding: 8px; text-align: left; }}
+                    th {{ background-color: #f2f2f2; }}
+                </style>
+            </head>
+            <body>
+                <h1>{document.name}</h1>
+                <p><strong>Author:</strong> {author_name}</p>
+                <p><strong>Status:</strong> {getattr(document, 'document_state', getattr(document, 'status', 'Unknown'))}</p>
+                <hr>
+                {markdown.markdown(document.content, extensions=['tables'])}
+            </body>
+            </html>
+            """
+            
+            # Return HTML response as fallback
+            return Response(
+                content=html_content.encode('utf-8'),
+                media_type="text/html",
+                headers={
+                    "Content-Disposition": f"inline; filename={document.name.replace(' ', '_')}.html"
+                }
+            )
         
     except HTTPException:
         raise
@@ -3738,3 +3789,70 @@ def generate_document_pdf(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate PDF: {str(e)}"
         )
+
+
+
+# === PUBLISH AS DOCUMENT ENDPOINTS ===
+
+@app.post("/api/publish/design-record-as-document")
+def publish_design_record_as_document(
+    request: models.PublishDesignRecordRequest,
+    user_id: int = Depends(auth.verify_token)
+):
+    """Publish Design Record report as a Document"""
+    result = publish_document_service.publish_design_record_as_document(
+        project_id=request.project_id,
+        project_name=request.project_name,
+        report_type=request.report_type,
+        compliance_standard=request.compliance_standard,
+        markdown_content=request.markdown_content,
+        user_id=user_id
+    )
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    return result
+
+
+@app.post("/api/publish/issues-as-document")
+def publish_issues_as_document(
+    request: models.PublishIssuesRequest,
+    user_id: int = Depends(auth.verify_token)
+):
+    """Publish Issues report as a Document"""
+    result = publish_document_service.publish_issues_as_document(
+        project_id=request.project_id,
+        project_name=request.project_name,
+        markdown_content=request.markdown_content,
+        user_id=user_id,
+        total_issues=request.total_issues
+    )
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    return result
+
+
+@app.post("/api/publish/audit-as-document")
+def publish_audit_as_document(
+    request: models.PublishAuditRequest,
+    user_id: int = Depends(auth.verify_token)
+):
+    """Publish Audit report as a Document"""
+    result = publish_document_service.publish_audit_as_document(
+        project_id=request.project_id,
+        project_name=request.project_name,
+        audit_id=request.audit_id,
+        audit_title=request.audit_title,
+        markdown_content=request.markdown_content,
+        user_id=user_id,
+        findings_count=request.findings_count,
+        actions_count=request.actions_count
+    )
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    return result
