@@ -8,6 +8,9 @@ from streamlit_ace import st_ace
 from auth_utils import require_auth, setup_authenticated_sidebar, get_auth_headers
 from config import BACKEND_URL
 
+# Review status constants (matching Document Reviews)
+REVIEW_STATUS_OPTIONS = ["draft", "review_request", "needs_update", "approved"]
+
 require_auth()
 
 st.set_page_config(page_title="Code Review Management", page_icon="💻", layout="wide")
@@ -37,6 +40,30 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
     }
+    .success-metric {
+        background-color: #f8f9fa;
+        border: 1px solid #28a745;
+        border-radius: 0.25rem;
+        padding: 0.5rem;
+        margin: 0.5rem 0;
+        color: #000000;
+    }
+    .warning-metric {
+        background-color: #f8f9fa;
+        border: 1px solid #ffc107;
+        border-radius: 0.25rem;
+        padding: 0.5rem;
+        margin: 0.5rem 0;
+        color: #000000;
+    }
+    .danger-metric {
+        background-color: #f8f9fa;
+        border: 1px solid #dc3545;
+        border-radius: 0.25rem;
+        padding: 0.5rem;
+        margin: 0.5rem 0;
+        color: #000000;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -44,226 +71,372 @@ st.title("💻 Code Review Management")
 
 setup_authenticated_sidebar()
 
+# === API FUNCTIONS ===
+
 def get_projects():
     """Get all projects for dropdown"""
     try:
         headers = get_auth_headers()
         response = requests.get(f"{BACKEND_URL}/projects", headers=headers)
         if response.status_code == 200:
-            projects = response.json()
-            return projects
-        else:
-            st.error(f"Failed to fetch projects: {response.status_code} - {response.text}")
-            return []
-    except Exception as e:
-        st.error(f"Error fetching projects: {e}")
+            return response.json()
+        return []
+    except:
         return []
 
 def get_users():
-    """Get all users for team selection"""
+    """Get all registered users for reviewer selection"""
     try:
-        response = requests.get(f"{BACKEND_URL}/users", headers=get_auth_headers())
+        headers = get_auth_headers()
+        response = requests.get(f"{BACKEND_URL}/users", headers=headers)
         if response.status_code == 200:
             return response.json()
         return []
     except:
         return []
 
-def get_repositories(project_id=None):
-    """Get repositories with optional filtering"""
+def get_repositories():
+    """Get all repositories"""
     try:
-        params = {}
-        if project_id:
-            params["project_id"] = project_id
-        
-        response = requests.get(f"{BACKEND_URL}/repositories", headers=get_auth_headers(), params=params)
+        response = requests.get(f"{BACKEND_URL}/repositories", headers=get_auth_headers())
         if response.status_code == 200:
             return response.json()
         return []
-    except:
+    except Exception as e:
+        st.error(f"Error fetching repositories: {str(e)}")
         return []
 
-def get_pull_requests(repository_id=None, status=None):
-    """Get pull requests with optional filtering"""
+def create_repository(repo_data):
+    """Create a new repository"""
     try:
-        params = {}
-        if repository_id:
-            params["repository_id"] = repository_id
-        if status:
-            params["status"] = status
-        
-        response = requests.get(f"{BACKEND_URL}/pull-requests", headers=get_auth_headers(), params=params)
+        response = requests.post(f"{BACKEND_URL}/repositories", json=repo_data, headers=get_auth_headers())
+        return response.status_code == 200
+    except Exception as e:
+        st.error(f"Error creating repository: {str(e)}")
+        return False
+
+def delete_repository(repo_id):
+    """Delete a repository"""
+    try:
+        response = requests.delete(f"{BACKEND_URL}/repositories/{repo_id}", headers=get_auth_headers())
+        return response.status_code == 200
+    except Exception as e:
+        st.error(f"Error deleting repository: {str(e)}")
+        return False
+
+def validate_git_url(git_url):
+    """Validate Git repository URL"""
+    try:
+        data = {"git_url": git_url}
+        response = requests.post(f"{BACKEND_URL}/repositories/validate-url", data=data, headers=get_auth_headers())
+        if response.status_code == 200:
+            return response.json()
+        return {"valid": False, "message": "Validation failed"}
+    except Exception as e:
+        return {"valid": False, "message": f"Error: {str(e)}"}
+
+def get_pull_requests(repository_id=None):
+    """Get pull requests"""
+    try:
+        params = {"repository_id": repository_id} if repository_id else {}
+        response = requests.get(f"{BACKEND_URL}/pull-requests", params=params, headers=get_auth_headers())
         if response.status_code == 200:
             return response.json()
         return []
-    except:
+    except Exception as e:
+        st.error(f"Error fetching pull requests: {str(e)}")
         return []
+
+def create_pull_request(pr_data):
+    """Create a pull request"""
+    try:
+        response = requests.post(f"{BACKEND_URL}/pull-requests", json=pr_data, headers=get_auth_headers())
+        return response.status_code == 200, response.json() if response.status_code == 200 else None
+    except Exception as e:
+        st.error(f"Error creating pull request: {str(e)}")
+        return False, None
+
+def get_code_reviews(pr_id=None):
+    """Get code reviews"""
+    try:
+        params = {"pr_id": pr_id} if pr_id else {}
+        response = requests.get(f"{BACKEND_URL}/code-reviews", params=params, headers=get_auth_headers())
+        if response.status_code == 200:
+            return response.json()
+        return []
+    except Exception as e:
+        st.error(f"Error fetching reviews: {str(e)}")
+        return []
+
+def create_code_review(review_data):
+    """Create a code review"""
+    try:
+        response = requests.post(f"{BACKEND_URL}/code-reviews", json=review_data, headers=get_auth_headers())
+        return response.status_code == 200, response.json() if response.status_code == 200 else None
+    except Exception as e:
+        st.error(f"Error creating review: {str(e)}")
+        return False, None
+
+def update_code_review(review_id, review_data):
+    """Update a code review"""
+    try:
+        response = requests.put(f"{BACKEND_URL}/code-reviews/{review_id}", json=review_data, headers=get_auth_headers())
+        return response.status_code == 200, response.json() if response.status_code == 200 else None
+    except Exception as e:
+        st.error(f"Error updating review: {str(e)}")
+        return False, None
 
 def get_pr_files(pr_id):
-    """Get files changed in a pull request"""
+    """Get pull request files"""
     try:
         response = requests.get(f"{BACKEND_URL}/pull-requests/{pr_id}/files", headers=get_auth_headers())
         if response.status_code == 200:
             return response.json()
         return []
-    except:
+    except Exception as e:
+        st.error(f"Error fetching PR files: {str(e)}")
         return []
 
-def get_code_reviews(pr_id=None):
-    """Get code reviews for a PR"""
+def trigger_automated_review(pr_id):
+    """Trigger automated AI code review"""
     try:
-        params = {}
-        if pr_id:
-            params["pr_id"] = pr_id
-        
-        response = requests.get(f"{BACKEND_URL}/code-reviews", headers=get_auth_headers(), params=params)
+        response = requests.post(f"{BACKEND_URL}/pull-requests/{pr_id}/automated-review", headers=get_auth_headers())
         if response.status_code == 200:
             return response.json()
-        return []
-    except:
-        return []
-
-def get_pr_diff(pr_id):
-    """Get the diff content for a pull request"""
-    try:
-        response = requests.get(f"{BACKEND_URL}/pull-requests/{pr_id}/diff", headers=get_auth_headers())
-        if response.status_code == 200:
-            return response.json()
-        return None
-    except:
-        return None
-
-def format_diff_content(diff_data):
-    """Format diff data for display in ace editor"""
-    if not diff_data:
-        return "No diff data available"
-    
-    diff_text = ""
-    for file_diff in diff_data.get('files', []):
-        diff_text += f"--- a/{file_diff['file_path']}\n"
-        diff_text += f"+++ b/{file_diff['file_path']}\n"
-        diff_text += file_diff.get('diff_content', '') + "\n\n"
-    
-    return diff_text
-
-def process_diff_for_display(diff_content):
-    """Process diff content for better visualization"""
-    if not diff_content:
-        return ""
-    
-    lines = diff_content.split('\n')
-    processed_lines = []
-    
-    for line in lines:
-        # Add visual indicators for better readability
-        if line.startswith('+++') or line.startswith('---'):
-            processed_lines.append(f"📁 {line}")
-        elif line.startswith('@@'):
-            processed_lines.append(f"📍 {line}")
-        elif line.startswith('+') and not line.startswith('+++'):
-            processed_lines.append(f"➕ {line}")
-        elif line.startswith('-') and not line.startswith('---'):
-            processed_lines.append(f"➖ {line}")
-        elif line.startswith('diff --git'):
-            processed_lines.append(f"🔄 {line}")
         else:
-            processed_lines.append(f"   {line}")
-    
-    return '\n'.join(processed_lines)
-
-def calculate_diff_stats(diff_content):
-    """Calculate statistics from diff content"""
-    if not diff_content:
+            st.error(f"Failed to trigger automated review: {response.status_code}")
+            return None
+    except Exception as e:
+        st.error(f"Error triggering automated review: {str(e)}")
         return None
-    
-    lines = diff_content.split('\n')
-    files = 0
-    additions = 0
-    deletions = 0
-    
-    for line in lines:
-        if line.startswith('diff --git'):
-            files += 1
-        elif line.startswith('+') and not line.startswith('+++'):
-            additions += 1
-        elif line.startswith('-') and not line.startswith('---'):
-            deletions += 1
-    
-    return {
-        'files': files,
-        'additions': additions,
-        'deletions': deletions
-    }
 
-# Main tab navigation
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Code Dashboard", "📁 Repositories", "🔀 Pull Requests", "👁️ Reviews"])
+def get_pr_analysis(pr_id):
+    """Get AI analysis for a pull request"""
+    try:
+        response = requests.get(f"{BACKEND_URL}/pull-requests/{pr_id}/analysis", headers=get_auth_headers())
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except Exception as e:
+        st.error(f"Error fetching analysis: {str(e)}")
+        return None
 
-with tab1:
+# === UI HELPER FUNCTIONS ===
+
+def display_repositories_dataframe(repositories):
+    """Display repositories as an interactive dataframe"""
+    if not repositories:
+        st.info("No repositories found.")
+        return None, None
     
-    # Filters
-    col1, col2 = st.columns(2)
+    # Create DataFrame
+    repo_data = []
+    for repo in repositories:
+        repo_data.append({
+            "ID": repo["id"],
+            "Name": repo["name"],
+            "Project": repo.get("project_name", "N/A"),
+            "Git URL": repo.get("git_url", "N/A"),
+            "Default Branch": repo.get("default_branch", "main"),
+            "Created": repo.get("created_at", "N/A")[:10] if repo.get("created_at") else "N/A"
+        })
+    
+    df = pd.DataFrame(repo_data)
+    
+    # Display with selection
+    selected_indices = st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="repositories_dataframe"
+    )
+    
+    selected_repo = None
+    if selected_indices and len(selected_indices.selection.rows) > 0:
+        selected_idx = selected_indices.selection.rows[0]
+        selected_repo = repositories[selected_idx]
+    
+    return selected_repo, selected_indices
+
+def display_pull_requests_dataframe(pull_requests):
+    """Display pull requests as an interactive dataframe"""
+    if not pull_requests:
+        st.info("No pull requests found.")
+        return None, None
+    
+    # Create DataFrame
+    pr_data = []
+    for pr in pull_requests:
+        pr_data.append({
+            "ID": pr["id"],
+            "PR #": pr["pr_number"],
+            "Title": pr["title"],
+            "Author": pr.get("author_name", "N/A"),
+            "Status": pr["status"],
+            "Source → Target": f"{pr.get('source_branch', 'N/A')} → {pr.get('target_branch', 'N/A')}",
+            "Files": pr.get("files_changed_count", 0),
+            "Changes": f"+{pr.get('additions', 0)} -{pr.get('deletions', 0)}",
+            "Created": pr.get("created_at", "N/A")[:10] if pr.get("created_at") else "N/A"
+        })
+    
+    df = pd.DataFrame(pr_data)
+    
+    # Display with selection
+    selected_indices = st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="pull_requests_dataframe"
+    )
+    
+    selected_pr = None
+    if selected_indices and len(selected_indices.selection.rows) > 0:
+        selected_idx = selected_indices.selection.rows[0]
+        selected_pr = pull_requests[selected_idx]
+    
+    return selected_pr, selected_indices
+
+def display_reviews_dataframe(reviews):
+    """Display reviews as an interactive dataframe"""
+    if not reviews:
+        st.info("No reviews found.")
+        return None, None
+    
+    # Create DataFrame
+    review_data = []
+    for review in reviews:
+        review_data.append({
+            "ID": review["id"],
+            "Reviewer": review.get("reviewer_name", "N/A"),
+            "Status": review["status"],
+            "Summary": review.get("summary_comment", "")[:50] + "..." if len(review.get("summary_comment", "")) > 50 else review.get("summary_comment", ""),
+            "Created": review.get("created_at", "N/A")[:10] if review.get("created_at") else "N/A"
+        })
+    
+    df = pd.DataFrame(review_data)
+    
+    # Display with selection
+    selected_indices = st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="reviews_dataframe"
+    )
+    
+    selected_review = None
+    if selected_indices and len(selected_indices.selection.rows) > 0:
+        selected_idx = selected_indices.selection.rows[0]
+        selected_review = reviews[selected_idx]
+    
+    return selected_review, selected_indices
+
+def display_success_metrics(analysis_results):
+    """Display success metrics for AI reviews"""
+    if not analysis_results:
+        return
+    
+    summary = analysis_results.get('summary', {})
+    
+    st.markdown("### 📊 Code Quality Metrics")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
     with col1:
-        projects = get_projects()
-        project_options = ["All Projects"] + [p["name"] for p in projects]
-        selected_project = st.selectbox("Filter by Project", project_options)
-        project_id = None
-        if selected_project != "All Projects":
-            project_id = next((p["id"] for p in projects if p["name"] == selected_project), None)
+        security_count = summary.get('security_issues_count', 0)
+        security_class = "success-metric" if security_count == 0 else "danger-metric" if security_count > 3 else "warning-metric"
+        st.markdown(f'<div class="{security_class}"><strong>Security Issues</strong><br/>{security_count}</div>', unsafe_allow_html=True)
     
     with col2:
-        status_filter = st.selectbox("Filter by PR Status", ["All", "draft", "open", "review_requested", "changes_requested", "approved", "merged", "closed"])
-        status = None if status_filter == "All" else status_filter
+        performance_count = summary.get('performance_issues_count', 0)
+        performance_class = "success-metric" if performance_count <= 2 else "warning-metric"
+        st.markdown(f'<div class="{performance_class}"><strong>Performance Issues</strong><br/>{performance_count}</div>', unsafe_allow_html=True)
     
-    # Get and display repositories and PRs
-    repositories = get_repositories(project_id)
+    with col3:
+        quality_count = summary.get('code_quality_issues_count', 0)
+        quality_class = "success-metric" if quality_count <= 5 else "warning-metric"
+        st.markdown(f'<div class="{quality_class}"><strong>Quality Issues</strong><br/>{quality_count}</div>', unsafe_allow_html=True)
     
-    if repositories:
-        # Summary metrics
-        total_repos = len(repositories)
-        total_prs = sum(repo["pull_requests_count"] for repo in repositories)
-        open_prs = sum(repo["open_prs_count"] for repo in repositories)
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Total Repositories", total_repos)
-        with col2:
-            st.metric("Total Pull Requests", total_prs)
-        with col3:
-            st.metric("Open PRs", open_prs)
-        with col4:
-            merge_rate = round((total_prs - open_prs) / max(total_prs, 1) * 100, 1)
-            st.metric("Merge Rate", f"{merge_rate}%")
-        
-        # Recent Pull Requests
-        st.subheader("Recent Pull Requests")
-        all_prs = get_pull_requests(status=status)
-        
-        if all_prs:
-            pr_data = []
-            for pr in all_prs[:10]:  # Show last 10 PRs
-                pr_data.append({
-                    "PR #": f"#{pr['pr_number']}",
-                    "Title": pr['title'][:50] + "..." if len(pr['title']) > 50 else pr['title'],
-                    "Repository": pr['repository_name'],
-                    "Author": pr['author_username'],
-                    "Status": pr['status'].replace('_', ' ').title(),
-                    "Files": pr['files_changed_count'],
-                    "Reviews": f"{pr['reviews_count'] - pr['pending_reviews_count']}/{pr['reviews_count']}",
-                    "Created": pr['created_at'][:10]
-                })
-            
-            df = pd.DataFrame(pr_data)
-            st.dataframe(df, use_container_width=True)
-        else:
-            st.info("No pull requests found.")
+    with col4:
+        suggestions_count = summary.get('suggestions_count', 0)
+        suggestions_class = "success-metric" if suggestions_count > 0 else "warning-metric"
+        st.markdown(f'<div class="{suggestions_class}"><strong>AI Suggestions</strong><br/>{suggestions_count}</div>', unsafe_allow_html=True)
+    
+    # Overall score
+    total_issues = security_count + performance_count + quality_count
+    if total_issues == 0:
+        score = "Excellent (100%)"
+        score_class = "success-metric"
+    elif total_issues <= 3:
+        score = "Good (80-90%)"
+        score_class = "success-metric"
+    elif total_issues <= 8:
+        score = "Needs Improvement (60-80%)"
+        score_class = "warning-metric"
     else:
-        st.info("No repositories found. Create your first repository in the 'Repositories' tab.")
+        score = "Poor (<60%)"
+        score_class = "danger-metric"
+    
+    st.markdown(f'<div class="{score_class}"><strong>Overall Code Quality Score:</strong> {score}</div>', unsafe_allow_html=True)
 
-with tab2:
+# === MAIN UI STRUCTURE ===
+
+# Create main tabs for the new structure
+main_tab1, main_tab2 = st.tabs(["🏢 Repository Management", "🔄 Pull Request Management"])
+
+with main_tab1:
+    st.header("Repository Management")
     
-    action = st.radio("Select Action", ["Create New Repository", "View/Edit Existing"])
+    col1, col2 = st.columns([3, 1])
     
-    if action == "Create New Repository":
+    with col1:
+        st.subheader("Repositories")
+        repositories = get_repositories()
+        selected_repo, repo_indices = display_repositories_dataframe(repositories)
+    
+    with col2:
+        st.subheader("Actions")
+        
+        if st.button("➕ Create Repository", type="primary", use_container_width=True):
+            st.session_state["show_create_repo"] = True
+        
+        if selected_repo:
+            st.markdown(f"**Selected:** {selected_repo['name']}")
+            
+            if selected_repo.get("git_url"):
+                if st.button("🔍 Test Connection", use_container_width=True):
+                    with st.spinner("Testing Git connection..."):
+                        validation = validate_git_url(selected_repo["git_url"])
+                        if validation.get("valid"):
+                            st.success("✅ Repository is accessible")
+                        else:
+                            st.error(f"❌ {validation.get('message')}")
+            
+            if st.button("🗑️ Delete Repository", use_container_width=True, type="secondary"):
+                if st.session_state.get("confirm_delete") != selected_repo["id"]:
+                    st.session_state["confirm_delete"] = selected_repo["id"]
+                    st.rerun()
+                else:
+                    with st.spinner("Deleting repository..."):
+                        if delete_repository(selected_repo["id"]):
+                            st.success("Repository deleted successfully!")
+                            st.session_state["confirm_delete"] = None
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete repository")
+            
+            if st.session_state.get("confirm_delete") == selected_repo["id"]:
+                st.warning("Click 'Delete Repository' again to confirm")
+    
+    # Create Repository Form
+    if st.session_state.get("show_create_repo"):
+        st.markdown("---")
+        st.subheader("Create New Repository")
         
         with st.form("create_repository_form"):
             col1, col2 = st.columns(2)
@@ -272,547 +445,309 @@ with tab2:
                 name = st.text_input("Repository Name*", placeholder="my-awesome-repo")
                 description = st.text_area("Description", placeholder="Repository description...")
                 git_url = st.text_input("Git URL (Optional)", placeholder="https://github.com/user/repo.git")
-                
+            
             with col2:
                 projects = get_projects()
-                if projects:
-                    project_names = [p["name"] for p in projects]
-                    selected_project_name = st.selectbox("Project*", project_names)
-                    selected_project_id = next((p["id"] for p in projects if p["name"] == selected_project_name), None)
-                else:
-                    st.error("No projects available. Please create a project first in the Projects page.")
-                    st.info("Go to Projects → Create Project to add a new project")
-                    selected_project_id = None
+                project_options = ["None"] + [p["name"] for p in projects] if projects else ["None"]
+                selected_project = st.selectbox("Project", options=project_options)
                 
-                git_provider = st.selectbox("Git Provider", ["github", "gitlab", "bitbucket", "azure", "other"])
                 default_branch = st.text_input("Default Branch", value="main")
-                is_private = st.checkbox("Private Repository", value=True)
+                
+                # URL validation
+                if git_url and st.form_submit_button("🔍 Validate URL"):
+                    validation = validate_git_url(git_url)
+                    if validation.get("valid"):
+                        st.success(f"✅ {validation.get('message', 'Repository is accessible')}")
+                    else:
+                        st.error(f"❌ {validation.get('message', 'Repository validation failed')}")
             
-            submitted = st.form_submit_button("Create Repository", type="primary")
+            col_submit, col_cancel = st.columns(2)
+            with col_submit:
+                submitted = st.form_submit_button("Create Repository", type="primary", use_container_width=True)
+            with col_cancel:
+                if st.form_submit_button("Cancel", use_container_width=True):
+                    st.session_state["show_create_repo"] = False
+                    st.rerun()
             
-            if submitted:
-                if not all([name, selected_project_id]):
-                    st.error("Please fill in all required fields marked with *")
+            if submitted and name:
+                project_id = None
+                if selected_project != "None" and projects:
+                    project_id = next((p["id"] for p in projects if p["name"] == selected_project), None)
+                
+                repo_data = {
+                    "name": name,
+                    "description": description,
+                    "git_url": git_url if git_url else None,
+                    "project_id": project_id,
+                    "default_branch": default_branch
+                }
+                
+                if create_repository(repo_data):
+                    st.success("Repository created successfully!")
+                    st.session_state["show_create_repo"] = False
+                    st.rerun()
                 else:
-                    try:
-                        repo_data = {
-                            "name": name,
-                            "description": description,
-                            "git_url": git_url or None,
-                            "git_provider": git_provider,
-                            "default_branch": default_branch,
-                            "is_private": is_private,
-                            "project_id": selected_project_id
-                        }
-                        
-                        response = requests.post(f"{BACKEND_URL}/repositories", json=repo_data, headers=get_auth_headers())
-                        
-                        if response.status_code == 200:
-                            repo_result = response.json()
-                            st.success(f"✅ Repository created successfully! Repository: {repo_result['name']}")
-                            st.balloons()
-                            st.rerun()
-                        else:
-                            error_msg = response.text
-                            try:
-                                error_json = response.json()
-                                if "detail" in error_json:
-                                    error_msg = error_json["detail"]
-                            except:
-                                pass
-                            st.error(f"❌ Failed to create repository: {error_msg}")
-                    except Exception as e:
-                        st.error(f"❌ Connection error: {e}")
+                    st.error("Failed to create repository")
+
+with main_tab2:
+    st.header("Pull Request Management")
     
-    else:  # View/Edit Existing
-        
+    # Sub-navigation for Pull Requests
+    pr_tab1, pr_tab2 = st.tabs(["📋 Manage Pull Requests", "➕ Create Pull Request"])
+    
+    with pr_tab1:
+        # Repository filter
         repositories = get_repositories()
         if repositories:
-            st.markdown("### Repositories")
+            repo_options = ["All Repositories"] + [repo["name"] for repo in repositories]
+            selected_repo_name = st.selectbox("Filter by Repository", options=repo_options)
             
-            # Prepare data for dataframe
-            repo_data = []
-            for repo in repositories:
-                repo_data.append({
-                    "Repository Name": repo['name'],
-                    "Project": repo['project_name'],
-                    "Git Provider": repo['git_provider'] or 'Not specified',
-                    "Default Branch": repo['default_branch'],
-                    "Pull Requests": f"{repo['pull_requests_count']} (Open: {repo['open_prs_count']})",
-                    "Private": 'Yes' if repo['is_private'] else 'No',
-                    "Created By": repo['created_by_username'],
-                    "Created": repo['created_at'][:10]
-                })
+            selected_repo_id = None
+            if selected_repo_name != "All Repositories":
+                selected_repo_id = next((repo["id"] for repo in repositories if repo["name"] == selected_repo_name), None)
+        else:
+            st.warning("No repositories found. Please create a repository first.")
+            st.stop()
+        
+        # Get and display pull requests
+        pull_requests = get_pull_requests(selected_repo_id)
+        selected_pr, pr_indices = display_pull_requests_dataframe(pull_requests)
+        
+        if selected_pr:
+            st.markdown("---")
+            st.subheader(f"Pull Request Details: #{selected_pr['pr_number']} - {selected_pr['title']}")
             
-            repo_df = pd.DataFrame(repo_data)
+            # Sub-tabs for PR details
+            detail_tab1, detail_tab2, detail_tab3 = st.tabs(["👥 Reviews Management", "📄 Code Changes", "🤖 AI-Powered Reviews"])
             
-            # Display dataframe with selection capability
-            selected_repo_indices = st.dataframe(
-                repo_df,
-                use_container_width=True,
-                hide_index=True,
-                on_select="rerun",
-                selection_mode="single-row",
-                height=min(400, len(repositories) * 35 + 50),  # Show up to 10 entries with scroll
-                key="repositories_dataframe"
-            )
-            
-            # Handle repository selection
-            if selected_repo_indices and len(selected_repo_indices.selection.rows) > 0:
-                selected_idx = selected_repo_indices.selection.rows[0]
-                selected_repo = repositories[selected_idx]
+            with detail_tab1:
+                st.subheader("Reviews Management")
                 
-                st.markdown("---")
-                st.subheader(f"📁 {selected_repo['name']} Details")
+                # Display existing reviews
+                reviews = get_code_reviews(selected_pr["id"])
+                selected_review, review_indices = display_reviews_dataframe(reviews)
                 
-                # Display repository details
                 col1, col2 = st.columns(2)
+                
                 with col1:
-                    st.markdown(f"**Name:** {selected_repo['name']}")
-                    st.markdown(f"**Project:** {selected_repo['project_name']}")
-                    st.markdown(f"**Git Provider:** {selected_repo['git_provider'] or 'Not specified'}")
-                    st.markdown(f"**Default Branch:** {selected_repo['default_branch']}")
+                    if st.button("➕ Create New Review", type="primary"):
+                        st.session_state["show_create_review"] = True
                 
                 with col2:
-                    st.markdown(f"**Created By:** {selected_repo['created_by_username']}")
-                    st.markdown(f"**Created:** {selected_repo['created_at'][:10]}")
-                    st.markdown(f"**Pull Requests:** {selected_repo['pull_requests_count']} (Open: {selected_repo['open_prs_count']})")
-                    st.markdown(f"**Private:** {'Yes' if selected_repo['is_private'] else 'No'}")
+                    if selected_review and st.button("✏️ Modify Review"):
+                        st.session_state["show_edit_review"] = selected_review["id"]
                 
-                st.markdown(f"**Description:** {selected_repo['description'] or 'No description'}")
-                if selected_repo['git_url']:
-                    st.markdown(f"**Git URL:** {selected_repo['git_url']}")
-            else:
-                st.info("💡 Select a repository from the table above to view details")
-        else:
-            st.info("No repositories found.")
-
-with tab3:
-    
-    # Select repository for PRs
-    repositories = get_repositories()
-    if repositories:
-        repo_options = [f"{repo['name']} ({repo['project_name']})" for repo in repositories]
-        selected_repo_str = st.selectbox("Select Repository for Pull Requests", repo_options, key="pr_repo")
-        selected_repo = repositories[repo_options.index(selected_repo_str)]
-        
-        pr_tab1, pr_tab2 = st.tabs(["👀 View Pull Requests", "➕ Create Pull Request"])
-        
-        with pr_tab1:
-            pull_requests = get_pull_requests(selected_repo["id"])
-            
-            if pull_requests:
-                st.markdown(f"### Pull Requests for {selected_repo['name']}")
-                
-                # Prepare data for dataframe
-                pr_data = []
-                for pr in pull_requests:
-                    status_color = {
-                        "draft": "🟡", "open": "🟢", "review_requested": "🔵",
-                        "changes_requested": "🟠", "approved": "✅", "merged": "🟪", "closed": "⚪"
-                    }
-                    
-                    pr_data.append({
-                        "PR #": f"#{pr['pr_number']}",
-                        "Title": pr['title'][:50] + "..." if len(pr['title']) > 50 else pr['title'],
-                        "Status": f"{status_color.get(pr['status'], '⚪')} {pr['status'].replace('_', ' ').title()}",
-                        "Author": pr['author_username'],
-                        "Branch": f"{pr['source_branch']} → {pr['target_branch']}",
-                        "Files": pr['files_changed_count'],
-                        "Changes": f"+{pr['additions']} -{pr['deletions']}",
-                        "Reviews": f"{pr['reviews_count']} ({pr['pending_reviews_count']} pending)",
-                        "Created": pr['created_at'][:10]
-                    })
-                
-                pr_df = pd.DataFrame(pr_data)
-                
-                # Display dataframe with selection capability
-                selected_pr_indices = st.dataframe(
-                    pr_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    on_select="rerun",
-                    selection_mode="single-row",
-                    height=min(400, len(pull_requests) * 35 + 50),  # Show up to 10 entries with scroll
-                    key="pull_requests_dataframe"
-                )
-                
-                # Handle pull request selection
-                if selected_pr_indices and len(selected_pr_indices.selection.rows) > 0:
-                    selected_idx = selected_pr_indices.selection.rows[0]
-                    selected_pr = pull_requests[selected_idx]
-                    
-                    st.markdown("---")
-                    
-                    # Create tabs for Reviews and Code Changes
-                    pr_detail_tab1, pr_detail_tab2 = st.tabs(["👁️ Reviews", "📝 Code Changes"])
-                    
-                    with pr_detail_tab1:
-                        st.subheader(f"Reviews for PR #{selected_pr['pr_number']}")
-                        
-                        # Get reviews for this PR
-                        reviews = get_code_reviews(selected_pr['id'])
-                        if reviews:
-                            # Prepare data for reviews dataframe
-                            review_data = []
-                            for review in reviews:
-                                status_color = {"pending": "⏳", "approved": "✅", "changes_requested": "🔄", "commented": "💬"}
-                                
-                                review_data.append({
-                                    "Reviewer": review['reviewer_username'],
-                                    "Status": f"{status_color.get(review['status'], '💭')} {review['status'].replace('_', ' ').title()}",
-                                    "Comments": review['comments_count'],
-                                    "Created": review['created_at'][:10],
-                                    "Submitted": review['submitted_at'][:10] if review['submitted_at'] else 'Pending',
-                                    "Summary": (review['summary_comment'][:50] + "...") if review['summary_comment'] and len(review['summary_comment']) > 50 else (review['summary_comment'] or 'No comment')
-                                })
-                            
-                            review_df = pd.DataFrame(review_data)
-                            
-                            # Display reviews dataframe with selection capability
-                            selected_review_indices = st.dataframe(
-                                review_df,
-                                use_container_width=True,
-                                hide_index=True,
-                                on_select="rerun",
-                                selection_mode="single-row",
-                                height=min(300, len(reviews) * 35 + 50),
-                                key=f"pr_reviews_dataframe_{selected_pr['id']}"
+                # Create Review Form
+                if st.session_state.get("show_create_review"):
+                    st.markdown("**Create New Review**")
+                    with st.form("create_review_form"):
+                        # Get users for reviewer selection
+                        users = get_users()
+                        if users:
+                            user_options = [f"{user['username']} ({user['email']})" for user in users]
+                            selected_reviewers = st.multiselect(
+                                "Select Reviewers*", 
+                                options=user_options,
+                                help="Select one or more users to review this pull request"
                             )
-                            
-                            # Handle review selection - Show full comment
-                            if selected_review_indices and len(selected_review_indices.selection.rows) > 0:
-                                review_idx = selected_review_indices.selection.rows[0]
-                                selected_review = reviews[review_idx]
-                                
-                                st.markdown("---")
-                                st.markdown(f"**💬 Review by {selected_review['reviewer_username']}:**")
-                                if selected_review['summary_comment']:
-                                    st.markdown(f"> {selected_review['summary_comment']}")
+                        else:
+                            st.warning("No users found. Please ensure users are registered.")
+                            selected_reviewers = []
+                        
+                        summary_comment = st.text_area("Review Summary", placeholder="Overall review comments...")
+                        status = st.selectbox("Review Status", options=REVIEW_STATUS_OPTIONS)
+                        
+                        col_submit, col_cancel = st.columns(2)
+                        with col_submit:
+                            if st.form_submit_button("Create Review", type="primary"):
+                                if selected_reviewers:
+                                    # Extract user IDs from selected reviewers
+                                    reviewer_ids = []
+                                    for reviewer_option in selected_reviewers:
+                                        # Extract username from "username (email)" format
+                                        username = reviewer_option.split(' (')[0]
+                                        user_id = next((user['id'] for user in users if user['username'] == username), None)
+                                        if user_id:
+                                            reviewer_ids.append(user_id)
+                                    
+                                    if reviewer_ids:
+                                        review_data = {
+                                            "pull_request_id": selected_pr["id"],
+                                            "reviewer_ids": reviewer_ids,
+                                            "summary_comment": summary_comment,
+                                            "status": status
+                                        }
+                                        success, result = create_code_review(review_data)
+                                        if success:
+                                            st.success("Review created successfully!")
+                                            st.session_state["show_create_review"] = False
+                                            st.rerun()
+                                    else:
+                                        st.error("Failed to find selected reviewers")
                                 else:
-                                    st.info("No summary comment provided")
-                            else:
-                                st.info("💡 Select a review from the table above to see the full comment")
-                        else:
-                            st.info("No reviews found for this pull request.")
-                    
-                    with pr_detail_tab2:
-                        st.subheader(f"Code Changes for PR #{selected_pr['pr_number']}")
+                                    st.error("Please select at least one reviewer")
                         
-                        # Show files changed summary
-                        files = get_pr_files(selected_pr['id'])
-                        if files:
-                            with st.expander("📁 Files Changed Summary", expanded=False):
-                                for file in files:
-                                    status_icon = {"added": "🆕", "modified": "📝", "deleted": "🗑️", "renamed": "📛"}
-                                    st.markdown(f"- {status_icon.get(file['file_status'], '📄')} `{file['file_path']}` (+{file['additions']} -{file['deletions']})")
+                        with col_cancel:
+                            if st.form_submit_button("Cancel"):
+                                st.session_state["show_create_review"] = False
+                                st.rerun()
+                
+                # Edit Review Form
+                if st.session_state.get("show_edit_review") and selected_review:
+                    st.markdown("**Modify Review**")
+                    with st.form("edit_review_form"):
+                        summary_comment = st.text_area("Review Summary", value=selected_review.get("summary_comment", ""))
+                        current_status = selected_review.get("status", "draft")
+                        # Handle legacy status mapping
+                        if current_status not in REVIEW_STATUS_OPTIONS:
+                            legacy_mapping = {"pending": "draft", "changes_requested": "needs_update", "commented": "review_request", "approved": "approved"}
+                            current_status = legacy_mapping.get(current_status, "draft")
                         
-                        # Diff Viewer
-                        diff_data = get_pr_diff(selected_pr['id'])
-                        if diff_data:
-                            st.markdown("**Diff Viewer:**")
-                            diff_content = format_diff_content(diff_data)
-                            st_ace(
-                                value=diff_content,
-                                language='diff',
-                                theme='monokai',  # Better theme for diff visualization
-                                height=500,  # Larger height for better code review
-                                key=f"pr_diff_viewer_{selected_pr['id']}",
-                                readonly=True,
-                                wrap=True,
-                                show_gutter=True,
-                                show_print_margin=False
-                            )
-                            
-                            # Show diff statistics
-                            stats = calculate_diff_stats(diff_content)
-                            if stats:
-                                col_stats1, col_stats2, col_stats3 = st.columns(3)
-                                with col_stats1:
-                                    st.metric("Files Changed", stats['files'])
-                                with col_stats2:
-                                    st.metric("Additions", stats['additions'], delta=f"+{stats['additions']}")
-                                with col_stats3:
-                                    st.metric("Deletions", stats['deletions'], delta=f"-{stats['deletions']}")
-                        else:
-                            st.info("No diff data available for this pull request")
-                else:
-                    st.info("💡 Select a pull request from the table above to view reviews and code changes")
-            else:
-                st.info("No pull requests found for this repository.")
-        
-        with pr_tab2:
-            st.markdown("### Create New Pull Request")
+                        status = st.selectbox("Review Status", 
+                                            options=REVIEW_STATUS_OPTIONS,
+                                            index=REVIEW_STATUS_OPTIONS.index(current_status))
+                        
+                        col_submit, col_cancel = st.columns(2)
+                        with col_submit:
+                            if st.form_submit_button("Update Review", type="primary"):
+                                review_data = {
+                                    "summary_comment": summary_comment,
+                                    "status": status
+                                }
+                                success, result = update_code_review(selected_review["id"], review_data)
+                                if success:
+                                    st.success("Review updated successfully!")
+                                    st.session_state["show_edit_review"] = None
+                                    st.rerun()
+                        
+                        with col_cancel:
+                            if st.form_submit_button("Cancel"):
+                                st.session_state["show_edit_review"] = None
+                                st.rerun()
             
+            with detail_tab2:
+                st.subheader("Code Changes")
+                
+                # Display files changed
+                pr_files = get_pr_files(selected_pr["id"])
+                
+                if pr_files:
+                    # Create DataFrame for files
+                    file_data = []
+                    for file in pr_files:
+                        file_data.append({
+                            "File Path": file["file_path"],
+                            "Status": file["file_status"],
+                            "Changes": f"+{file.get('additions', 0)} -{file.get('deletions', 0)}",
+                            "Total Changes": file.get("changes", 0)
+                        })
+                    
+                    files_df = pd.DataFrame(file_data)
+                    st.dataframe(files_df, use_container_width=True, hide_index=True)
+                    
+                    # Show overall stats
+                    total_additions = sum(f.get("additions", 0) for f in pr_files)
+                    total_deletions = sum(f.get("deletions", 0) for f in pr_files)
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Files Changed", len(pr_files))
+                    with col2:
+                        st.metric("Total Additions", total_additions, delta=f"+{total_additions}")
+                    with col3:
+                        st.metric("Total Deletions", total_deletions, delta=f"-{total_deletions}")
+                else:
+                    st.info("No files changed in this pull request.")
+            
+            with detail_tab3:
+                st.subheader("AI-Powered Automated Reviews")
+                
+                col_ai1, col_ai2 = st.columns([2, 1])
+                
+                with col_ai2:
+                    if st.button("🚀 Run AI Analysis", type="primary", use_container_width=True):
+                        with st.spinner("🤖 AI is analyzing the code changes..."):
+                            analysis_result = trigger_automated_review(selected_pr["id"])
+                            if analysis_result:
+                                st.success("✅ Automated review completed!")
+                                st.session_state[f"analysis_{selected_pr['id']}"] = analysis_result
+                                st.rerun()
+                    
+                    if st.button("📊 View Analysis", use_container_width=True):
+                        analysis = get_pr_analysis(selected_pr["id"])
+                        if analysis:
+                            st.session_state[f"show_analysis_{selected_pr['id']}"] = analysis
+                        else:
+                            st.warning("No analysis available. Run AI analysis first.")
+                
+                with col_ai1:
+                    # Display AI analysis results
+                    analysis = st.session_state.get(f"show_analysis_{selected_pr['id']}")
+                    if analysis and not analysis.get('error'):
+                        # Success metrics
+                        display_success_metrics(analysis)
+                        
+                        # Detailed analysis sections
+                        if analysis.get('security_issues'):
+                            with st.expander("🔒 Security Issues", expanded=True):
+                                for i, issue in enumerate(analysis['security_issues'][:3]):
+                                    st.error(f"**{issue.get('description')}**")
+                                    if issue.get('match'):
+                                        st.code(issue.get('match'), language='python')
+                        
+                        if analysis.get('suggestions'):
+                            with st.expander("💡 AI Suggestions", expanded=True):
+                                for i, suggestion in enumerate(analysis['suggestions'][:3]):
+                                    st.info(f"**{suggestion.get('description')}**")
+                                    if suggestion.get('rationale'):
+                                        st.caption(f"*Rationale: {suggestion['rationale']}*")
+                        
+                        if analysis.get('performance_issues'):
+                            with st.expander("⚡ Performance Recommendations", expanded=False):
+                                for issue in analysis['performance_issues'][:3]:
+                                    st.warning(f"**{issue.get('description')}**")
+                                    if issue.get('match'):
+                                        st.code(issue.get('match'), language='python')
+                    else:
+                        st.info("💡 Click 'View Analysis' to see AI-powered code analysis results")
+    
+    with pr_tab2:
+        st.subheader("Create New Pull Request")
+        
+        repositories = get_repositories()
+        if not repositories:
+            st.warning("No repositories found. Please create a repository first.")
+        else:
             with st.form("create_pr_form"):
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    pr_title = st.text_input("Title*", placeholder="Add new feature X")
-                    source_branch = st.text_input("Source Branch*", placeholder="feature/new-feature")
-                    external_id = st.text_input("External PR ID (Optional)", placeholder="123")
+                    repo_names = [repo["name"] for repo in repositories]
+                    selected_repo_name = st.selectbox("Repository*", options=repo_names)
+                    title = st.text_input("Pull Request Title*", placeholder="Add new feature...")
+                    source_branch = st.text_input("Source Branch*", value="feature-branch", placeholder="feature-branch")
                 
                 with col2:
-                    target_branch = st.text_input("Target Branch*", value=selected_repo['default_branch'])
-                    external_url = st.text_input("External URL (Optional)", placeholder="https://github.com/user/repo/pull/123")
+                    target_branch = st.text_input("Target Branch*", value="main", placeholder="main")
+                    description = st.text_area("Description", placeholder="Describe the changes...")
                 
-                description = st.text_area("Description", height=100, placeholder="Describe what this PR does...")
-                
-                submitted = st.form_submit_button("Create Pull Request", type="primary")
-                
-                if submitted:
-                    if not all([pr_title, source_branch, target_branch]):
-                        st.error("Please fill in all required fields marked with *")
-                    else:
-                        try:
-                            pr_data = {
-                                "repository_id": selected_repo["id"],
-                                "title": pr_title,
-                                "description": description,
-                                "source_branch": source_branch,
-                                "target_branch": target_branch,
-                                "external_id": external_id or None,
-                                "external_url": external_url or None
-                            }
-                            
-                            response = requests.post(f"{BACKEND_URL}/pull-requests", json=pr_data, headers=get_auth_headers())
-                            
-                            if response.status_code == 200:
-                                pr_result = response.json()
-                                st.success(f"✅ Pull Request created successfully! PR #{pr_result['pr_number']}")
-                                st.balloons()
-                                st.rerun()
-                            else:
-                                error_msg = response.text
-                                try:
-                                    error_json = response.json()
-                                    if "detail" in error_json:
-                                        error_msg = error_json["detail"]
-                                except:
-                                    pass
-                                st.error(f"❌ Failed to create pull request: {error_msg}")
-                        except Exception as e:
-                            st.error(f"❌ Connection error: {e}")
-    else:
-        st.info("No repositories available. Create a repository first.")
-
-with tab4:
-    
-    # Select PR for reviews
-    repositories = get_repositories()
-    if repositories:
-        repo_options = [f"{repo['name']} ({repo['project_name']})" for repo in repositories]
-        selected_repo_str = st.selectbox("Select Repository for Reviews", repo_options, key="review_repo")
-        selected_repo = repositories[repo_options.index(selected_repo_str)]
-        
-        pull_requests = get_pull_requests(selected_repo["id"])
-        
-        if pull_requests:
-            pr_options = [f"#{pr['pr_number']}: {pr['title']}" for pr in pull_requests]
-            selected_pr_str = st.selectbox("Select Pull Request", pr_options, key="review_pr")
-            selected_pr = pull_requests[pr_options.index(selected_pr_str)]
-            
-            review_tab1, review_tab2 = st.tabs(["👀 View Reviews", "➕ Create Review"])
-            
-            with review_tab1:
-                reviews = get_code_reviews(selected_pr["id"])
-                
-                if reviews:
-                    st.markdown(f"### Reviews for PR #{selected_pr['pr_number']}")
-                    
-                    # Prepare data for dataframe
-                    review_data = []
-                    for review in reviews:
-                        status_color = {"pending": "⏳", "approved": "✅", "changes_requested": "🔄", "commented": "💬"}
+                if st.form_submit_button("Create Pull Request", type="primary", use_container_width=True):
+                    if title and source_branch and target_branch:
+                        selected_repo_id = next((repo["id"] for repo in repositories if repo["name"] == selected_repo_name), None)
                         
-                        review_data.append({
-                            "Reviewer": review['reviewer_username'],
-                            "Status": f"{status_color.get(review['status'], '💭')} {review['status'].replace('_', ' ').title()}",
-                            "Comments": review['comments_count'],
-                            "Created": review['created_at'][:10],
-                            "Submitted": review['submitted_at'][:10] if review['submitted_at'] else 'Pending',
-                            "Summary": (review['summary_comment'][:50] + "...") if review['summary_comment'] and len(review['summary_comment']) > 50 else (review['summary_comment'] or 'No comment')
-                        })
-                    
-                    review_df = pd.DataFrame(review_data)
-                    
-                    # Display dataframe with selection capability
-                    selected_review_indices = st.dataframe(
-                        review_df,
-                        use_container_width=True,
-                        hide_index=True,
-                        on_select="rerun",
-                        selection_mode="single-row",
-                        height=min(400, len(reviews) * 35 + 50),  # Show up to 10 entries with scroll
-                        key="reviews_dataframe"
-                    )
-                    
-                    # Handle review selection - Show 2-panel diff viewer
-                    if selected_review_indices and len(selected_review_indices.selection.rows) > 0:
-                        selected_idx = selected_review_indices.selection.rows[0]
-                        selected_review = reviews[selected_idx]
+                        pr_data = {
+                            "repository_id": selected_repo_id,
+                            "title": title,
+                            "description": description,
+                            "source_branch": source_branch,
+                            "target_branch": target_branch
+                        }
                         
-                        st.markdown("---")
-                        st.subheader(f"🔍 Code Diff Viewer - Review by {selected_review['reviewer_username']}")
-                        
-                        # 2-Panel Diff/Merge Tool
-                        col_left, col_right = st.columns([1, 1])
-                        
-                        with col_left:
-                            st.markdown("**📝 Git Diff Input**")
-                            st.caption("Paste your git diff code here to visualize changes")
-                            
-                            # Get existing diff for this PR if available
-                            existing_diff = ""
-                            pr_diff_data = get_pr_diff(selected_pr['id'])
-                            if pr_diff_data:
-                                existing_diff = format_diff_content(pr_diff_data)
-                            
-                            # Editable diff input
-                            diff_input = st_ace(
-                                value=existing_diff,
-                                language='diff',
-                                theme='github',
-                                height=400,
-                                key=f"diff_input_{selected_review['id']}",
-                                placeholder="Paste git diff output here...\n\nExample:\ndiff --git a/file.py b/file.py\nindex 1234567..abcdefg 100644\n--- a/file.py\n+++ b/file.py\n@@ -1,3 +1,4 @@\n def hello():\n+    print('Added line')\n     print('Hello World')\n-    print('Removed line')",
-                                wrap=True,
-                                auto_update=True,
-                                show_gutter=True,
-                                show_print_margin=False
-                            )
-                        
-                        with col_right:
-                            st.markdown("**🎨 Colored Diff Visualization**")
-                            st.caption("Real-time colored view of your diff")
-                            
-                            # Process and display colored diff
-                            if diff_input and diff_input.strip():
-                                try:
-                                    # Create a more visual representation of the diff
-                                    colored_diff = process_diff_for_display(diff_input)
-                                    
-                                    # Display processed diff with better visualization
-                                    st_ace(
-                                        value=colored_diff,
-                                        language='diff',
-                                        theme='monokai',  # Better colors for diff visualization
-                                        height=400,
-                                        key=f"diff_display_{selected_review['id']}",
-                                        readonly=True,
-                                        wrap=True,
-                                        show_gutter=True,
-                                        show_print_margin=False
-                                    )
-                                    
-                                    # Additional diff statistics
-                                    stats = calculate_diff_stats(diff_input)
-                                    if stats:
-                                        col_stats1, col_stats2, col_stats3 = st.columns(3)
-                                        with col_stats1:
-                                            st.metric("Files Changed", stats['files'])
-                                        with col_stats2:
-                                            st.metric("Additions", stats['additions'], delta=f"+{stats['additions']}")
-                                        with col_stats3:
-                                            st.metric("Deletions", stats['deletions'], delta=f"-{stats['deletions']}")
-                                        
-                                except Exception as e:
-                                    st.error(f"Error processing diff: {str(e)}")
-                                    # Fallback to simple display
-                                    st_ace(
-                                        value=diff_input,
-                                        language='diff',
-                                        theme='monokai',
-                                        height=400,
-                                        key=f"diff_display_fallback_{selected_review['id']}",
-                                        readonly=True,
-                                        wrap=True
-                                    )
-                            else:
-                                # Show placeholder when no diff is provided
-                                st.markdown("""
-                                <div style="
-                                    border: 2px dashed #ccc; 
-                                    border-radius: 8px; 
-                                    padding: 40px; 
-                                    text-align: center; 
-                                    height: 320px; 
-                                    display: flex; 
-                                    align-items: center; 
-                                    justify-content: center;
-                                    background-color: #f8f9fa;
-                                ">
-                                    <div>
-                                        <h4 style="color: #666;">🎨 Diff Visualization</h4>
-                                        <p style="color: #888;">Paste git diff code in the left panel<br>to see colored visualization here</p>
-                                    </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                        
-                        # Review summary at the bottom
-                        if selected_review['summary_comment']:
-                            st.markdown("---")
-                            st.markdown("**💬 Review Summary:**")
-                            st.markdown(f"> {selected_review['summary_comment']}")
-                    else:
-                        st.info("💡 Select a review from the table above to open the diff viewer")
-                else:
-                    st.info("No reviews found for this pull request.")
-            
-            with review_tab2:
-                st.markdown("### Create Code Review")
-                
-                with st.form("create_review_form"):
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        users = get_users()
-                        if users:
-                            reviewer_names = [f"{u['username']} ({u['email']})" for u in users]
-                            selected_reviewers = st.multiselect("Select Reviewers*", reviewer_names)
-                            reviewer_ids = [users[reviewer_names.index(name)]["id"] for name in selected_reviewers]
+                        success, result = create_pull_request(pr_data)
+                        if success:
+                            st.success("Pull request created successfully!")
+                            st.rerun()
                         else:
-                            st.error("No users available for review assignment.")
-                            reviewer_ids = []
-                    
-                    with col2:
-                        review_status = st.selectbox("Review Status", ["pending", "approved", "changes_requested", "commented"])
-                    
-                    summary_comment = st.text_area("Summary Comment", height=100, placeholder="Overall feedback on this PR...")
-                    
-                    submitted = st.form_submit_button("Create Review", type="primary")
-                    
-                    if submitted:
-                        if not reviewer_ids:
-                            st.error("Please select at least one reviewer")
-                        else:
-                            try:
-                                review_data = {
-                                    "pull_request_id": selected_pr["id"],
-                                    "reviewer_ids": reviewer_ids,
-                                    "summary_comment": summary_comment or None,
-                                    "status": review_status
-                                }
-                                
-                                response = requests.post(f"{BACKEND_URL}/code-reviews", json=review_data, headers=get_auth_headers())
-                                
-                                if response.status_code == 200:
-                                    reviews_result = response.json()
-                                    st.success(f"✅ Code review(s) created successfully! {len(reviews_result)} reviewer(s) assigned.")
-                                    st.balloons()
-                                    st.rerun()
-                                else:
-                                    error_msg = response.text
-                                    try:
-                                        error_json = response.json()
-                                        if "detail" in error_json:
-                                            error_msg = error_json["detail"]
-                                    except:
-                                        pass
-                                    st.error(f"❌ Failed to create review: {error_msg}")
-                            except Exception as e:
-                                st.error(f"❌ Connection error: {e}")
-        else:
-            st.info("No pull requests available. Create a pull request first.")
-    else:
-        st.info("No repositories available. Create a repository first.")
+                            st.error("Failed to create pull request")
+                    else:
+                        st.error("Please fill in all required fields")

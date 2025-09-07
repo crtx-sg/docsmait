@@ -1,10 +1,11 @@
 FROM python:3.11-slim
 WORKDIR /app
 
-# Install system dependencies for python-magic and document processing
+# Install system dependencies for python-magic, document processing, and git
 RUN apt-get update && apt-get install -y \
     libmagic1 \
     libmagic-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

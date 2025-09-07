@@ -199,6 +199,37 @@ class CodeReviewService:
         
         return self._pr_file_to_response(pr_file)
     
+    def get_pr_diff(self, pr_id: str) -> Optional[dict]:
+        """Get pull request diff content"""
+        # Get PR files with patch content
+        files = self.db.query(PullRequestFile).filter(
+            PullRequestFile.pull_request_id == pr_id
+        ).order_by(PullRequestFile.file_path).all()
+        
+        if not files:
+            return None
+        
+        # Format diff data
+        diff_files = []
+        for file in files:
+            diff_files.append({
+                "file_path": file.file_path,
+                "file_status": file.file_status,
+                "old_file_path": file.old_file_path,
+                "additions": file.additions,
+                "deletions": file.deletions,
+                "changes": file.changes,
+                "diff_content": file.patch_content or f"Binary file or no diff content available for {file.file_path}"
+            })
+        
+        return {
+            "pull_request_id": pr_id,
+            "files": diff_files,
+            "total_files": len(diff_files),
+            "total_additions": sum(f["additions"] for f in diff_files),
+            "total_deletions": sum(f["deletions"] for f in diff_files)
+        }
+    
     # === CODE REVIEW CRUD ===
     
     def create_code_review(self, review_data: CodeReviewCreate, current_user_id: int) -> List[CodeReviewResponse]:

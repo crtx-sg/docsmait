@@ -1,5 +1,5 @@
 # backend/app/main.py
-from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Query
+from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Query, Request
 from sqlalchemy.orm import Session, joinedload
 from . import models, services, auth
 from .user_service import user_service
@@ -14,6 +14,10 @@ from .ai_service import ai_service
 from .ai_config import ai_config
 from .audit_service import AuditService
 from .code_review_service import CodeReviewService
+from .automated_review_service import AutomatedReviewService, get_or_create_ai_reviewer
+from .webhook_service import WebhookService
+from .git_integration_service import git_service
+from .cicd_integration_service import CICDIntegrationService
 from .project_export_service import project_export_service
 from .activity_log_service import activity_log_service
 from .issues_service_pg import issues_service
@@ -1402,6 +1406,15 @@ def add_pr_file(pr_id: str, file_path: str = Form(...), file_status: str = Form(
     code_review_service = CodeReviewService(db)
     return code_review_service.add_pr_file(pr_id, file_path, file_status, additions, deletions, patch_content)
 
+@app.get("/pull-requests/{pr_id}/diff")
+def get_pr_diff(pr_id: str, user_id: int = Depends(auth.verify_token), db: Session = Depends(get_db)):
+    """Get pull request diff content"""
+    code_review_service = CodeReviewService(db)
+    diff_data = code_review_service.get_pr_diff(pr_id)
+    if not diff_data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Diff not available for this pull request")
+    return diff_data
+
 # === CODE REVIEWS ===
 
 @app.post("/code-reviews", response_model=List[models.CodeReviewResponse])
@@ -1447,6 +1460,157 @@ def update_code_comment(comment_id: str, comment_data: models.CodeCommentUpdate,
     if not comment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Code comment not found")
     return comment
+
+# === AUTOMATED CODE REVIEW ===
+
+@app.post("/pull-requests/{pr_id}/automated-review")
+def trigger_automated_review(pr_id: str, user_id: int = Depends(auth.verify_token), db: Session = Depends(get_db)):
+    """Trigger automated AI review for a pull request"""
+    try:
+        ai_reviewer = get_or_create_ai_reviewer(db)
+        review_service = AutomatedReviewService(db)
+        
+        # Perform analysis
+        analysis_results = review_service.analyze_pull_request(pr_id, ai_reviewer.id)
+        
+        if analysis_results.get('error'):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=analysis_results['error'])
+        
+        # Create automated review
+        review = review_service.create_automated_review(pr_id, analysis_results, ai_reviewer.id)
+        
+        return {
+            "message": "Automated review completed",
+            "analysis": analysis_results,
+            "review": review
+        }
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Automated review failed: {str(e)}")
+
+@app.get("/pull-requests/{pr_id}/analysis")
+def get_pr_analysis(pr_id: str, user_id: int = Depends(auth.verify_token), db: Session = Depends(get_db)):
+    """Get AI analysis results for a pull request"""
+    try:
+        ai_reviewer = get_or_create_ai_reviewer(db)
+        review_service = AutomatedReviewService(db)
+        
+        analysis_results = review_service.analyze_pull_request(pr_id, ai_reviewer.id)
+        
+        if analysis_results.get('error'):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=analysis_results['error'])
+        
+        return analysis_results
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Analysis failed: {str(e)}")
+
+# === GIT INTEGRATION ===
+
+@app.get("/repositories/{repository_id}/branches")
+def get_repository_branches(repository_id: str, user_id: int = Depends(auth.verify_token), db: Session = Depends(get_db)):
+    """Get branches for a repository"""
+    try:
+        code_review_service = CodeReviewService(db)
+        repository = code_review_service.get_repository(repository_id)
+        
+        if not repository:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repository not found")
+        
+        if not repository.git_url:
+            return {"branches": [repository.default_branch or "main"]}
+        
+        branches = git_service.get_repository_branches(repository.git_url)
+        return {"branches": branches}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch branches: {str(e)}")
+
+@app.post("/repositories/validate-url")
+def validate_git_url(git_url: str = Form(...), user_id: int = Depends(auth.verify_token)):
+    """Validate if a Git URL is accessible"""
+    try:
+        is_valid, message = git_service.validate_git_url(git_url)
+        return {
+            "valid": is_valid,
+            "message": message,
+            "git_url": git_url
+        }
+    except Exception as e:
+        return {
+            "valid": False,
+            "message": f"Validation failed: {str(e)}",
+            "git_url": git_url
+        }
+
+# === WEBHOOKS ===
+
+@app.post("/webhooks/github")
+async def github_webhook(request: Request, db: Session = Depends(get_db)):
+    """Handle GitHub webhooks"""
+    signature = request.headers.get('X-Hub-Signature-256')
+    webhook_service = WebhookService(db)
+    return await webhook_service.handle_github_webhook(request, signature)
+
+@app.post("/webhooks/gitlab")
+async def gitlab_webhook(request: Request, db: Session = Depends(get_db)):
+    """Handle GitLab webhooks"""
+    token = request.headers.get('X-Gitlab-Token')
+    webhook_service = WebhookService(db)
+    return await webhook_service.handle_gitlab_webhook(request, token)
+
+# === CI/CD INTEGRATION ===
+
+@app.get("/pull-requests/{pr_id}/build-status")
+def get_pr_build_status(pr_id: str, user_id: int = Depends(auth.verify_token), db: Session = Depends(get_db)):
+    """Get CI/CD build status for a pull request"""
+    cicd_service = CICDIntegrationService(db)
+    build_status = cicd_service.get_build_status(pr_id)
+    if not build_status:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Build status not available")
+    return build_status
+
+@app.get("/pull-requests/{pr_id}/test-coverage")
+def get_pr_test_coverage(pr_id: str, user_id: int = Depends(auth.verify_token), db: Session = Depends(get_db)):
+    """Get test coverage for a pull request"""
+    cicd_service = CICDIntegrationService(db)
+    coverage = cicd_service.get_test_coverage(pr_id)
+    if not coverage:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test coverage not available")
+    return coverage
+
+@app.get("/pull-requests/{pr_id}/quality-gates")
+def get_pr_quality_gates(pr_id: str, user_id: int = Depends(auth.verify_token), db: Session = Depends(get_db)):
+    """Get quality gate status for a pull request"""
+    cicd_service = CICDIntegrationService(db)
+    gates = cicd_service.get_quality_gates(pr_id)
+    return {"quality_gates": gates}
+
+@app.get("/pull-requests/{pr_id}/deployment-status")
+def get_pr_deployment_status(pr_id: str, user_id: int = Depends(auth.verify_token), db: Session = Depends(get_db)):
+    """Get deployment status for a pull request"""
+    cicd_service = CICDIntegrationService(db)
+    deployment_status = cicd_service.get_deployment_status(pr_id)
+    if not deployment_status:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deployment status not available")
+    return deployment_status
+
+@app.get("/pull-requests/{pr_id}/merge-requirements")
+def check_pr_merge_requirements(pr_id: str, user_id: int = Depends(auth.verify_token), db: Session = Depends(get_db)):
+    """Check if pull request meets merge requirements"""
+    cicd_service = CICDIntegrationService(db)
+    return cicd_service.check_merge_requirements(pr_id)
+
+@app.post("/pull-requests/{pr_id}/deploy/{environment}")
+def trigger_pr_deployment(pr_id: str, environment: str, user_id: int = Depends(auth.verify_token), db: Session = Depends(get_db)):
+    """Trigger deployment for a pull request to specified environment"""
+    if environment not in ["development", "staging"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid environment. Only 'development' and 'staging' are allowed.")
+    
+    cicd_service = CICDIntegrationService(db)
+    result = cicd_service.trigger_deployment(pr_id, environment)
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("message", "Deployment failed"))
+    
+    return result
 
 # ========== Issues Management Endpoints ==========
 

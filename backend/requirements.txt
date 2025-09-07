@@ -24,3 +24,5 @@ pyyaml
 reportlab
 pillow
 markdown
+# Git integration
+GitPython

@@ -193,7 +193,7 @@ graph TB
     end
     
     subgraph "KB Chat Processing"
-        ChatInterface --> QueryAPI[/kb/query_with_context API]
+        ChatInterface --> QueryAPI["KB Query with Context API"]
         EditChat --> QueryAPI
         ReviewChat --> QueryAPI
         QueryAPI --> ContextEngine[Context Combination Engine]
