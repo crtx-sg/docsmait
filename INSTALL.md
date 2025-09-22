@@ -44,7 +44,17 @@ docker compose ps
 docker compose logs -f
 ```
 
-### 4. Access the Application
+### 4. Database Initialization
+
+After starting the services, you need to initialize the database. This will create the necessary tables and a default admin user.
+
+```bash
+docker exec docsmait_backend python -m app.init_db
+```
+
+This will output the credentials for the default admin user.
+
+### 5. Access the Application
 
 - **Frontend (Streamlit)**: http://localhost:8501
 - **Backend API**: http://localhost:8001
@@ -52,9 +62,9 @@ docker compose logs -f
 - **Qdrant Vector DB**: http://localhost:6335
 - **PostgreSQL**: localhost:5433
 
-### 5. Initial Setup
+### 6. Initial Setup
 
-1. **Create Admin User**: First user to register gets admin privileges
+1. **Login as Admin**: Use the admin credentials from the previous step to log in.
 2. **Navigate to**: http://localhost:8501/pages/Auth.py
 3. **Sign up** with your admin credentials
 4. **Access all features** with admin privileges
@@ -225,20 +235,6 @@ kubectl port-forward service/docsmait-frontend 8501:8501
 ---
 
 ## 🗃️ Database Setup
-
-### Automatic Setup (Docker)
-
-Database initialization happens automatically via `init_db.py`:
-
-```python
-# Tables created automatically:
-- users, projects, project_members
-- documents, templates, document_versions
-- requirements, hazards, fmea_analyses
-- design_artifacts, test_artifacts
-- code_reviews, audits
-- system_settings, usage_tracking
-```
 
 ### Manual Database Setup
 

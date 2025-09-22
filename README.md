@@ -88,13 +88,19 @@ docker-compose up -d
 docker-compose ps
 ```
 
-### 4. Access Application
+### 4. Initialize Database
+
+```bash
+docker exec docsmait_backend python -m app.init_db
+```
+
+### 5. Access Application
 
 - **Web Interface**: http://localhost:8501
 - **API Documentation**: http://localhost:8000/docs
 - **Vector Database**: http://localhost:6333
 
-### 5. Initial Setup
+### 6. Initial Setup
 
 1. Navigate to http://localhost:8501/pages/Auth.py
 2. Create admin account (first user gets admin privileges)
